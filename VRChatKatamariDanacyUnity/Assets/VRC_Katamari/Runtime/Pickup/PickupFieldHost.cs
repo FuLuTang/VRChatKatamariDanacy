@@ -150,6 +150,18 @@ namespace VRCKatamari.Pickup
         // Same ceiling pattern as HiddenLogLimit: one line per failure category, ever.
         private const int BlockingLogLimit = 3;
 
+        // ---- Spatial index (Docs/Design/PickupAbsorb/PICKUP_FIELD_PERF.md) ----
+        private const float DefaultGridCellSizeM = 2f;
+        // Ceiling on grid cells; a larger field gets a larger cell instead.
+        private const int GridMaxCells = 4096;
+        // A static row whose box reaches further than this from its centre would stretch every
+        // grid query, so it is scanned in the linear list instead (with its cached position).
+        private const float GridMaxHalfDiagonalM = 1.5f;
+        // Static rows re-read per frame to catch a mover the propMobile column did not name.
+        private const int DriftChecksPerFrame = 8;
+        private const float DriftToleranceM = 0.001f;
+        private const int DriftLogLimit = 3;
+
         [Header("Ball")]
         [SerializeField] private KatamariBallMotor motor;
 
@@ -244,6 +256,18 @@ namespace VRCKatamari.Pickup
         [SerializeField] private float blockingMarginM = DefaultBlockingMarginM;
         [SerializeField] private float blockingStickinessM = DefaultBlockingStickinessM;
 
+        [Header("Spatial index (static props by grid cell, moving props scanned)")]
+        // Per row: true when something else (the motion host, a rider on a moving parent) may
+        // move this prop's Transform, so every scan must read it live. false rows are looked up
+        // by grid cell from the position read once in Start. OPTIONAL: an absent or short
+        // column makes EVERY row a moving row (the scan reads each Transform, as it did before
+        // the index existed), so an un-synced scene stays exactly correct, only not faster.
+        // Written by PickupFieldSync from the level's motion rows. The stack fall marks rows it
+        // moves at run time (MarkPropMobile); a drift check catches the rest, with a warning.
+        [SerializeField] private bool[] propMobile;
+        // Grid cell edge, metres. 0 / absent in an older scene means the default (2 m).
+        [SerializeField] private float gridCellSizeM = DefaultGridCellSizeM;
+
         // ---- Per-prop store (allocated in Start, never serialized) ----
         private int[] propStates;
         // The rows this host has queued in the motor (see QueuedCapacity): the withdraw list.
@@ -298,16 +322,60 @@ namespace VRCKatamari.Pickup
         private float[] propHalfDiagonal;
         private Vector3[] propMinima;
         private Vector3[] propMaxima;
-        // Per-scan candidate flags, written for every prop so a stale true cannot survive.
-        // The classifier sets at most one of them per prop.
-        private bool[] blockingCandidate;
+        // Per-scan candidate flags. They are set only for the rows in candRows and cleared from
+        // that list at the start of the next scan, so a stale true cannot survive. The
+        // classifier gives a row at most one role: supportCandidate marks the support rows,
+        // propObbCandidate every candidate (blocking or support).
         private bool[] supportCandidate;
+        private int[] candRows;
+        private int candCount;
+        private float[] candDistanceByRow;
         private int propUsableCount;
         private float nextBlockingScanTime;
         private int blockingLogCount;
         // Applied prop solids by role, as of the last scan (blocking = role 3, support = 2).
         private int propObbBlockingCount;
         private int propObbSupportCount;
+
+        // ---- Spatial index (allocated in Start, never serialized) ----
+        // propWorldPositions: world position read once in Start; valid for a row that is not
+        // mobile. propReqMm: the absorb requirement per row (or invalid), so the size test is
+        // an integer compare instead of a cube root per row per scan.
+        private Vector3[] propWorldPositions;
+        private float[] propReqMm;
+        private bool[] rowMobile;
+        // tracked: the row can ever matter (a transform and a scan or obstacle role).
+        private bool[] rowTracked;
+        private bool[] rowInLinear;
+        private bool[] propBoxValid;
+        // Rows scanned every time: mobile rows and static rows with a big box.
+        private int[] linearRows;
+        private int linearCount;
+        // Every tracked static row, for the drift check.
+        private int[] staticRows;
+        private int staticCount;
+        private int driftCursor;
+        private int driftLogCount;
+        private int mobileRowCount;
+        private int bigStaticRowCount;
+        private bool gridActive;
+        private float[] gridInfo;
+        private int[] gridCellStart;
+        private int[] gridCellRows;
+        private Vector3[] gridCellMin;
+        private Vector3[] gridCellMax;
+        private int gridMemberCount;
+        private float gridMaxHalfDiagonal;
+        // The free rows near the ball for the stages of this Update: gathered once, read by
+        // the obstacle stage and the candidate scan. Valid only inside Update.
+        private int[] queryRows;
+        private int[] nearRows;
+        private float[] nearDistSq;
+        private Vector3[] nearPositions;
+        private int nearCount;
+        private bool nearValid;
+        private float nearScanReachM;
+        private float nearPruneReachM;
 
         // ---- Contact prop solids (CONTACT_MODEL_V2 §4A.4/§5.2, stage S4b) ----
         // One TRUE OBB per selected prop for the v2 contact solver. Built from
@@ -404,6 +472,7 @@ namespace VRCKatamari.Pickup
             ResolveGrowthMm3();
             MarkSubmittable();
             PreparePropRows();
+            BuildSpatialIndex();
             ReportPropDataProblems();
             seenEvents = 0;
             nextScanTime = 0f;
@@ -411,6 +480,11 @@ namespace VRCKatamari.Pickup
             Debug.Log("[PickupFieldHost] ready props=" + propCount
                 + " submittable=" + submittableCount
                 + " propRows=" + propUsableCount
+                + " index=" + (gridActive ? "grid" : "linear")
+                + " gridRows=" + gridMemberCount
+                + " linearRows=" + linearCount
+                + " mobileRows=" + mobileRowCount
+                + " mobileColumn=" + (propMobile != null && propMobile.Length >= propCount ? "yes" : "absent")
                 + " propObstacles=" + (blockingDisabled ? "off" : "on")
                 + " ownSize=" + (ownSizeFallbackRows > 0 ? "fallback" : "local")
                 + " activationR=" + activationRadiusM
@@ -439,6 +513,13 @@ namespace VRCKatamari.Pickup
         /// </remarks>
         public void Update()
         {
+            UpdateFrame();
+            // The gathered rows are only valid for the stages of one Update.
+            nearValid = false;
+        }
+
+        private void UpdateFrame()
+        {
             if (motor == null)
             {
                 LogMotorMissingOnce();
@@ -458,6 +539,7 @@ namespace VRCKatamari.Pickup
             if (motor.GetSemanticDiameterWorldM() <= 0f) return;
 
             ConsumeAbsorbedEvents();
+            VerifyStaticRows();
             UpdatePropObstacles();
             if (!Collecting()) return;
             if (attachmentRoot == null)
@@ -735,6 +817,8 @@ namespace VRCKatamari.Pickup
                 blockingMarginM = DefaultBlockingMarginM;
             if (!KatamariMath.IsFiniteFloat(blockingStickinessM) || blockingStickinessM < 0f)
                 blockingStickinessM = DefaultBlockingStickinessM;
+            if (!KatamariMath.IsFiniteFloat(gridCellSizeM) || gridCellSizeM <= 0f)
+                gridCellSizeM = DefaultGridCellSizeM;
         }
 
         /// <summary>
@@ -851,7 +935,6 @@ namespace VRCKatamari.Pickup
             propHalfDiagonal = new float[propCount];
             propMinima = new Vector3[propCount];
             propMaxima = new Vector3[propCount];
-            blockingCandidate = new bool[propCount];
             propUsableCount = 0;
             blockingLogCount = 0;
             supportCandidate = new bool[propCount];
@@ -1055,6 +1138,330 @@ namespace VRCKatamari.Pickup
             }
         }
 
+        // ------------------------------------------------------------------
+        // Spatial index: which rows can matter to the ball right now.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Builds, once in Start, everything the per-scan row selection reads: each row's
+        /// absorb requirement, the static rows' world position and box, the grid over the
+        /// static rows, and the short list of rows that are read live every scan.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Why. The old scan walked all rows three times per interval (candidate scan,
+        /// obstacle classification, nearest-solid selection), each row costing a Transform
+        /// read and about thirty Udon operations, which was ~3.9 ms of the Cancer level's
+        /// 14 ms script time with the ball standing still. Only the rows within a couple of
+        /// metres of the ball can change any decision, and a static row's position never
+        /// changes, so it can be found by cell instead of by measurement.
+        /// </para>
+        /// <para>
+        /// Row classes. <i>Mobile</i> (<c>propMobile[i]</c>, or every row when the column is
+        /// absent): the Transform is read each scan, exactly as before. <i>Static</i>: the
+        /// position and the blocking box are computed here once. A static row with a box
+        /// reaching further than <see cref="GridMaxHalfDiagonalM"/> from its centre goes to the
+        /// linear list (it would stretch every grid query) but still uses its cached values.
+        /// Rows with no transform, or neither a candidate nor an obstacle role, are in no list:
+        /// no stage ever acted on them. The result of every stage is identical to the full
+        /// walk; only the set of rows it looks at shrinks.
+        /// </para>
+        /// </remarks>
+        private void BuildSpatialIndex()
+        {
+            rowMobile = new bool[propCount];
+            rowTracked = new bool[propCount];
+            rowInLinear = new bool[propCount];
+            propBoxValid = new bool[propCount];
+            propWorldPositions = new Vector3[propCount];
+            propReqMm = new float[propCount];
+            linearRows = new int[propCount];
+            staticRows = new int[propCount];
+            queryRows = new int[propCount];
+            nearRows = new int[propCount];
+            nearDistSq = new float[propCount];
+            nearPositions = new Vector3[propCount];
+            candRows = new int[propCount];
+            candDistanceByRow = new float[propCount];
+            candCount = 0;
+            nearCount = 0;
+            nearValid = false;
+            linearCount = 0;
+            staticCount = 0;
+            driftCursor = 0;
+            driftLogCount = 0;
+            mobileRowCount = 0;
+            bigStaticRowCount = 0;
+            gridActive = false;
+            gridMemberCount = 0;
+            gridMaxHalfDiagonal = 0f;
+
+            bool haveColumn = propMobile != null && propMobile.Length >= propCount;
+            bool[] member = new bool[propCount];
+            int memberCount = 0;
+            for (int i = 0; i < propCount; i++)
+            {
+                propReqMm[i] = PickupAbsorbMath.ResolveRequirementMmOrInvalid(propOwnSizes[i],
+                    propGateK[i]);
+                Transform t = propTransforms[i];
+                if (t == null) continue;
+                if (!submittable[i] && !propUsable[i]) continue;
+
+                Vector3 position = t.position;
+                propWorldPositions[i] = position;
+                bool mobile = !haveColumn || propMobile[i];
+                // A static row that is not at a finite place was skipped by every stage.
+                if (!mobile && !KatamariMath.IsFiniteVector(position)) continue;
+                rowTracked[i] = true;
+
+                if (mobile)
+                {
+                    rowMobile[i] = true;
+                    rowInLinear[i] = true;
+                    linearRows[linearCount] = i;
+                    linearCount = linearCount + 1;
+                    mobileRowCount = mobileRowCount + 1;
+                    continue;
+                }
+
+                staticRows[staticCount] = i;
+                staticCount = staticCount + 1;
+                if (propUsable[i])
+                {
+                    Vector3 minimum;
+                    Vector3 maximum;
+                    propBoxValid[i] = BlockingPropMath.TryBoxFromCentreAndExtents(position,
+                        propBounds[i], out minimum, out maximum);
+                    if (propBoxValid[i])
+                    {
+                        propMinima[i] = minimum;
+                        propMaxima[i] = maximum;
+                    }
+                    if (propHalfDiagonal[i] > GridMaxHalfDiagonalM)
+                    {
+                        rowInLinear[i] = true;
+                        linearRows[linearCount] = i;
+                        linearCount = linearCount + 1;
+                        bigStaticRowCount = bigStaticRowCount + 1;
+                        continue;
+                    }
+                    if (propHalfDiagonal[i] > gridMaxHalfDiagonal)
+                        gridMaxHalfDiagonal = propHalfDiagonal[i];
+                }
+                member[i] = true;
+                memberCount = memberCount + 1;
+            }
+
+            if (memberCount > 0)
+            {
+                gridInfo = new float[PickupSpatialGrid.InfoLength];
+                if (PickupSpatialGrid.TryComputeLayout(propWorldPositions, member, propCount,
+                    gridCellSizeM, GridMaxCells, gridInfo))
+                {
+                    int cells = PickupSpatialGrid.CellCount(gridInfo);
+                    gridCellStart = new int[cells + 1];
+                    gridCellRows = new int[memberCount];
+                    gridCellMin = new Vector3[cells];
+                    gridCellMax = new Vector3[cells];
+                    gridActive = PickupSpatialGrid.BuildCells(gridInfo, propWorldPositions, member,
+                        propCount, gridCellStart, gridCellRows)
+                        && PickupSpatialGrid.BuildCellBounds(gridInfo, propWorldPositions,
+                        gridCellStart, gridCellRows, gridCellMin, gridCellMax);
+                }
+                if (gridActive)
+                {
+                    gridMemberCount = memberCount;
+                }
+                else
+                {
+                    // The grid could not be built: the static rows are scanned like the rest.
+                    for (int i = 0; i < propCount; i++)
+                    {
+                        if (!member[i]) continue;
+                        rowInLinear[i] = true;
+                        linearRows[linearCount] = i;
+                        linearCount = linearCount + 1;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Marks a row as one whose Transform another system moves, so every scan reads it
+        /// live from now on. Idempotent; a row the index never tracked, a bad index and a
+        /// call before Start are ignored.
+        /// </summary>
+        /// <remarks>
+        /// The contract for movers: a system that writes a prop's Transform calls this before
+        /// its first write (the stack fall does), or the level's <c>propMobile</c> column names
+        /// the row. The mover keeps writing the prop's own Transform - the scan reads that, so
+        /// a mover that updates it less often just shows the scan the position it last wrote,
+        /// which is what the full walk read too.
+        /// </remarks>
+        public void MarkPropMobile(int index)
+        {
+            if (rowMobile == null || index < 0 || index >= propCount) return;
+            if (rowMobile[index]) return;
+            if (!rowTracked[index]) return;
+            rowMobile[index] = true;
+            mobileRowCount = mobileRowCount + 1;
+            if (rowInLinear[index]) return;
+            rowInLinear[index] = true;
+            linearRows[linearCount] = index;
+            linearCount = linearCount + 1;
+        }
+
+        /// <summary>
+        /// Safety net for the static-row cache: re-reads a few static rows per frame and
+        /// turns a row that is not where Start saw it into a mobile row, with one warning.
+        /// </summary>
+        /// <remarks>
+        /// A mover that neither the <c>propMobile</c> column nor <see cref="MarkPropMobile"/>
+        /// named is found within <c>staticCount / DriftChecksPerFrame</c> frames; until then the
+        /// scan sees its old position. The warning names the row so the column can be fixed.
+        /// </remarks>
+        private void VerifyStaticRows()
+        {
+            if (staticCount <= 0) return;
+            for (int n = 0; n < DriftChecksPerFrame; n++)
+            {
+                driftCursor = driftCursor + 1;
+                if (driftCursor >= staticCount) driftCursor = 0;
+                int row = staticRows[driftCursor];
+                if (rowMobile[row]) continue;
+                if (propStates[row] != StateFree) continue;
+
+                Vector3 live = propTransforms[row].position;
+                Vector3 cached = propWorldPositions[row];
+                if (Mathf.Abs(live.x - cached.x) <= DriftToleranceM
+                    && Mathf.Abs(live.y - cached.y) <= DriftToleranceM
+                    && Mathf.Abs(live.z - cached.z) <= DriftToleranceM) continue;
+
+                MarkPropMobile(row);
+                if (driftLogCount < DriftLogLimit)
+                {
+                    driftLogCount = driftLogCount + 1;
+                    Debug.LogWarning("[PickupFieldHost] static row " + row + " (" + itemIds[row]
+                        + ") moved " + Vector3.Distance(live, cached).ToString("F3")
+                        + " m without being marked mobile; it is read live from now on."
+                        + " Fix the propMobile column (re-run Sync Prop Arrays) or call"
+                        + " MarkPropMobile before moving it.");
+                }
+            }
+        }
+
+        // Gathers the free rows near the ball unless this Update already did for at least
+        // these reaches. A negative reach means "that stage is not running".
+        private void EnsureNearRows(Vector3 center, float scanReachM, float pruneReachM)
+        {
+            if (nearValid && nearScanReachM >= scanReachM && nearPruneReachM >= pruneReachM)
+                return;
+            GatherNearRows(center, scanReachM, pruneReachM);
+        }
+
+        /// <summary>
+        /// Fills nearRows / nearDistSq / nearPositions with the free rows that the candidate
+        /// scan (reach <paramref name="scanReachM"/> from the ball centre) or the obstacle
+        /// stage (reach <paramref name="pruneReachM"/> plus the row's half diagonal) could act
+        /// on. A superset of what each stage keeps; the stages apply their own exact tests.
+        /// </summary>
+        /// <remarks>
+        /// The squared distances and the limits are computed with the same expressions the
+        /// stages use, from the same positions (a static row's cached one equals what its
+        /// Transform would read), so a row the stage would keep is never dropped here.
+        /// </remarks>
+        private void GatherNearRows(Vector3 center, float scanReachM, float pruneReachM)
+        {
+            int total = 0;
+            float gridReach = scanReachM;
+            if (pruneReachM >= 0f)
+            {
+                float withExtent = pruneReachM + gridMaxHalfDiagonal;
+                if (withExtent > gridReach) gridReach = withExtent;
+            }
+            if (gridActive && gridReach >= 0f)
+            {
+                total = PickupSpatialGrid.Query(center, gridReach, gridInfo, gridCellStart,
+                    gridCellRows, gridCellMin, gridCellMax, queryRows);
+                if (total < 0)
+                {
+                    // Cannot happen with a finite centre and a built grid; if it ever does,
+                    // look at every grid row rather than none.
+                    total = 0;
+                    for (int g = 0; g < gridMemberCount; g++)
+                    {
+                        queryRows[total] = gridCellRows[g];
+                        total = total + 1;
+                    }
+                }
+            }
+            for (int k = 0; k < linearCount; k++)
+            {
+                queryRows[total] = linearRows[k];
+                total = total + 1;
+            }
+
+            float scanSq = -1f;
+            if (scanReachM >= 0f) scanSq = scanReachM * scanReachM;
+            int near = 0;
+            for (int k = 0; k < total; k++)
+            {
+                int row = queryRows[k];
+                if (propStates[row] != StateFree) continue;
+                Vector3 position;
+                if (rowMobile[row]) position = propTransforms[row].position;
+                else position = propWorldPositions[row];
+
+                float dx = position.x - center.x;
+                float dy = position.y - center.y;
+                float dz = position.z - center.z;
+                float distanceSq = dx * dx + dy * dy + dz * dz;
+                if (!KatamariMath.IsFiniteFloat(distanceSq)) continue;
+
+                float limitSq = scanSq;
+                if (pruneReachM >= 0f)
+                {
+                    float pruneLimit = pruneReachM + propHalfDiagonal[row];
+                    float pruneSq = pruneLimit * pruneLimit;
+                    if (pruneSq > limitSq) limitSq = pruneSq;
+                }
+                if (distanceSq > limitSq) continue;
+
+                nearRows[near] = row;
+                nearDistSq[near] = distanceSq;
+                nearPositions[near] = position;
+                near = near + 1;
+            }
+            nearCount = near;
+            nearScanReachM = scanReachM;
+            nearPruneReachM = pruneReachM;
+            nearValid = true;
+        }
+
+        /// <summary>Static rows found through grid cells (0 when the grid is off).</summary>
+        public int GetGridRowCount()
+        {
+            return gridMemberCount;
+        }
+
+        /// <summary>Rows scanned every time: mobile rows plus big static rows.</summary>
+        public int GetLinearRowCount()
+        {
+            return linearCount;
+        }
+
+        /// <summary>Rows read live every scan (the propMobile column, marks and drift finds).</summary>
+        public int GetMobileRowCount()
+        {
+            return mobileRowCount;
+        }
+
+        /// <summary>Free rows the last gather handed to the stages (diagnostic).</summary>
+        public int GetNearRowCount()
+        {
+            return nearCount;
+        }
+
         /// <summary>
         /// Reports the authoring mistakes this layer can see, once each, in one line per
         /// category instead of one line per prop.
@@ -1234,6 +1641,14 @@ namespace VRCKatamari.Pickup
         /// <summary>Index of the prop with this item id, or -1 when it is not this host's.</summary>
         private int FindPropIndex(string itemId)
         {
+            // An absorbed prop was one of this host's queued candidates, so look at those few
+            // first (item ids are unique per field: the authoring rules refuse duplicates, so
+            // this finds the same row the full walk would).
+            for (int q = 0; q < queuedCount; q++)
+            {
+                int queuedRow = queuedIndices[q];
+                if (itemIds[queuedRow] == itemId) return queuedRow;
+            }
             for (int i = 0; i < propCount; i++)
             {
                 if (itemIds[i] == itemId) return i;
@@ -1462,19 +1877,26 @@ namespace VRCKatamari.Pickup
             // UpdatePropObstacles use, so the three agree on what "too big" means.
             float ballDiameterM = motor.GetSemanticDiameterWorldM();
 
+            // The rows near the ball come from the spatial index (grid cells for static
+            // props, a short list for moving ones); the verdict per row is the same
+            // PickupCandidateSelection decision as before, over cached requirements.
+            EnsureNearRows(center, activationRadiusM, -1f);
+            float ballMm;
+            bool ballMmValid = PickupAbsorbMath.TryFloorMillimetres(ballDiameterM, out ballMm);
+
             int selected = 0;
             int inRange = 0;
             int withinLimit = 0;
-            for (int i = 0; i < propCount; i++)
+            for (int k = 0; k < nearCount; k++)
             {
+                int i = nearRows[k];
                 if (propStates[i] != StateFree) continue;
                 if (!submittable[i]) continue;
-                Transform prop = propTransforms[i];
-                if (prop == null) continue;
 
                 int selectedAfter;
-                int offer = PickupCandidateSelection.OfferProp(i, prop.position, center,
-                    activationRadiusM, propOwnSizes, propGateK, ballDiameterM,
+                int offer = PickupCandidateSelection.OfferMeasured(i, nearDistSq[k],
+                    activationRadiusM,
+                    PickupAbsorbMath.IsBeyondCachedRequirement(propReqMm[i], ballMmValid, ballMm),
                     nearestIndices, nearestDistSq, selected, slotCount, out selectedAfter);
                 selected = selectedAfter;
                 if (offer == PickupCandidateSelection.OfferOutOfRange) continue;
@@ -1727,12 +2149,28 @@ namespace VRCKatamari.Pickup
             float pruneRadius = radius + blockingStickinessM;
             if (!KatamariMath.IsFiniteFloat(pruneRadius)) return;
 
+            // Last scan's candidates leave first; only the rows in candRows ever carry a flag.
+            for (int k = 0; k < candCount; k++)
+            {
+                int previousRow = candRows[k];
+                propObbCandidate[previousRow] = false;
+                supportCandidate[previousRow] = false;
+            }
+            candCount = 0;
+
             // One cross-behaviour read per scan; the per-row query only runs while something falls.
             bool anyFalling = fallHost != null && fallHost.GetFallingCount() > 0;
-            for (int i = 0; i < propCount; i++)
+
+            // The rows near the ball for this scan (and for the candidate scan, when it is due
+            // in the same frame: one gather serves both). Every row the original full walk
+            // could have kept is in the list; the per-row tests below are the original ones.
+            float scanReach = -1f;
+            if (now >= nextScanTime && Collecting()) scanReach = activationRadiusM;
+            EnsureNearRows(center, scanReach, pruneRadius);
+
+            for (int k = 0; k < nearCount; k++)
             {
-                blockingCandidate[i] = false;
-                supportCandidate[i] = false;
+                int i = nearRows[k];
                 // Absorbed and hidden props are no longer walls or floors. A row with no
                 // transform or no usable volume has no box to build, so it is skipped too
                 // (not because it is unsubmittable: a prop the motor would refuse as a
@@ -1742,28 +2180,31 @@ namespace VRCKatamari.Pickup
                 // A falling prop is neither a wall nor a floor (PROP_BEHAVIOURS section 4).
                 if (anyFalling && fallHost.IsPropFalling(i)) continue;
 
-                Vector3 position = propTransforms[i].position;
-                float dx = position.x - center.x;
-                float dy = position.y - center.y;
-                float dz = position.z - center.z;
-                float distanceSq = dx * dx + dy * dy + dz * dz;
-                if (!KatamariMath.IsFiniteFloat(distanceSq)) continue;
-
                 // Pruning only, never a decision: the distance to an axis-aligned box is at
                 // least the distance to its centre minus its half diagonal, so a prop past
                 // this bound cannot be selected at radius + stickiness.
                 float pruneLimit = pruneRadius + propHalfDiagonal[i];
-                if (distanceSq > pruneLimit * pruneLimit) continue;
+                if (nearDistSq[k] > pruneLimit * pruneLimit) continue;
 
-                if (!PickupAbsorbMath.IsBeyondAbsorbLimit(propOwnSizes[i], EffectiveVolumeK(i),
-                    ballDiameterM)) continue;
+                if (!PickupAbsorbMath.IsBeyondCachedRequirement(propReqMm[i], true, ballMm))
+                    continue;
 
+                // A static row's box was built once in Start from the same position and bounds;
+                // a moving row's is rebuilt from the position read this scan.
                 Vector3 minimum;
                 Vector3 maximum;
-                if (!BlockingPropMath.TryBoxFromCentreAndExtents(position, propBounds[i],
-                    out minimum, out maximum)) continue;
-                propMinima[i] = minimum;
-                propMaxima[i] = maximum;
+                if (rowMobile[i])
+                {
+                    if (!BlockingPropMath.TryBoxFromCentreAndExtents(nearPositions[k],
+                        propBounds[i], out minimum, out maximum)) continue;
+                    propMinima[i] = minimum;
+                    propMaxima[i] = maximum;
+                }
+                else
+                {
+                    if (!propBoxValid[i]) continue;
+                    maximum = propMaxima[i];
+                }
 
                 // Already above the top is the static box's rule 2: a ball descending onto
                 // this prop must not see its landing surface classified as a wall.
@@ -1771,8 +2212,19 @@ namespace VRCKatamari.Pickup
                 int role;
                 if (!SupportSurfaceMath.TryClassifyProp(true, maximum.y, supportHeight,
                     stepLimit, alreadyAbove, out role)) continue;
-                if (role == SupportSurfaceMath.PropRoleSupport) supportCandidate[i] = true;
-                else if (role == SupportSurfaceMath.PropRoleBlocking) blockingCandidate[i] = true;
+                if (role == SupportSurfaceMath.PropRoleSupport)
+                {
+                    supportCandidate[i] = true;
+                    propObbCandidate[i] = true;
+                    candRows[candCount] = i;
+                    candCount = candCount + 1;
+                }
+                else if (role == SupportSurfaceMath.PropRoleBlocking)
+                {
+                    propObbCandidate[i] = true;
+                    candRows[candCount] = i;
+                    candCount = candCount + 1;
+                }
             }
 
             // One predicate decides which props are walls and which are floors.
@@ -1815,22 +2267,17 @@ namespace VRCKatamari.Pickup
             if (capacity > PropObbBakeMath.PropObbCapacity) capacity = PropObbBakeMath.PropObbCapacity;
             if (capacity <= 0) { ClearPropObbs(); ClearPropProxies(); return; }
 
-            int candidates = 0;
-            for (int i = 0; i < propCount; i++)
-            {
-                bool candidate = blockingCandidate[i] || supportCandidate[i];
-                propObbCandidate[i] = candidate;
-                if (candidate) candidates = candidates + 1;
-            }
+            // The candidates are the rows UpdatePropObstacles listed this scan.
+            int candidates = candCount;
             propObbCandidateCount = candidates;
             // More candidates than the block holds is the §5.4 failure mode: count it once per
             // scan so it is visible, and let the nearest-first selection keep the nearest.
             if (candidates > capacity) propObbOverflowCount = propObbOverflowCount + 1;
 
-            int written = BlockingPropMath.SelectNearest(center, radiusM, propMinima, propMaxima,
-                propObbCandidate, propCount, propObbPreviousIndices, propObbPreviousCount,
-                blockingStickinessM, propObbSelectedIndices, propObbSelectedDistances,
-                capacity);
+            int written = BlockingPropMath.SelectNearestAmong(center, radiusM, propMinima,
+                propMaxima, propObbCandidate, candRows, candCount, propCount, candDistanceByRow,
+                propObbPreviousIndices, propObbPreviousCount, blockingStickinessM,
+                propObbSelectedIndices, propObbSelectedDistances, capacity);
             if (written < 0)
             {
                 // A refused selection is a data error, not an empty world: keep the solids

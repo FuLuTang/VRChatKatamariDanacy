@@ -77,13 +77,37 @@ namespace VRCKatamari.Pickup
             float dz = propPosition.z - ballCenter.z;
             float distSq = dx * dx + dy * dy + dz * dz;
             if (!KatamariMath.IsFiniteFloat(distSq)) return OfferOutOfRange;
-            if (distSq > activationRadiusM * activationRadiusM) return OfferOutOfRange;
 
-            if (PickupAbsorbMath.IsBeyondAbsorbLimit(ownSizes[index], volumeKs[index],
-                ballSemanticDiameterWorldM))
+            // The size test runs only inside the radius (it needs a cube root).
+            bool beyondLimit = false;
+            if (distSq <= activationRadiusM * activationRadiusM)
             {
-                return OfferBeyondLimit;
+                beyondLimit = PickupAbsorbMath.IsBeyondAbsorbLimit(ownSizes[index], volumeKs[index],
+                    ballSemanticDiameterWorldM);
             }
+            return OfferMeasured(index, distSq, activationRadiusM, beyondLimit, indices,
+                distancesSq, selected, limit, out selectedAfter);
+        }
+
+        /// <summary>
+        /// The decision core of <see cref="OfferProp"/> for a caller that already measured the
+        /// squared centre distance (finite) and resolved the size verdict, e.g. from a cached
+        /// requirement (<see cref="PickupAbsorbMath.IsBeyondCachedRequirement"/>).
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="beyondLimit"/> is only read for a row inside the radius. The
+        /// selection is the nearest rows by (squared distance, row index): equal distances rank
+        /// the lower row first, so the result does not depend on the order rows are offered in
+        /// (the host walks grid cells, not rows 0..n-1).
+        /// </remarks>
+        public static int OfferMeasured(int index, float distSq, float activationRadiusM,
+            bool beyondLimit, int[] indices, float[] distancesSq, int selected, int limit,
+            out int selectedAfter)
+        {
+            selectedAfter = selected;
+            if (!KatamariMath.IsFiniteFloat(distSq)) return OfferOutOfRange;
+            if (distSq > activationRadiusM * activationRadiusM) return OfferOutOfRange;
+            if (beyondLimit) return OfferBeyondLimit;
 
             selectedAfter = InsertNearest(index, distSq, indices, distancesSq, selected, limit);
             return OfferWithinLimit;
@@ -100,14 +124,16 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// Keeps the nearest rows seen so far, ascending by squared distance.
+        /// Keeps the nearest rows seen so far, ascending by (squared distance, row index).
         /// </summary>
         /// <remarks>
         /// Insertion into two small caller-owned arrays: no allocation and no sort of the
         /// whole prop list. Returns the new number of selected entries; a row farther than
-        /// the current farthest of a full selection is dropped.
+        /// the current farthest of a full selection is dropped. Equal distances rank the lower
+        /// row first - what an ascending 0..n-1 walk with a strict comparison always produced -
+        /// so any offer order gives the same selection.
         /// </remarks>
-        private static int InsertNearest(int index, float distSq, int[] indices,
+        public static int InsertNearest(int index, float distSq, int[] indices,
             float[] distancesSq, int selected, int limit)
         {
             if (limit <= 0) return selected;
@@ -117,7 +143,7 @@ namespace VRCKatamari.Pickup
             if (selected < limit)
             {
                 int at = selected;
-                while (at > 0 && distancesSq[at - 1] > distSq)
+                while (at > 0 && Ranks(distSq, index, distancesSq[at - 1], indices[at - 1]))
                 {
                     distancesSq[at] = distancesSq[at - 1];
                     indices[at] = indices[at - 1];
@@ -128,9 +154,9 @@ namespace VRCKatamari.Pickup
                 return selected + 1;
             }
 
-            if (distSq >= distancesSq[limit - 1]) return selected;
+            if (!Ranks(distSq, index, distancesSq[limit - 1], indices[limit - 1])) return selected;
             int pos = limit - 1;
-            while (pos > 0 && distancesSq[pos - 1] > distSq)
+            while (pos > 0 && Ranks(distSq, index, distancesSq[pos - 1], indices[pos - 1]))
             {
                 distancesSq[pos] = distancesSq[pos - 1];
                 indices[pos] = indices[pos - 1];
@@ -139,6 +165,14 @@ namespace VRCKatamari.Pickup
             distancesSq[pos] = distSq;
             indices[pos] = index;
             return selected;
+        }
+
+        // True when (distSq, index) ranks strictly before (otherDistSq, otherIndex).
+        private static bool Ranks(float distSq, int index, float otherDistSq, int otherIndex)
+        {
+            if (distSq < otherDistSq) return true;
+            if (distSq > otherDistSq) return false;
+            return index < otherIndex;
         }
     }
 }

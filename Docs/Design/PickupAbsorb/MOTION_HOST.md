@@ -41,24 +41,56 @@
 - **相位（D-12）**：`props[].phase` → `SeedForPhase01`；否则 `PhaseSeed.From(meta.id, itemId)`。种子之后的所有随机抽取都是它的确定函数，无 `Random`、无时钟。
 - **触发门 ≠ 剔除半径**：`rowTriggerRadiusM`（`params.triggerRadiusM`，缺省 `PanicRadiusM(sizeGroup)` = 2 m）每 5 Hz 对球心距离判一次，触发后闩锁并设 Animator `Panic`；`wakeRadiusM=12`、`cullHysteresisM=3` 只决定是否**冻结**（时钟与状态保留，回来不重置、不跳变，Animator 组件关/开）。`sizeGroup` 本数据没有，全按 0（`motion_sim` 同口径）。**触发后的动作原作未知**，目前不位移，8 件 `0x04` 保持静止（M1/M2）。
 - **只驱动"自由"的件**（与吸收/坠落的约定，全部是对 transform 的**只读**检查，不需要 `PickupFieldHost`/电机配合）：
-  1. `transform.parent != Start 时的父` → **Away**（被吸收挂到了球的附着根）：不再写。`ResetField` 把它放回原父后自动 **Revive**（重置状态、回出生位姿）。
+  1. `transform.parent != Start 时的父` → **Away**（被吸收挂到了球的附着根）：不再写（写之前必查，另每 6 帧批查一次所有活动行）。`ResetField` 把它放回原父后自动 **Revive**（重置状态、回出生位姿）。
   2. 上次写入位置与当前位置相差 >2 cm → **Yielded**（别人动了它：坠落、搬运）：不再写，直到 `ResumeRowAfterSettle`。
   3. 父行不在 Active（父被吃/被挪走）→ 子行 **Detached**，不再被携带；父回来则恢复。
   4. `SuspendRow(row)` → **Suspended**。
   给 stack-fall 的最小接口（可选，不调也安全，因为 2 已能识别）：`FindRow(Transform)`、`SuspendRow(int)`、`ResumeRowAfterSettle(int)`（D-14：落定后把出生位姿重定为当前位姿、断开父链、时钟继续）。给回合控制器：`ResetAll()`（重开回合）。**不要**去改 `PickupFieldHost`/电机。
 - **挡路/接触**：见 §5。
 
-## 4. 每帧成本（估算，未测）
+## 4. 每帧成本与降频规则
 
-数据：全量步进 = 31×15 + 18×30 + 15×15 + 8×30 + 10×15 + 15×5 + 7×5 + 5×10 + 2×10 + 2×5 = **1,810 步/秒**（与 `LEVEL_FORMAT_V2` §6.7.5 一致；spin/flip 每步拆 3 块 dt=2，多约 60 次数学调用/秒）。
+**实测基线（R51 消融，蟹座关、球静止、Editor 后台、31.6 fps）**：关掉 MotionHost 一项，`ScriptUpdate` 14.0 → 5.0 ms，即 **≈ 9 ms**。用 Udon 外部调用（每个 float 运算、数组读、Transform 读写都是一次 extern）数出来的热点，优化前（估算，未测）：
 
-- **步进**：≈1,870 次数学调用/秒 ≈ 每帧（90 Hz）约 21 次。
-- **写入**：smooth 的 129 行 + 42 个携带行每帧各写一次（hop/whack 26 行与 WaitForPlayer 15 行只在步进帧/携带时写）≈ **每帧最多 ~155 次 `SetPositionAndRotation` + `Lerp` + `Slerp`**（部分行重叠）。
-- **检查**：每行每帧 `t.parent` 比较 + 一次 `t.position` 读（漂移检测）+ 数组读写，约 60–70 次 Udon 外部调用/行。
-- **口径**：按仓库 [PROP_BEHAVIOURS](PROP_BEHAVIOURS.md) §7.1 的 0.02 ms/次单件更新（`budget.py`）：155 行 × 0.02 ms ≈ **3.1 ms/帧上界**（PC，每行都满更新时）；按实际每行 ~65 外部调用 × 0.2–0.5 µs ≈ 0.01–0.03 ms 的区间，**155 行 ≈ 1.6–5 ms**。上界超过 25% 预算（2.78 ms @90 Hz）。**这是估算，不是测量。**
-- **12 m 剔除对本关几乎不省**：球半径 12 m 覆盖整个 452 m² 的院子，所以本关全员活跃；剔除对大关才有意义。
-- **不预先优化**。若 Unity Profiler 里 `MotionHost.Update` 超标，按收益排序的候选（现在**不做**）：漂移检测降到每 2–3 帧、smooth 改成 30 Hz 步进不插值、把携带行并入父行步进。
-- 诊断：勾 `logStatsEachSecond` 每秒打一行 `steps/writes/active/away/yielded/culled`；期望 `steps≈1,800–1,900`。
+| 来源 | 外部调用/次 | 次数/秒（本关） | 外部调用/秒 | 占比 |
+| --- | --- | --- | --- | --- |
+| **路径步进**（p23 50 点 × 7 行、p15 59 点 × 2 行，15 Hz）：每步 `IsPathOk` 两次（3N 次有限性检查 + N−1 次开方）、总长一次、线性段扫描 | ≈ 8,500 | 135 | **≈ 1.15 M** | ≈ 55% |
+| 每帧每行的所有权检查与写入（`t.parent`、`t.position` + `HasDrifted` 里 6 次有限性检查、Lerp/Slerp、`SetPositionAndRotation`） | ≈ 140 | 155 × 31.6 | ≈ 0.69 M | ≈ 33% |
+| 其余步进（hop/whack 30 Hz 共 780 步/秒占一半、sway/walk/bob/spin…） | ≈ 170 | ≈ 1,665 | ≈ 0.28 M | ≈ 13% |
+
+合计 ≈ 2.1 M 外部调用/秒 ÷ 实测 0.284 s/s ⇒ 约 0.135 µs/次，与 Udon 常见量级吻合（这个标定把外部调用数换成毫秒；绝对值不可靠，**占比**才是结论：路径步进是第一热点）。
+
+### 做了什么（运动结果不变）
+
+1. **路径表预计算**（`MotionMath.BuildPathTable` / `TryStepPathPrepared`）：每条路径启动时把累计长度、段长、每段起始朝向与朝向差、俯仰一次算好；每步只剩一次段命中（带段号提示：先试上次的段、下一段，失败才线性扫描）、一次插值。表里存的就是原函数每次重算的那些 float（同顺序累加），所以位置/朝向与原步进逐位一致（测试 `Prepared…MatchesOriginal…` 取 1e-6）。输入校验（速度、半高、出生位置有限）每行只在启动时做一次；路径坏了（有 <1 cm 的段/非有限点）的行与原来一样不动（现在启动时警告一次）。BackAndForth 永远用开路径表（原函数忽略 closed）。≈ 8,500 → ≈ 100 次/步。
+2. **远处行只在自己步进的帧写 Transform**：球半径 + `nearMarginM`（默认 6 m）之外的行（`rowFar`，每 `classifyStrideFrames=6` 帧用球心距离重判，1/6 的行每帧）不再每帧插值写入，只在这一帧它自己步进了、或它的父行这一帧写了的时候写。**步进时刻表不动**（每个到期步照常走，状态与优化前逐步相同——hop 的"批量步不等于两个单步"见 `MotionMath` TryStepHop，所以**不做**合并步进），写入时的位姿用的是**当前时刻**的插值（`SmoothFraction(now, stepTime, interval)`），所以"被更新那一帧的姿态 = 全频版同一帧的姿态"（测试 `FarSmoothRowsWriteTheCurrentTimePose…`，60/30/144 fps）。远处行的可见更新率从每帧降到其步进率（15/10/5 Hz，与原作自己的 15 Hz 离散一致）。
+3. **步进帧才写，且位姿没变就不写**：30 Hz 的 hop/whack 的步输出与上一步逐位相同（休息的 hop、停在顶端的 whack）时不再重算 `StandalonePose`、不写 Transform（`SamePoseRequest` 是精确比较，不是 Unity `==` 的近似比较）。hop 18 行 ≈ 95% 的时间在休息。携带行（`rowRiding`）只在父行本帧写过、或自己有步进时才写（父没动，子的位姿是同一个函数值）。
+4. **每行常量预计算**：`rowSpace`、`rowKeepsSpawnRotation`、`rowHopSpeedCmPerFrame`（原来每步都当实参调 `HopSpeedCmPerFrame` 一串比较）、`rowRiding`（父链在 Start 校验之后才定）。`HasDrifted` → `HasDriftedSquared`（容差平方启动时算一次，`!(d² ≤ tol²)` 所以 NaN/∞ 仍算漂移；约 45 → 16 次外部调用）。统计计数只在 `logStatsEachSecond` 时累加。
+5. **所有权检查改到"写之前"**：`t.parent`/漂移只在真要写 Transform 之前查（保护的就是这次写，所以不会覆盖被吸附/被摔的道具）；每 6 帧的分类批里再对所有活动行查一次 `t.parent`（被吸收 → Away，回合重置后能 Revive、状态重置）；不写 Transform 的行（WaitForPlayer、只有 Animator 的行）靠这一查发现被吸收。检查次数从"每行每帧"降到"每行每 6 帧 + 每次写"。
+6. **剔除/分类**：剔除用同一次距离计算，不再每行每帧做 `(i+frame)%stride`；`classifyStrideFrames` 12 → 6（grep 在 .unity/.prefab 里没有找到序列化的 `cullStrideFrames`，字段改名后默认值生效）。
+
+### 预期（估算，未测；Unity 验证后以实测为准）
+
+同一场景、同一标定（0.135 µs/次、31.6 fps）：
+
+| 项 | 优化后外部调用/秒 | 说明 |
+| --- | --- | --- |
+| 路径步进 | ≈ 19 k（135 × ≈140，含步进壳） | 1.15 M → 0.02 M |
+| 其余步进 | ≈ 0.28 M → ≈ 0.17 M | hop/whack 休息步省 `StandalonePose`/有限性检查 ≈ 80 次/步 |
+| 每帧行驱动 | 近处行 ≈ 95/次，远处/冻结行 ≈ 12–30/次；假设 40% 近：≈ 8k/帧 × 31.6 ≈ 0.26 M | 原 0.69 M |
+| 合计 | ≈ **0.47 M/秒 ⇒ ≈ 2.0 ms/帧**（近处占 20% 时 ≈ 1.7 ms，占 60% 时 ≈ 2.4 ms） | 原 ≈ 9 ms |
+
+即**降幅约 4.5×（≈ 9 → ≈ 2 ms）**。**没有凭空保证 ≤1.5 ms**：剩下的大头是其余步进（≈ 0.17 M ≈ 0.8 ms，不能再降：步进时刻表和状态必须与优化前一致）和近处行的写入。要再压到 1.5 ms：缩小 `nearMarginM`（4 m 仍盖住吸收/挡路读取，见下）、或把 `wakeRadiusM` 由 12 m 收到 9 m（会改"冻结"的可见范围，是设计参数，需要 owner 决定）。帧率越高，每帧行驱动越贵（每秒的步进成本固定），60 fps 下近处行的每帧写入翻倍，但远处行不涨。
+
+### 远处行的位置滞后：对吸收/挡路的影响
+
+`PickupFieldHost` 每次扫描（0.05 s）读运动行的 `Transform.position` 做吸收候选（球心 1.6 m 内）、挡路/支撑 OBB（球半径 + 0.8 m 余量 + 0.25 m 粘滞 + 道具半对角线内）。`nearMarginM`（6 m）= 这些读取范围（≤ 约 5 m，含 2 m 半对角线）之外再留约 2 m 给"两次分类之间球的位移"（6 帧 × 10 m/s ÷ 30 fps = 2 m）。因此：**所有可能被这些扫描读到的行都在近处，位姿每帧都写，与优化前一样**；远处行读到的位置最多比全频版旧一个步进间隔（15 Hz 的游走/路径行约 2.4–5 cm，10 Hz 的云 ≈ 30 cm），而它们离球 ≥ 6 m，不会被吸、不会挡路。规则：运动行的世界位姿**始终写在它自己的道具 Transform 上**（PickupFieldHost 读的就是它），不新增接口。球变大时近处半径按 `GetCollisionRadiusWorldM()` 同步变大（`NearRadiusM`）。
+
+### 关闭再开（R50 提到的"绝对 Time.time 相位"）
+
+不是问题，R50 的描述与代码不符：运动状态是**逐步积分**的（每步把 `state` 的时钟/距离累加 `dt` 帧），`Time.time` 只用来决定"这一步何时到期"和写入时的插值分数，相位不是 `Time.time` 的函数；种子只在 Start 决定初值。岛被停放时 `Update` 不跑，状态原样冻结，重开后从冻结的姿态继续（与被剔除的行同口径）。优化前重开的实际副作用只有：到期时间已过期，开头最多补 3 步并在一个间隔内用过期的步时刻插值（一次小抖动）。现在加了 `IsResumeGap`：两次 `Update` 间隔 > `resumeGapSeconds`（0.5 s）就把所有活动行的时刻表重新锚到 now（带原来的 8 档错开），状态不变；0.5 s 以内的卡顿仍走原来的补步逻辑。结论：**重开不会跳相位**；若想要"重开像新开局"，那是 `ResetAll()` 的事，不是这里。
+
+- 诊断：勾 `logStatsEachSecond` 每秒打一行 `steps/writes/active/away/yielded/culled/far`；`steps` 应与优化前同量级（≈1,800–1,900，步进没减），`writes` 应明显下降。`decimateFarWrites=false` 回到全频写入，可作 Profiler A/B。
 
 ## 5. 运动道具的接触/挡路：现状核对
 
@@ -86,10 +118,10 @@
 
 步骤与判据：
 1. 刷新/编译：Console 0 error；`MotionHost` 出现 U# 程序资产。**特别看**：U# 是否接受 `float[][]` 锯齿数组与 `Transform.SetPositionAndRotation`、`Animator.Play(string,int,float)`；不接受时的退路是把 `rowState` 拍平成带偏移的一维数组并给 `MotionMath` 加偏移重载。
-2. EditMode 测试：`MotionHostMathTests`（31）、`PlacementMotionRowsTests`（10，其中"参考关卡行数"与"带子件的路径蟹仍是自有程序行"两条本机跑不了，需 Unity：前者期望 `Own=113 Rider=42 paths=3 errors=0`）；另有 `PlacementImporterHierarchyTests`（子件文件夹名 `<父id>_children`、容器不与道具同名）与 `PlacementV2StructureProxyTests`（有同 id 道具的 proxy 固体关 Renderer 留 BoxCollider、二次导入 `~0`）。
+2. EditMode 测试：`MotionHostMathTests`（31）、`MotionHostSchedulingTests`（17：预计算路径与原步进逐位一致、远处行/步进行降频写入的位姿等于全频版、写入门规则）、`PlacementMotionRowsTests`（10，其中"参考关卡行数"与"带子件的路径蟹仍是自有程序行"两条本机跑不了，需 Unity：前者期望 `Own=113 Rider=42 paths=3 errors=0`）；另有 `PlacementImporterHierarchyTests`（子件文件夹名 `<父id>_children`、容器不与道具同名）与 `PlacementV2StructureProxyTests`（有同 id 道具的 proxy 固体关 Renderer 留 BoxCollider、二次导入 `~0`）。
 3. （可选，要骨骼）把 `~/KatamariRef/props/skinned_fbx/*` 拷到 Windows 工程 `Assets/_RefUnlicensed/Animation/`，跑菜单 `Assemble Skeletal Animation`：期望 `[anim] +N ~0`、每行 `[anim_fit]` 比值接近 1；再跑一次 `+0 ~0`。
 4. 重新导入 RefCancer（`Import Placement`）：期望首次 `motion host: rows=155`（有骨骼则 +已装配的纯动画行）、`writes>0`；**第二次 `writes=0`、headline `other=0`**。
-5. Play：院子里螃蟹游走、风铃/云/旗杆摆动、hop 的蟹短促下陷；勾 `logStatsEachSecond`，每秒 `steps≈1,800–1,900`，`MotionHost.Update` 的 Profiler 耗时记录下来（PC 与 Quest 分别）。
+5. Play：院子里螃蟹游走、风铃/云/旗杆摆动、hop 的蟹短促下陷；勾 `logStatsEachSecond`，每秒 `steps≈1,800–1,900`，`MotionHost.Update` 的 Profiler 耗时记录下来（PC 与 Quest 分别），并与 `decimateFarWrites=false` 对比；蟹座关目标 ≈ 2 ms 量级（基线 ≈ 9 ms）。
 6. 吸收一只在动的蟹：它立刻停在球上（`away` +1），不抖、不回弹；`ResetField`/重开回合后它回到出生位姿重新走（`away` 回落）。
 7. 球走到离某蟹 2 m 内：`GetTriggeredCount` +1、该蟹 Animator `Panic`；球在 3–12 m：蟹照常游走，不触发。
 8. 路径蟹（coconut_crab_009/010/011、fiddler_crab_034/038/041/042、small_fiddler_crab_045）：Animator 参数 `Moving=true`、当前状态 `walk`（不再是 `idle`）；**按物体名取位姿时先确认拿到的是带 Renderer 的那个**（`GetComponent<Renderer>() != null`）：带子件的父蟹下面有 `Hierarchy/<id>_children` 文件夹（单位位姿，名字不再等于蟹 id）。预期 30 s 内这 8 只的世界 xz 都在变、coconut_crab_009/011 与 fiddler_crab_034 不再读到 (0,0,0)，它们的子件（fiddler_crab_037、color_tv_001、fiddler_crab_035、shoji_001）跟着走。

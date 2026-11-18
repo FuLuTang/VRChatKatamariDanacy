@@ -75,7 +75,7 @@
 - 初始化：Udon 行为在所在物体首次激活之前没有跑过 `Start`，对它调方法不安全。所以 `LevelSwitchHost.Start` 先把所有岛打开，两帧之后（`ParkIdleIslands`）再按规则关掉，这样每个宿主都跑过一次 `Start`，之后的 `TryActivate` 是同步的。两帧内的 `TryActivate` 返回 `FailIslandsNotReady`。`TerrainFieldHost` 的 `deferRegistration` 路径在 `Start` 里不登记，所以首次激活不会覆盖当前关；`Start` 只跑一次，开关岛不会重复登记。
 - `TryActivate(i)` 顺序：先唤醒（若停放）并打开目标岛 → 离开关的 `ResetField`（吸附道具回到岛内原位）→ 关掉离开的岛 → 清表/登记/球就位。回大厅到达后 `ParkActiveIsland`；同一关再次开始时 `WakeActiveIsland`，随后走回合自己的重置。
 - 球、座位、`HubResultBoard`、`HubReturnButton_<id>`、`HubRoom` 都是场景根物体，不在岛内；岛关闭不影响它们。关闭期间球身上吸附的道具挂在球下，随球可见。
-- 关闭期间 `MotionHost`/`PropFallHost` 暂停：`MotionHost` 用绝对 `Time.time` 算相位，重新打开时相位会直接跳到当前时刻；`PropFallHost` 用 `deltaTime` 累加，无影响。重新打开后运动道具位置是上次关闭时的姿态，回合重置（`ResetField`）只还原被吸附的道具。
+- 关闭期间 `MotionHost`/`PropFallHost` 暂停：`MotionHost` 的运动状态是逐步积分的（`Time.time` 只决定步进何时到期），重新打开时从冻结的姿态继续、不跳相位（Update 间隔 > 0.5 s 时把时刻表重新锚到当前时刻，见 [MOTION_HOST](../PickupAbsorb/MOTION_HOST.md) §4）；`PropFallHost` 用 `deltaTime` 累加，无影响。重新打开后运动道具位置是上次关闭时的姿态，回合重置（`ResetField`）只还原被吸附的道具。
 - 多人：`SetActive` 只对本地客户端生效，各客户端各自开关自己的岛，别的玩家所在关的岛在本机是关着的，看不到对方的球和场景；本轮按单人测试，不解决。
 
 ## 4. 世界坐标型序列化字段要补偏移

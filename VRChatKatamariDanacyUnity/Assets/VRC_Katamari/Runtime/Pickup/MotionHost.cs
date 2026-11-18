@@ -36,7 +36,11 @@ namespace VRCKatamari.Pickup
     /// schedule: every due step advances the program by exactly <c>30 / rate</c> game frames
     /// (in chunks of at most 2, MotionMath section 12.0), so the result does not depend on the
     /// frame rate. Rows below 30 Hz are interpolated between steps every rendered frame; hop
-    /// and whack (30 Hz) are written as stepped. Culling: a row more than
+    /// and whack (30 Hz) are written as stepped. Write decimation: a row further than the
+    /// ball's radius + <c>nearMarginM</c> (default 6 m) only writes its transform on the frames
+    /// it stepped (the pose is still the one for that frame's time, and the schedule is never
+    /// thinned, so trajectories are identical); a stepped row also skips the write when its pose
+    /// did not change (a resting hop). Culling: a row more than
     /// <c>wakeRadiusM</c> from the ball freezes (clock and state kept, nothing reset) once it is
     /// <c>wakeRadiusM + cullHysteresisM</c> away, and its Animator is disabled; WaitForPlayer's
     /// trigger gate (<c>rowTriggerRadiusM</c>, 2 m) is a different thing and is untouched by it.
@@ -75,8 +79,16 @@ namespace VRCKatamari.Pickup
         [SerializeField] private float cullHysteresisM = MotionHostMath.DefaultCullHysteresisM;
         [Tooltip("A prop further than this from where the host last put it belongs to somebody else (fall, reset): the host stops writing.")]
         [SerializeField] private float driftToleranceM = MotionHostMath.DefaultDriftToleranceM;
-        [Tooltip("Each row is re-tested against the ball every this many frames, staggered by row index.")]
-        [SerializeField] private int cullStrideFrames = 12;
+        [Tooltip("Each row is re-tested against the ball (cull, near/far, still-parented) once per this many frames: 1/stride of the rows every frame.")]
+        [SerializeField] private int classifyStrideFrames = MotionHostMath.DefaultClassifyStrideFrames;
+
+        [Header("Write decimation (cost of far rows)")]
+        [Tooltip("Rows beyond ball radius + nearMarginM write their transform only when their program stepped. Off = every row as before (for A/B in the Profiler).")]
+        [SerializeField] private bool decimateFarWrites = true;
+        [Tooltip("Must cover everything that reads a mover's transform: absorb reach 1.6 m, blocking margin 0.8 m + 0.25 m stickiness + the prop's half diagonal, and the ball's travel between two re-tests of a row (stride frames x speed). 6 m leaves ~2 m spare at 30 fps and 10 m/s.")]
+        [SerializeField] private float nearMarginM = MotionHostMath.DefaultNearMarginM;
+        [Tooltip("An Update gap longer than this (level parked and reopened) re-anchors every schedule at now; the programs continue from their frozen state.")]
+        [SerializeField] private float resumeGapSeconds = MotionHostMath.DefaultResumeGapSeconds;
 
         [Header("Diagnostics")]
         [SerializeField] private bool logStatsEachSecond;
@@ -121,8 +133,28 @@ namespace VRCKatamari.Pickup
         private bool ready;
         private int rowCount;
         private int frameIndex;
+        private int classifyCursor;
+        private float lastUpdateTime;
+        private float driftToleranceSq;
+        // Per-frame observer, shared by the row calls (fields, not arguments, to save copies).
+        private float frameNow;
+        private bool frameHaveObserver;
+        private Vector3 frameObserver;
         private float[][] rowState;
         private float[][] pathArrays;
+        private float[][] pathTables;
+        private float[][] pathTablesOpen;
+        private float[][] rowPathTable;
+        private bool[] rowIsPath;
+        private bool[] rowFar;
+        private bool[] rowRiding;
+        private bool[] rowKeepsSpawnRotation;
+        private bool[] rowHasLast;
+        private int[] rowSpace;
+        private int[] rowWriteFrame;
+        private float[] rowHopSpeedCmPerFrame;
+        private Vector3[] rowLastOffset;
+        private Vector3[] rowLastEuler;
         private Vector3[] spawnPos;
         private Quaternion[] spawnRot;
         private Quaternion[] spawnRotInverse;
@@ -165,6 +197,19 @@ namespace VRCKatamari.Pickup
             BuildPaths();
 
             float now = Time.time;
+            driftToleranceSq = MotionHostMath.DriftToleranceSquared(driftToleranceM);
+            for (int i = 0; i < rowCount; i++)
+            {
+                // A parent must come first: composing a rider from a row not yet written this
+                // frame would lag it by one frame, so a bad order is refused, not tolerated.
+                int parentRow = rowParentRow[i];
+                if (parentRow >= i || parentRow < -1)
+                {
+                    Debug.LogWarning("[MotionHost] row " + i + " (" + rowItemIds[i] + ") has parent row "
+                        + parentRow + " which does not precede it; the parent link is ignored");
+                    rowParentRow[i] = -1;
+                }
+            }
             for (int i = 0; i < rowCount; i++)
             {
                 Transform t = rowTransforms[i];
@@ -184,20 +229,12 @@ namespace VRCKatamari.Pickup
             }
             for (int i = 0; i < rowCount; i++)
             {
-                // A parent must come first: composing a rider from a row not yet written this
-                // frame would lag it by one frame, so a bad order is refused, not tolerated.
-                int parentRow = rowParentRow[i];
-                if (parentRow >= i || parentRow < -1)
-                {
-                    Debug.LogWarning("[MotionHost] row " + i + " (" + rowItemIds[i] + ") has parent row "
-                        + parentRow + " which does not precede it; the parent link is ignored");
-                    rowParentRow[i] = -1;
-                }
                 ResetRowState(i, now);
                 StartAnimator(i);
             }
 
             statsWindowStart = now;
+            lastUpdateTime = now;
             ready = true;
             Debug.Log("[MotionHost] rows=" + rowCount + " paths=" + (pathPointStart == null ? 0 : pathPointStart.Length)
                 + " wakeRadiusM=" + wakeRadiusM + " observer=" + (motor != null));
@@ -210,16 +247,31 @@ namespace VRCKatamari.Pickup
             float now = Time.time;
             bool haveObserver = false;
             Vector3 observer = Vector3.zero;
+            // float.MaxValue: nothing is far (no observer, or decimation off).
+            float nearRadiusSq = float.MaxValue;
             if (motor != null)
             {
                 observer = motor.GetCenterWorld();
                 haveObserver = KatamariMath.IsFiniteVector(observer);
+                if (haveObserver && decimateFarWrites)
+                {
+                    float nearRadius = MotionHostMath.NearRadiusM(motor.GetCollisionRadiusWorldM(),
+                        nearMarginM);
+                    nearRadiusSq = nearRadius * nearRadius;
+                }
             }
 
+            frameNow = now;
+            frameHaveObserver = haveObserver;
+            frameObserver = observer;
+            if (MotionHostMath.IsResumeGap(lastUpdateTime, now, resumeGapSeconds)) ResyncSchedules(now);
+            lastUpdateTime = now;
+
             frameIndex = frameIndex + 1;
+            ClassifyBatch(nearRadiusSq);
             for (int i = 0; i < rowCount; i++)
             {
-                DriveRow(i, now, observer, haveObserver);
+                DriveRow(i);
             }
 
             if (logStatsEachSecond && now - statsWindowStart >= 1f)
@@ -228,7 +280,8 @@ namespace VRCKatamari.Pickup
                 lastStatsWrites = statsWrites;
                 Debug.Log("[MotionHost] last second: steps=" + statsSteps + " writes=" + statsWrites
                     + " active=" + CountMode(ModeActive) + " away=" + CountMode(ModeAway)
-                    + " yielded=" + CountMode(ModeYielded) + " culled=" + CountCulled());
+                    + " yielded=" + CountMode(ModeYielded) + " culled=" + CountCulled()
+                    + " far=" + CountFar());
                 statsWindowStart = now;
                 statsSteps = 0;
                 statsWrites = 0;
@@ -276,6 +329,12 @@ namespace VRCKatamari.Pickup
         public int GetCulledCount()
         {
             return ready ? CountCulled() : 0;
+        }
+
+        /// <summary>Rows beyond the near radius right now (they write only on their own steps).</summary>
+        public int GetFarCount()
+        {
+            return ready ? CountFar() : 0;
         }
 
         /// <summary>Rows whose WaitForPlayer gate has fired.</summary>
@@ -340,6 +399,8 @@ namespace VRCKatamari.Pickup
             spawnRotInverse[row] = MotionHostMath.Conjugate(rotation);
             rowParentRow[row] = -1;
             rowInherit[row] = MotionHostMath.InheritNone;
+            rowRiding[row] = false;
+            rowHasLast[row] = false;
             prevPos[row] = position;
             nextPos[row] = position;
             prevRot[row] = rotation;
@@ -371,62 +432,79 @@ namespace VRCKatamari.Pickup
 
         // --- Per-row drive ------------------------------------------------------
 
-        private void DriveRow(int i, float now, Vector3 observer, bool haveObserver)
+        // Once per stride-th of the rows per frame: still ours? still awake? near or far?
+        private void ClassifyBatch(float nearRadiusSq)
         {
-            int mode = rowMode[i];
-            if (mode == ModeDead) return;
+            int batch = MotionHostMath.ClassifyBatchSize(rowCount, classifyStrideFrames);
+            int index = classifyCursor;
+            for (int k = 0; k < batch; k++)
+            {
+                ClassifyRow(index, nearRadiusSq);
+                index = index + 1;
+                if (index >= rowCount) index = 0;
+            }
+            classifyCursor = index;
+        }
+
+        private void ClassifyRow(int i, float nearRadiusSq)
+        {
+            if (rowMode[i] != ModeActive) return;
             Transform t = rowTransforms[i];
             if (t == null)
             {
                 rowMode[i] = ModeDead;
                 return;
             }
-
-            if (mode == ModeAway)
-            {
-                // The absorb host's reset puts the prop back under its original parent.
-                if (t.parent == homeParent[i]) ReviveRow(i, now);
-                return;
-            }
-            if (mode == ModeDetached)
-            {
-                int detachedParent = rowParentRow[i];
-                if (detachedParent >= 0 && rowMode[detachedParent] == ModeActive) ReviveRow(i, now);
-                return;
-            }
-            if (mode != ModeActive) return;
-
-            // Taken by the absorb host (parented to the ball): stop before writing a pose.
+            // Taken by the absorb host (parented to the ball): stop driving it. (A write also
+            // re-checks, so a prop is never written after it was taken.)
             if (t.parent != homeParent[i])
             {
                 rowMode[i] = ModeAway;
                 return;
             }
+            if (!frameHaveObserver) return;
 
+            Vector3 delta = curPos[i] - frameObserver;
+            float distanceSquared = delta.sqrMagnitude;
+            rowFar[i] = MotionHostMath.UpdateFar(rowFar[i], distanceSquared, nearRadiusSq);
+            bool wasCulled = rowCulled[i];
+            bool culled = MotionHostMath.UpdateCulled(wasCulled, distanceSquared, wakeRadiusM,
+                cullHysteresisM);
+            if (culled == wasCulled) return;
+            rowCulled[i] = culled;
+            Animator animator = rowAnimators != null && i < rowAnimators.Length ? rowAnimators[i] : null;
+            if (animator != null) animator.enabled = !culled;
+            if (!culled)
+            {
+                // Frozen, not reset: resume the schedule from now with the same state.
+                rowNextDue[i] = frameNow;
+                rowStepTime[i] = frameNow;
+            }
+        }
+
+        private void DriveRow(int i)
+        {
+            int mode = rowMode[i];
+            if (mode != ModeActive)
+            {
+                if (mode != ModeDead) DriveInactiveRow(i, mode);
+                return;
+            }
+            if (rowCulled[i]) return;
+            if (!rowDrivesPose[i]) return;
+
+            bool riding = rowRiding[i];
             int parentRow = rowParentRow[i];
-            int inherit = rowInherit[i];
-            if (parentRow >= 0 && inherit != MotionHostMath.InheritNone && rowMode[parentRow] != ModeActive)
+            if (riding && rowMode[parentRow] != ModeActive)
             {
                 rowMode[i] = ModeDetached;
                 return;
             }
 
-            if (rowWrote[i] && MotionHostMath.HasDrifted(curPos[i], t.position, driftToleranceM))
-            {
-                rowMode[i] = ModeYielded;
-                return;
-            }
-
-            if (haveObserver && cullStrideFrames > 0 && ((i + frameIndex) % cullStrideFrames) == 0)
-            {
-                UpdateCull(i, now, observer);
-            }
-            if (rowCulled[i]) return;
-
-            if (!rowDrivesPose[i]) return;
-
+            float now = frameNow;
             int motionClass = rowMotionClass[i];
-            bool stepped = false;
+            bool stepRan = false;
+            bool poseChanged = false;
             if (motionClass != MotionHostMath.ClassNone)
             {
                 float interval = rowInterval[i];
@@ -434,37 +512,77 @@ namespace VRCKatamari.Pickup
                 while (now >= rowNextDue[i] && guard < MaxCatchUpStepsPerFrame)
                 {
                     guard = guard + 1;
-                    stepped = true;
+                    stepRan = true;
                     float stepTime = rowNextDue[i];
                     rowNextDue[i] = stepTime + interval;
                     rowStepTime[i] = stepTime;
-                    StepRow(i, motionClass, observer, haveObserver);
+                    if (StepRow(i, motionClass)) poseChanged = true;
                 }
                 if (now >= rowNextDue[i]) rowNextDue[i] = MotionHostMath.NextDue(rowNextDue[i], now, interval);
             }
 
-            // A row with no pose of its own (WaitForPlayer) writes only while riding a parent; a
-            // stepped (30 Hz) row writes only on the frames it stepped; smooth and riding rows
-            // write every frame.
+            // A row with no pose of its own (WaitForPlayer) writes only while riding a parent.
             if (!rowWritesPose[i]) return;
-            bool riding = parentRow >= 0 && inherit != MotionHostMath.InheritNone;
-            if (!rowSmooth[i] && !stepped && !riding && rowWrote[i]) return;
+            bool smooth = rowSmooth[i];
+            bool parentWrote = riding && rowWriteFrame[parentRow] == frameIndex;
+            if (!MotionHostMath.ShouldWritePose(rowWrote[i], !rowFar[i], smooth,
+                smooth ? stepRan : poseChanged, riding, parentWrote)) return;
+            WriteRow(i, now, smooth, riding, parentRow, motionClass);
+        }
+
+        // The prop is parked (away, detached): watch for it coming back.
+        private void DriveInactiveRow(int i, int mode)
+        {
+            if (mode == ModeAway)
+            {
+                // The absorb host's reset puts the prop back under its original parent.
+                Transform t = rowTransforms[i];
+                if (t == null) rowMode[i] = ModeDead;
+                else if (t.parent == homeParent[i]) ReviveRow(i, frameNow);
+                return;
+            }
+            if (mode == ModeDetached)
+            {
+                int detachedParent = rowParentRow[i];
+                if (detachedParent >= 0 && rowMode[detachedParent] == ModeActive) ReviveRow(i, frameNow);
+            }
+        }
+
+        // The one place a pose is written. The ownership tests sit here, in front of the write
+        // they protect: a prop taken by the absorb host or moved by a fall is never overwritten.
+        private void WriteRow(int i, float now, bool smooth, bool riding, int parentRow, int motionClass)
+        {
+            Transform t = rowTransforms[i];
+            if (t == null)
+            {
+                rowMode[i] = ModeDead;
+                return;
+            }
+            if (t.parent != homeParent[i])
+            {
+                rowMode[i] = ModeAway;
+                return;
+            }
+            if (rowWrote[i] && MotionHostMath.HasDriftedSquared(curPos[i], t.position, driftToleranceSq))
+            {
+                rowMode[i] = ModeYielded;
+                return;
+            }
 
             Vector3 position = nextPos[i];
             Quaternion rotation = nextRot[i];
-            if (rowSmooth[i])
+            if (smooth)
             {
                 float fraction = MotionHostMath.SmoothFraction(now, rowStepTime[i], rowInterval[i]);
                 position = Vector3.Lerp(prevPos[i], nextPos[i], fraction);
                 rotation = Quaternion.Slerp(prevRot[i], nextRot[i], fraction);
             }
 
-            if (parentRow >= 0 && inherit != MotionHostMath.InheritNone
-                && MotionHostMath.SpaceOf(motionClass) != MotionHostMath.SpaceAbsolute)
+            if (riding && rowSpace[i] != MotionHostMath.SpaceAbsolute)
             {
                 Vector3 carriedPosition;
                 Quaternion carriedRotation;
-                MotionHostMath.CarryByParent(inherit, curPos[parentRow], curRot[parentRow],
+                MotionHostMath.CarryByParent(rowInherit[i], curPos[parentRow], curRot[parentRow],
                     spawnPos[parentRow], spawnRotInverse[parentRow], position, rotation,
                     out carriedPosition, out carriedRotation);
                 position = carriedPosition;
@@ -475,21 +593,23 @@ namespace VRCKatamari.Pickup
             curPos[i] = position;
             curRot[i] = rotation;
             rowWrote[i] = true;
-            statsWrites = statsWrites + 1;
+            rowWriteFrame[i] = frameIndex;
+            if (logStatsEachSecond) statsWrites = statsWrites + 1;
         }
 
         // One due step of a row's program: tier frames in chunks of at most two (MotionMath
-        // 12.0), then the standalone pose of the last chunk.
-        private void StepRow(int i, int motionClass, Vector3 observer, bool haveObserver)
+        // 12.0), then the standalone pose of the last chunk. True when the row's pose request
+        // changed (a stepped row whose request is bit-for-bit the previous one keeps its pose).
+        private bool StepRow(int i, int motionClass)
         {
-            statsSteps = statsSteps + 1;
+            if (logStatsEachSecond) statsSteps = statsSteps + 1;
             float[] state = rowState[i];
 
             if (motionClass == MotionHostMath.ClassWaitForPlayer)
             {
-                if (!rowTriggered[i] && haveObserver)
+                if (!rowTriggered[i] && frameHaveObserver)
                 {
-                    float distance = Vector3.Distance(observer, curPos[i]);
+                    float distance = Vector3.Distance(frameObserver, curPos[i]);
                     if (MotionHostMath.IsTriggered(rowMotionIdCode[i], distance, rowTriggerRadiusM[i],
                         rowSizeGroup[i]))
                     {
@@ -497,48 +617,68 @@ namespace VRCKatamari.Pickup
                         SetAnimatorBool(i, "Panic", true);
                     }
                 }
-                return;
+                return false;
             }
 
             float remaining = rowTierFrames[i];
             Vector3 offsetOrPosition = Vector3.zero;
             Vector3 euler = Vector3.zero;
             bool ok = false;
-            float[] pathArray = null;
-            int pathCount = 0;
-            bool closed = false;
-            int pathIndex = rowPathIndex[i];
-            if (pathIndex >= 0)
+            if (rowIsPath[i])
             {
-                pathArray = pathArrays[pathIndex];
-                pathCount = pathPointCount[pathIndex];
-                closed = pathClosed[pathIndex];
+                float[] table = rowPathTable[i];
+                float[] points = pathArrays[rowPathIndex[i]];
+                while (remaining > 0.0001f)
+                {
+                    float chunk = remaining > MaxChunkFrames ? MaxChunkFrames : remaining;
+                    remaining = remaining - chunk;
+                    ok = MotionHostMath.TryStepPreparedPath(motionClass, state, chunk, spawnPos[i],
+                        points, table, rowSpeedMps[i], rowHalfHeightM[i], out offsetOrPosition,
+                        out euler);
+                    if (!ok) break;
+                }
             }
+            else
+            {
+                while (remaining > 0.0001f)
+                {
+                    float chunk = remaining > MaxChunkFrames ? MaxChunkFrames : remaining;
+                    remaining = remaining - chunk;
+                    ok = MotionHostMath.TryStep(motionClass, state, chunk, rowPhaseSeed[i],
+                        rowHalfHeightM[i], rowSwayTranslation[i], rowLoop[i], rowSpeedMps[i],
+                        rowHopSpeedCmPerFrame[i], null, 0, false, spawnPos[i],
+                        out offsetOrPosition, out euler);
+                    if (!ok) break;
+                }
+            }
+            if (!ok) return false;
 
-            while (remaining > 0.0001f)
+            if (motionClass == MotionHostMath.ClassSporadicWalk) UpdateMovingFlag(i, state);
+
+            bool smooth = rowSmooth[i];
+            if (!smooth && rowHasLast[i]
+                && MotionHostMath.SamePoseRequest(offsetOrPosition, euler, rowLastOffset[i], rowLastEuler[i]))
             {
-                float chunk = remaining > MaxChunkFrames ? MaxChunkFrames : remaining;
-                remaining = remaining - chunk;
-                ok = MotionHostMath.TryStep(motionClass, state, chunk, rowPhaseSeed[i],
-                    rowHalfHeightM[i], rowSwayTranslation[i], rowLoop[i], rowSpeedMps[i],
-                    MotionMath.HopSpeedCmPerFrame(rowSizeGroup[i]), pathArray, pathCount, closed,
-                    spawnPos[i], out offsetOrPosition, out euler);
-                if (!ok) break;
+                return false;
             }
-            if (!ok) return;
 
             Vector3 standalonePosition;
             Quaternion standaloneRotation;
-            MotionHostMath.StandalonePose(motionClass, spawnPos[i], spawnRot[i], offsetOrPosition,
-                euler, out standalonePosition, out standaloneRotation);
-            if (!KatamariMath.IsFiniteVector(standalonePosition)) return;
+            MotionHostMath.StandalonePoseIn(rowSpace[i], rowKeepsSpawnRotation[i], spawnPos[i],
+                spawnRot[i], offsetOrPosition, euler, out standalonePosition, out standaloneRotation);
+            if (!KatamariMath.IsFiniteVector(standalonePosition)) return false;
 
+            if (!smooth)
+            {
+                rowLastOffset[i] = offsetOrPosition;
+                rowLastEuler[i] = euler;
+                rowHasLast[i] = true;
+            }
             prevPos[i] = nextPos[i];
             prevRot[i] = nextRot[i];
             nextPos[i] = standalonePosition;
             nextRot[i] = standaloneRotation;
-
-            if (motionClass == MotionHostMath.ClassSporadicWalk) UpdateMovingFlag(i, state);
+            return true;
         }
 
         // A walker is "moving" while its own state machine is in the Walk phase (state[1] == 0).
@@ -550,20 +690,15 @@ namespace VRCKatamari.Pickup
             SetAnimatorBool(i, "Moving", moving);
         }
 
-        private void UpdateCull(int i, float now, Vector3 observer)
+        // The level was parked and is back: every active row restarts its schedule from now
+        // (staggered like a fresh start), keeping its program state.
+        private void ResyncSchedules(float now)
         {
-            Vector3 delta = curPos[i] - observer;
-            bool wasCulled = rowCulled[i];
-            bool culled = MotionHostMath.UpdateCulled(wasCulled, delta.sqrMagnitude, wakeRadiusM,
-                cullHysteresisM);
-            if (culled == wasCulled) return;
-            rowCulled[i] = culled;
-            Animator animator = rowAnimators != null && i < rowAnimators.Length ? rowAnimators[i] : null;
-            if (animator != null) animator.enabled = !culled;
-            if (!culled)
+            for (int i = 0; i < rowCount; i++)
             {
-                // Frozen, not reset: resume the schedule from now with the same state.
-                rowNextDue[i] = now;
+                if (rowMode[i] != ModeActive) continue;
+                float stagger = rowInterval[i] > 0f ? rowInterval[i] * ((i % 8) / 8f) : 0f;
+                rowNextDue[i] = now + stagger;
                 rowStepTime[i] = now;
             }
         }
@@ -650,6 +785,17 @@ namespace VRCKatamari.Pickup
             rowWritesPose = new bool[rowCount];
             rowSmooth = new bool[rowCount];
             rowMoving = new bool[rowCount];
+            rowIsPath = new bool[rowCount];
+            rowFar = new bool[rowCount];
+            rowRiding = new bool[rowCount];
+            rowKeepsSpawnRotation = new bool[rowCount];
+            rowHasLast = new bool[rowCount];
+            rowSpace = new int[rowCount];
+            rowWriteFrame = new int[rowCount];
+            rowHopSpeedCmPerFrame = new float[rowCount];
+            rowPathTable = new float[rowCount][];
+            rowLastOffset = new Vector3[rowCount];
+            rowLastEuler = new Vector3[rowCount];
             rowInterval = new float[rowCount];
             rowTierFrames = new float[rowCount];
             rowNextDue = new float[rowCount];
@@ -668,6 +814,8 @@ namespace VRCKatamari.Pickup
         {
             int paths = pathPointStart == null ? 0 : pathPointStart.Length;
             pathArrays = new float[paths][];
+            pathTables = new float[paths][];
+            pathTablesOpen = new float[paths][];
             for (int p = 0; p < paths; p++)
             {
                 int count = pathPointCount[p];
@@ -682,9 +830,31 @@ namespace VRCKatamari.Pickup
                 else
                 {
                     for (int k = 0; k < count * 3; k++) points[k] = pathPoints[start + k];
+                    BuildPathTables(p, points, count);
                 }
                 pathArrays[p] = points;
             }
+        }
+
+        // The per-path numbers every step used to re-measure, once (MotionMath.BuildPathTable).
+        // BackAndForth ignores the closed flag, so a closed path also gets an open table.
+        private void BuildPathTables(int p, float[] points, int count)
+        {
+            bool closed = pathClosed[p];
+            float[] table = new float[MotionMath.PathTableFloats(count, closed)];
+            if (!MotionMath.BuildPathTable(points, count, closed, table))
+            {
+                Debug.LogWarning("[MotionHost] path " + p + " has a degenerate or non-finite segment; rows on it do not move");
+            }
+            pathTables[p] = table;
+            if (!closed)
+            {
+                pathTablesOpen[p] = table;
+                return;
+            }
+            float[] open = new float[MotionMath.PathTableFloats(count, false)];
+            MotionMath.BuildPathTable(points, count, false, open);
+            pathTablesOpen[p] = open;
         }
 
         // Which rows write a pose, how often, and with what state size.
@@ -702,6 +872,8 @@ namespace VRCKatamari.Pickup
             bool riding = rowParentRow[i] >= 0 && rowInherit[i] != MotionHostMath.InheritNone;
             bool pathMissing = MotionHostMath.IsPathClass(motionClass)
                 && (rowPathIndex[i] < 0 || pathPointCount == null || rowPathIndex[i] >= pathPointCount.Length);
+            rowIsPath[i] = false;
+            rowPathTable[i] = null;
             if (pathMissing)
             {
                 Debug.LogWarning("[MotionHost] row " + i + " (" + rowItemIds[i] + ") is a path class without a usable path; it does not move");
@@ -712,6 +884,28 @@ namespace VRCKatamari.Pickup
             {
                 rowMotionClass[i] = MotionHostMath.ClassNone;
             }
+            else if (MotionHostMath.IsPathClass(motionClass))
+            {
+                float[] table = motionClass == MotionHostMath.ClassBackAndForth
+                    ? pathTablesOpen[rowPathIndex[i]] : pathTables[rowPathIndex[i]];
+                if (table == null || table[0] < 0.5f
+                    || !MotionMath.PathRowInputsOk(rowSpeedMps[i], rowHalfHeightM[i], spawnPos[i]))
+                {
+                    Debug.LogWarning("[MotionHost] row " + i + " (" + rowItemIds[i] + ") has an unusable path or path inputs; it does not move");
+                    ownsProgram = false;
+                    rowMotionClass[i] = MotionHostMath.ClassNone;
+                }
+                else
+                {
+                    rowIsPath[i] = true;
+                    rowPathTable[i] = table;
+                }
+            }
+            int finalClass = rowMotionClass[i];
+            rowSpace[i] = MotionHostMath.SpaceOf(finalClass);
+            rowKeepsSpawnRotation[i] = MotionHostMath.KeepsSpawnRotation(finalClass);
+            rowHopSpeedCmPerFrame[i] = MotionMath.HopSpeedCmPerFrame(rowSizeGroup[i]);
+            rowRiding[i] = riding;
             rowDrivesPose[i] = ownsProgram || riding;
             // WaitForPlayer runs a program (the gate) but has no pose to write.
             rowWritesPose[i] = (ownsProgram && motionClass != MotionHostMath.ClassWaitForPlayer) || riding;
@@ -734,6 +928,8 @@ namespace VRCKatamari.Pickup
             rowTriggered[i] = false;
             rowMoving[i] = false;
             rowCulled[i] = false;
+            rowHasLast[i] = false;
+            rowWriteFrame[i] = -1;
             // Rows start their schedules staggered, so the first frame does not step all of them.
             float stagger = rowInterval[i] > 0f ? rowInterval[i] * ((i % 8) / 8f) : 0f;
             rowNextDue[i] = now + stagger;
@@ -761,6 +957,7 @@ namespace VRCKatamari.Pickup
                 curPos[i] = spawnPos[i];
                 curRot[i] = spawnRot[i];
                 rowWrote[i] = true;
+                rowWriteFrame[i] = frameIndex;
             }
         }
 
@@ -799,6 +996,16 @@ namespace VRCKatamari.Pickup
             for (int i = 0; i < rowCount; i++)
             {
                 if (rowMode[i] == mode) count = count + 1;
+            }
+            return count;
+        }
+
+        private int CountFar()
+        {
+            int count = 0;
+            for (int i = 0; i < rowCount; i++)
+            {
+                if (rowFar[i]) count = count + 1;
             }
             return count;
         }

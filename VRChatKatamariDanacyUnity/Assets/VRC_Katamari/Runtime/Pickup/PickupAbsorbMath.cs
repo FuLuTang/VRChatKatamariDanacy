@@ -615,6 +615,36 @@ namespace VRCKatamari.Pickup
             return reqMm > ballMm;
         }
 
+        /// <summary>The "no valid requirement" marker of <see cref="ResolveRequirementMmOrInvalid"/>.</summary>
+        public const float RequirementInvalid = -1f;
+
+        /// <summary>
+        /// The item's Req in whole mm, or <see cref="RequirementInvalid"/> when
+        /// <see cref="TryComputePickupReqDiameterMm"/> refuses the size/k. A host that tests
+        /// the same item every scan resolves this once (it needs a cube root) and then asks
+        /// <see cref="IsBeyondCachedRequirement"/>.
+        /// </summary>
+        public static float ResolveRequirementMmOrInvalid(Vector3 itemSize, float volumeK)
+        {
+            float reqMm;
+            if (!TryComputePickupReqDiameterMm(itemSize, volumeK, out reqMm)) return RequirementInvalid;
+            return reqMm;
+        }
+
+        /// <summary>
+        /// <see cref="IsBeyondAbsorbLimit"/> from a cached requirement and the ball's already
+        /// floored whole-mm diameter (<paramref name="ballMmValid"/> = the result of
+        /// <see cref="TryFloorMillimetres"/>). Same verdict for every input: an invalid
+        /// requirement or an invalid ball diameter is "beyond"; otherwise Req &gt; ballMm.
+        /// </summary>
+        public static bool IsBeyondCachedRequirement(float requirementMmOrInvalid,
+            bool ballMmValid, float ballMm)
+        {
+            if (!ballMmValid) return true;
+            if (requirementMmOrInvalid < 0f) return true;
+            return requirementMmOrInvalid > ballMm;
+        }
+
         /// <summary>
         /// Everything the size gate accepts at this ball: the item's Req in whole mm and the
         /// ball's whole-mm diameter, resolved once for a caller that reports them.

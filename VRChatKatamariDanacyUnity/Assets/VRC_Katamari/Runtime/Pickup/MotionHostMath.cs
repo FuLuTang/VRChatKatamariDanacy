@@ -76,6 +76,22 @@ namespace VRCKatamari.Pickup
         /// </summary>
         public const float DefaultDriftToleranceM = 0.02f;
         /// <summary>
+        /// Rows further than <c>ball radius + this</c> from the ball only write their pose on the
+        /// frames they step (see <see cref="ShouldWritePose"/>). It has to cover everything that
+        /// reads a mover's transform: the absorb reach (1.6 m), the blocking/support margin
+        /// (0.8 m + 0.25 m stickiness + the prop's half diagonal), and the ball's travel between two
+        /// re-classifications of a row (<see cref="DefaultClassifyStrideFrames"/> frames at up to
+        /// ~10 m/s is 2 m at 30 fps).
+        /// </summary>
+        public const float DefaultNearMarginM = 6f;
+        /// <summary>Every row is re-tested against the ball (cull + near/far) once per this many frames.</summary>
+        public const int DefaultClassifyStrideFrames = 6;
+        /// <summary>
+        /// A gap between two <c>Update</c> calls longer than this (the level was parked, the
+        /// Editor was paused) re-anchors every row's schedule at now instead of replaying it.
+        /// </summary>
+        public const float DefaultResumeGapSeconds = 0.5f;
+        /// <summary>
         /// Below this update rate the pose is interpolated between steps; at or above it the
         /// step is written as it is (hop and whack are 30 Hz by the tier table, and a 7-frame
         /// hop does not survive being smeared).
@@ -116,9 +132,9 @@ namespace VRCKatamari.Pickup
             if (motionClass == ClassSporadicWalk || motionClass == ClassClouds)
                 return MotionMath.WanderStateFloats;
             if (motionClass == ClassWaitForPlayer) return MotionMath.WaitForPlayerStateFloats;
-            if (motionClass == ClassPathCollision) return MotionMath.PathCollisionStateFloats;
-            if (motionClass == ClassSlopingPath) return MotionMath.SlopingPathStateFloats;
-            if (motionClass == ClassBackAndForth) return MotionMath.BackAndForthNoYawStateFloats;
+            // The path classes carry one more float than MotionMath's own steps need: the
+            // prepared step's segment hint (MotionMath.TryStepPathPrepared).
+            if (IsPathClass(motionClass)) return MotionMath.PreparedPathStateFloats;
             return 0;
         }
 
@@ -202,6 +218,8 @@ namespace VRCKatamari.Pickup
             else if (motionClass == ClassPathCollision) MotionMath.ResetPathCollision(state);
             else if (motionClass == ClassSlopingPath) MotionMath.ResetSlopingPath(state);
             else if (motionClass == ClassBackAndForth) MotionMath.ResetBackAndForthNoYaw(state);
+            if (IsPathClass(motionClass) && state != null && state.Length >= MotionMath.PreparedPathStateFloats)
+                state[2] = 0f;
         }
 
         /// <summary>
@@ -279,6 +297,24 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
+        /// <see cref="TryStep"/> for a path class from a prepared table
+        /// (<see cref="MotionMath.BuildPathTable"/>): the same position and euler, the same
+        /// <c>2 b</c> lift, without re-measuring the polyline. BackAndForth needs the table of the
+        /// path built open. The caller has checked <see cref="MotionMath.PathRowInputsOk"/>.
+        /// </summary>
+        public static bool TryStepPreparedPath(int motionClass, float[] state, float dtFrames,
+            Vector3 spawnPositionM, float[] pathPointsM, float[] table, float speedMps,
+            float halfHeightM, out Vector3 offsetOrPositionM, out Vector3 eulerRad)
+        {
+            int kind = motionClass == ClassSlopingPath ? MotionMath.PathKindSloping
+                : motionClass == ClassBackAndForth ? MotionMath.PathKindBackAndForth
+                : MotionMath.PathKindCollision;
+            return PathStep(MotionMath.TryStepPathPrepared(kind, state, dtFrames, spawnPositionM,
+                pathPointsM, table, speedMps, halfHeightM, out offsetOrPositionM, out eulerRad),
+                halfHeightM, ref offsetOrPositionM);
+        }
+
+        /// <summary>
         /// WaitForPlayer's gate with the row's own trigger radius (LEVEL_FORMAT_V2 6.7.3
         /// <c>triggerRadiusM</c>), which is NOT the host's wake radius: 2.0 m for the size
         /// groups Cancer has, against 12 m of culling. motionId 0x00 triggers on distance and
@@ -342,6 +378,30 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
+        /// Rows classified (culled / near / far) this frame so that every one of
+        /// <paramref name="rowCount"/> rows is visited once per <paramref name="strideFrames"/>
+        /// frames: <c>ceil(rowCount / stride)</c>. A stride below 1 means every row every frame.
+        /// </summary>
+        public static int ClassifyBatchSize(int rowCount, int strideFrames)
+        {
+            if (rowCount <= 0) return 0;
+            if (strideFrames <= 1) return rowCount;
+            return (rowCount + strideFrames - 1) / strideFrames;
+        }
+
+        /// <summary>
+        /// True when the host was not updated for longer than the gap (a parked level coming
+        /// back): its schedule is re-anchored at now, so the program continues from the state it
+        /// froze with instead of replaying the gap (the original catch-up was up to three steps
+        /// on a stale interpolation clock).
+        /// </summary>
+        public static bool IsResumeGap(float lastUpdateSeconds, float nowSeconds, float gapSeconds)
+        {
+            float elapsed = nowSeconds - lastUpdateSeconds;
+            return KatamariMath.IsFiniteFloat(elapsed) && elapsed > gapSeconds;
+        }
+
+        /// <summary>
         /// When a row is next due, anchored on the schedule rather than on "now" so a 15 Hz row
         /// stays at 15 Hz instead of at 15 Hz minus its frame jitter. If the schedule has
         /// fallen more than one interval behind (the row was culled, the frame hitched) it
@@ -379,6 +439,64 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
+        /// The radius inside which a mover writes its pose every frame: the ball's collision
+        /// radius plus the margin. A non-finite or negative margin falls back to the default; a
+        /// non-finite radius counts as 0.
+        /// </summary>
+        public static float NearRadiusM(float ballRadiusM, float marginM)
+        {
+            float radius = KatamariMath.IsFiniteFloat(ballRadiusM) && ballRadiusM > 0f ? ballRadiusM : 0f;
+            float margin = KatamariMath.IsFiniteFloat(marginM) && marginM >= 0f ? marginM : DefaultNearMarginM;
+            return radius + margin;
+        }
+
+        /// <summary>
+        /// Near/far classification from a squared distance. A non-finite distance keeps the
+        /// current state; a non-finite radius makes everything near.
+        /// </summary>
+        public static bool UpdateFar(bool wasFar, float distanceSquaredM, float nearRadiusSquaredM)
+        {
+            if (!KatamariMath.IsFiniteFloat(distanceSquaredM) || distanceSquaredM < 0f) return wasFar;
+            if (!KatamariMath.IsFiniteFloat(nearRadiusSquaredM)) return false;
+            return distanceSquaredM > nearRadiusSquaredM;
+        }
+
+        /// <summary>
+        /// Whether a row writes its transform this frame. Near rows behave exactly as before the
+        /// far-write change (smooth rows every frame, stepped rows on the frames their pose
+        /// changed, riders when their parent moved); a FAR row (beyond
+        /// <see cref="NearRadiusM"/>) writes only when its own program produced a new pose or its
+        /// parent wrote this frame, because nothing that reads transforms (absorb, blocking) can
+        /// see it. The pose written is always the one for the current time, so a skipped frame only
+        /// delays it, it never makes it wrong.
+        /// </summary>
+        /// <param name="wroteBefore">False until the row has written once (the first write is
+        /// unconditional).</param>
+        /// <param name="stepRanOrChanged">A smooth row: its program stepped this frame; a stepped
+        /// (30 Hz) row: its step produced a pose different from the previous one.</param>
+        /// <param name="riding">The row follows a parent row.</param>
+        /// <param name="parentWroteThisFrame">The parent row wrote its pose this frame.</param>
+        public static bool ShouldWritePose(bool wroteBefore, bool near, bool smooth,
+            bool stepRanOrChanged, bool riding, bool parentWroteThisFrame)
+        {
+            if (!wroteBefore || stepRanOrChanged) return true;
+            if (riding && parentWroteThisFrame) return true;
+            return smooth && near;
+        }
+
+        /// <summary>
+        /// True when two step outputs are bit-for-bit the same pose request (a resting hop, a
+        /// whack-a-mole holding at the top): the previous pose is still right, so the standalone
+        /// pose is not recomputed and the transform is not written.
+        /// </summary>
+        public static bool SamePoseRequest(Vector3 offsetA, Vector3 eulerA, Vector3 offsetB,
+            Vector3 eulerB)
+        {
+            return offsetA.x == offsetB.x && offsetA.y == offsetB.y && offsetA.z == offsetB.z
+                && eulerA.x == eulerB.x && eulerA.y == eulerB.y && eulerA.z == eulerB.z;
+        }
+
+        /// <summary>
         /// True when the prop is not where the host last put it: somebody else (the absorb
         /// attach, a stack fall, a round reset) has taken it, and the host must stop writing.
         /// </summary>
@@ -393,6 +511,29 @@ namespace VRCKatamari.Pickup
             float dy = currentM.y - lastWrittenM.y;
             float dz = currentM.z - lastWrittenM.z;
             return dx * dx + dy * dy + dz * dz > tolerance * tolerance;
+        }
+
+        /// <summary>
+        /// <see cref="HasDrifted"/> with the tolerance already squared and no per-call
+        /// sanitising (the host does that once): <c>!(d2 &lt;= tolerance^2)</c>, so a non-finite
+        /// pose is drift too.
+        /// </summary>
+        public static bool HasDriftedSquared(Vector3 lastWrittenM, Vector3 currentM,
+            float toleranceSquaredM)
+        {
+            float dx = currentM.x - lastWrittenM.x;
+            float dy = currentM.y - lastWrittenM.y;
+            float dz = currentM.z - lastWrittenM.z;
+            return !(dx * dx + dy * dy + dz * dz <= toleranceSquaredM);
+        }
+
+        /// <summary>The squared drift tolerance, with the same fallback <see cref="HasDrifted"/> applies.</summary>
+        public static float DriftToleranceSquared(float toleranceM)
+        {
+            float tolerance = toleranceM;
+            if (!KatamariMath.IsFiniteFloat(tolerance) || tolerance < 0f)
+                tolerance = DefaultDriftToleranceM;
+            return tolerance * tolerance;
         }
 
         // --- Pose composition ---------------------------------------------------
@@ -458,7 +599,18 @@ namespace VRCKatamari.Pickup
             Quaternion spawnRotation, Vector3 offsetOrPositionM, Vector3 eulerRad,
             out Vector3 positionM, out Quaternion rotation)
         {
-            int space = SpaceOf(motionClass);
+            StandalonePoseIn(SpaceOf(motionClass), KeepsSpawnRotation(motionClass), spawnPositionM,
+                spawnRotation, offsetOrPositionM, eulerRad, out positionM, out rotation);
+        }
+
+        /// <summary>
+        /// <see cref="StandalonePose"/> with the class lookups (<see cref="SpaceOf"/>,
+        /// <see cref="KeepsSpawnRotation"/>) already done: the host resolves them once per row.
+        /// </summary>
+        public static void StandalonePoseIn(int space, bool keepsSpawnRotation,
+            Vector3 spawnPositionM, Quaternion spawnRotation, Vector3 offsetOrPositionM,
+            Vector3 eulerRad, out Vector3 positionM, out Quaternion rotation)
+        {
             if (space == SpaceAbsolute)
             {
                 positionM = offsetOrPositionM;
@@ -468,8 +620,7 @@ namespace VRCKatamari.Pickup
             if (space == SpaceWorldAxis)
             {
                 positionM = spawnPositionM + offsetOrPositionM;
-                rotation = KeepsSpawnRotation(motionClass) ? spawnRotation
-                    : EulerToQuaternion(eulerRad);
+                rotation = keepsSpawnRotation ? spawnRotation : EulerToQuaternion(eulerRad);
                 return;
             }
             positionM = spawnPositionM + spawnRotation * offsetOrPositionM;

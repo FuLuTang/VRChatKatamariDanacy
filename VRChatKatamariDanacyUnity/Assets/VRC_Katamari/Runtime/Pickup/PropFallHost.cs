@@ -400,6 +400,9 @@ namespace VRCKatamari.Pickup
                 out newBottom, out newVelocity);
             velocityY[i] = newVelocity;
 
+            // The pickup host finds static props by cached position; a prop this host moves
+            // must be read live from its first write on (idempotent, one cross call per fall).
+            if (!moved[i]) pickupField.MarkPropMobile(i);
             Vector3 position = t.position;
             position.y = position.y + (newBottom - previousBottom);
             t.position = position;

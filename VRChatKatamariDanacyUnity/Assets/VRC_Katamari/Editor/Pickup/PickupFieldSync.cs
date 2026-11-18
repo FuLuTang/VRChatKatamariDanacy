@@ -122,6 +122,7 @@ namespace VRCKatamari.Editor.Pickup
         private const string GrowthMm3Field = "propGrowthMm3";
         private const string VolumeKField = "propVolumeK";
         private const string ParentIndexField = "propParentIndex";
+        private const string MobileField = "propMobile";
         private const string PropCollidersField = "propColliders";
         private const string PropProxyKindsField = "propProxyKinds";
         private const string PropProxyCentersField = "propProxyCenters";
@@ -319,6 +320,7 @@ namespace VRCKatamari.Editor.Pickup
             // Same rule for k: a re-sync without a declaration must not reprice a field.
             Dictionary<string, float> existingVolumeK = ReadExistingVolumeK(host);
             Dictionary<string, string> existingParents = ReadExistingParents(host);
+            Dictionary<string, bool> existingMobile = ReadExistingMobile(host);
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> existingProxies =
                 ReadExistingProxies(host);
 
@@ -380,7 +382,14 @@ namespace VRCKatamari.Editor.Pickup
                                  "to break a cycle; those rows have no parent (-1)");
             }
 
-            if (!WriteRows(host, rows, parentColumn, report))
+            // The mobile column is declared by the motion half of the level import
+            // (ApplyMobileDeclaration); here a re-sync keeps what each id already has, and an
+            // id with no value is mobile (read live every scan: always correct, only slower).
+            bool[] mobileColumn = PickupFieldAuthoringRules.PreserveMobileColumn(rowIds,
+                existingMobile);
+            report.MobileRows = CountTrue(mobileColumn);
+
+            if (!WriteRows(host, rows, parentColumn, mobileColumn, report))
             {
                 return report;
             }
@@ -388,7 +397,8 @@ namespace VRCKatamari.Editor.Pickup
             MarkDirty(host);
             CopyProxy(host, report);
             report.ReadBackVerified = VerifyReadBack(host, rows.Count, createMissingColliders) &&
-                                      VerifyParentColumn(host, parentColumn);
+                                      VerifyParentColumn(host, parentColumn) &&
+                                      VerifyMobileColumn(host, mobileColumn);
             if (!report.ReadBackVerified)
             {
                 if (string.IsNullOrEmpty(report.Failure))
@@ -1295,7 +1305,7 @@ namespace VRCKatamari.Editor.Pickup
         // ------------------------------------------------------------------- write ---
 
         private static bool WriteRows(PickupFieldHost host, List<PropRow> rows, int[] parentColumn,
-            PickupFieldSyncReport report)
+            bool[] mobileColumn, PickupFieldSyncReport report)
         {
             var serialized = new SerializedObject(host);
             var properties = new SerializedProperty[20];
@@ -1352,6 +1362,15 @@ namespace VRCKatamari.Editor.Pickup
                 return false;
             }
 
+            string mobileFailure;
+            SerializedProperty mobileFlags = RequireArray(serialized, MobileField,
+                out mobileFailure);
+            if (mobileFlags == null)
+            {
+                report.Fail(mobileFailure);
+                return false;
+            }
+
             Undo.RegisterCompleteObjectUndo(host, UndoLabel);
 
             bool anyCollider = false;
@@ -1383,6 +1402,7 @@ namespace VRCKatamari.Editor.Pickup
             values.arraySize = rows.Count;
             volumeKs.arraySize = rows.Count;
             parentIndices.arraySize = rows.Count;
+            mobileFlags.arraySize = rows.Count;
             colliders.arraySize = anyCollider ? rows.Count : 0;
             proxyKinds.arraySize = rows.Count;
             proxyCenters.arraySize = rows.Count;
@@ -1410,6 +1430,7 @@ namespace VRCKatamari.Editor.Pickup
                 values.GetArrayElementAtIndex(i).longValue = row.GrowthMm3;
                 volumeKs.GetArrayElementAtIndex(i).floatValue = row.VolumeK;
                 parentIndices.GetArrayElementAtIndex(i).intValue = parentColumn[i];
+                mobileFlags.GetArrayElementAtIndex(i).boolValue = mobileColumn[i];
                 if (anyCollider)
                 {
                     colliders.GetArrayElementAtIndex(i).objectReferenceValue = row.PrimaryCollider;
@@ -1491,6 +1512,150 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             return true;
+        }
+
+        private static int CountTrue(bool[] values)
+        {
+            int count = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (values[i]) count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>Reads <c>propMobile</c> back and compares it with what was written.</summary>
+        private static bool VerifyMobileColumn(PickupFieldHost host, bool[] expected)
+        {
+            SerializedProperty property = new SerializedObject(host).FindProperty(MobileField);
+            if (property == null || !property.isArray || property.arraySize != expected.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < expected.Length; i++)
+            {
+                if (property.GetArrayElementAtIndex(i).boolValue != expected[i]) return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Reads the host's current <c>propMobile</c> column into item id to flag. A host
+        /// without the column (a scene synced before it existed) or with a short one
+        /// contributes only the rows it has.
+        /// </summary>
+        private static Dictionary<string, bool> ReadExistingMobile(PickupFieldHost host)
+        {
+            var existing = new Dictionary<string, bool>(StringComparer.Ordinal);
+            var serialized = new SerializedObject(host);
+            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
+            SerializedProperty flags = serialized.FindProperty(MobileField);
+            if (ids == null || flags == null || !ids.isArray || !flags.isArray)
+            {
+                return existing;
+            }
+
+            int rows = Math.Min(ids.arraySize, flags.arraySize);
+            for (int i = 0; i < rows; i++)
+            {
+                string id = ids.GetArrayElementAtIndex(i).stringValue;
+                if (string.IsNullOrEmpty(id) || existing.ContainsKey(id)) continue;
+                existing.Add(id, flags.GetArrayElementAtIndex(i).boolValue);
+            }
+
+            return existing;
+        }
+
+        /// <summary>
+        /// Writes the host's <c>propMobile</c> column from the level's motion rows: true for
+        /// every row whose id is in <paramref name="mobileIds"/>, false for the rest (null =
+        /// nothing moves). Only this column is touched. Returns the number of mobile rows,
+        /// or -1 when nothing could be written (Play Mode, no host, no rows, not an UdonSharp
+        /// proxy, a read-back mismatch); <paramref name="failure"/> says why.
+        /// </summary>
+        /// <remarks>
+        /// The level import calls this after it has written the motion host, so the column
+        /// is exactly "the rows the motion host may move" (see
+        /// <see cref="PickupFieldAuthoringRules.FindMobileMotionItemIds"/>); a plain
+        /// re-sync then keeps it by id. A host with no rows yet is left alone: the sync that
+        /// creates the rows runs first in the import.
+        /// </remarks>
+        public static int ApplyMobileDeclaration(PickupFieldHost host, ISet<string> mobileIds,
+            out int rowCount, out string failure)
+        {
+            rowCount = 0;
+            failure = null;
+            if (host == null)
+            {
+                failure = "the host is null";
+                return -1;
+            }
+
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                failure = "exit Play Mode first; this writes serialized scene data";
+                return -1;
+            }
+
+            if (!UdonSharpEditorUtility.IsProxyBehaviour(host))
+            {
+                failure = "the host is not an UdonSharp proxy";
+                return -1;
+            }
+
+            var serialized = new SerializedObject(host);
+            string problem;
+            SerializedProperty ids = RequireArray(serialized, ItemIdsField, out problem);
+            SerializedProperty flags = RequireArray(serialized, MobileField, out problem);
+            if (ids == null || flags == null)
+            {
+                failure = problem;
+                return -1;
+            }
+
+            rowCount = ids.arraySize;
+            if (rowCount == 0)
+            {
+                failure = "the host has no rows yet";
+                return -1;
+            }
+
+            var rowIds = new string[rowCount];
+            for (int i = 0; i < rowCount; i++) rowIds[i] = ids.GetArrayElementAtIndex(i).stringValue;
+            bool[] column = PickupFieldAuthoringRules.ResolveMobileColumn(rowIds, mobileIds);
+
+            bool same = flags.arraySize == rowCount;
+            for (int i = 0; same && i < rowCount; i++)
+            {
+                same = flags.GetArrayElementAtIndex(i).boolValue == column[i];
+            }
+
+            if (!same)
+            {
+                Undo.RegisterCompleteObjectUndo(host, UndoLabel);
+                flags.arraySize = rowCount;
+                for (int i = 0; i < rowCount; i++) flags.GetArrayElementAtIndex(i).boolValue = column[i];
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                MarkDirty(host);
+                var copyReport = new PickupFieldSyncReport();
+                CopyProxy(host, copyReport);
+                if (!string.IsNullOrEmpty(copyReport.Failure))
+                {
+                    failure = copyReport.Failure;
+                    return -1;
+                }
+            }
+
+            if (!VerifyMobileColumn(host, column))
+            {
+                failure = "the propMobile column did not read back as written";
+                return -1;
+            }
+
+            return CountTrue(column);
         }
 
         /// <summary>

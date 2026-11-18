@@ -45,6 +45,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
             report.V2MotionRows = table.RowCount;
             report.V2MotionPaths = table.PathPointStart.Length;
+            SyncPropMobility(levelRoot, table, report);
 
             MotionHost host = levelRoot.GetComponentInChildren<MotionHost>(true);
             if (table.RowCount == 0)

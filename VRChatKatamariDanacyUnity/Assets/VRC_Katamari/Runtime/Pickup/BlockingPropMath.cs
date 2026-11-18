@@ -120,18 +120,73 @@ namespace VRCKatamari.Pickup
             int[] previousIndices, int previousCount, float stickinessM,
             int[] outIndices, float[] outDistances, int capacity)
         {
-            if (!KatamariMath.IsFiniteVector(ballCentre)) return -1;
-            if (!KatamariMath.IsFiniteFloat(radiusM) || radiusM < 0f) return -1;
-            if (!KatamariMath.IsFiniteFloat(stickinessM) || stickinessM < 0f) return -1;
-            if (capacity < 0) return -1;
             if (count < 0) return -1;
-            if (previousCount < 0) return -1;
             if (count > 0)
             {
                 if (minima == null || maxima == null || candidate == null) return -1;
                 if (count > minima.Length || count > maxima.Length || count > candidate.Length)
                     return -1;
             }
+
+            // 全表版是列表版的特例：候选就是 candidate[] 为真的行，按下标升序。
+            // 这里分配两个数组，只给测试与离线对拍用；运行期宿主走 SelectNearestAmong。
+            int[] rows = new int[count];
+            int candidateCount = 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (!candidate[i]) continue;
+                rows[candidateCount] = i;
+                candidateCount = candidateCount + 1;
+            }
+            float[] distanceByRow = new float[count];
+            return SelectNearestAmong(ballCentre, radiusM, minima, maxima, candidate, rows,
+                candidateCount, count, distanceByRow, previousIndices, previousCount, stickinessM,
+                outIndices, outDistances, capacity);
+        }
+
+        /// <summary>
+        /// <see cref="SelectNearest"/> 的候选列表版：只看 <paramref name="candidateRows"/> 里的行，
+        /// 代价与候选数成正比而不是与整张道具表成正比。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 规则与结果和全表版逐字相同（同一个 tie-break：距离相等取下标小的），所以候选列表
+        /// 的顺序不影响结果。契约：<c>candidate[row]</c> 为真当且仅当 row 在
+        /// <c>candidateRows[0, candidateCount)</c> 里——粘性保留用 candidate[] 判断"仍是候选"，
+        /// 距离则取自本次调用刚算好的 <paramref name="distanceByRow"/>（长度至少 rowCount，
+        /// 调用方自备、每次被覆盖；已选行的距离会被改成 +∞ 当作"已取"标记）。
+        /// </para>
+        /// <para>
+        /// 返回 -1 的条件与全表版相同，另加：候选列表里有 [0, rowCount) 之外的下标、
+        /// distanceByRow 太短。-1 时 outIndices / outDistances 一个元素都不写。
+        /// </para>
+        /// </remarks>
+        public static int SelectNearestAmong(
+            Vector3 ballCentre, float radiusM,
+            Vector3[] minima, Vector3[] maxima, bool[] candidate,
+            int[] candidateRows, int candidateCount, int rowCount, float[] distanceByRow,
+            int[] previousIndices, int previousCount, float stickinessM,
+            int[] outIndices, float[] outDistances, int capacity)
+        {
+            if (!KatamariMath.IsFiniteVector(ballCentre)) return -1;
+            if (!KatamariMath.IsFiniteFloat(radiusM) || radiusM < 0f) return -1;
+            if (!KatamariMath.IsFiniteFloat(stickinessM) || stickinessM < 0f) return -1;
+            if (capacity < 0) return -1;
+            if (rowCount < 0) return -1;
+            if (candidateCount < 0) return -1;
+            if (previousCount < 0) return -1;
+            if (rowCount > 0)
+            {
+                if (minima == null || maxima == null || candidate == null) return -1;
+                if (rowCount > minima.Length || rowCount > maxima.Length
+                    || rowCount > candidate.Length) return -1;
+            }
+            if (candidateCount > 0)
+            {
+                if (candidateRows == null || distanceByRow == null) return -1;
+                if (candidateCount > candidateRows.Length) return -1;
+            }
+            if (distanceByRow != null && rowCount > distanceByRow.Length) return -1;
             if (previousCount > 0 && previousIndices == null) return -1;
             if (previousIndices != null && previousCount > previousIndices.Length) return -1;
             if (capacity > 0)
@@ -140,13 +195,16 @@ namespace VRCKatamari.Pickup
                 if (capacity > outIndices.Length || capacity > outDistances.Length) return -1;
             }
 
-            // 写入前把每个候选盒算一遍并丢弃结果：既校验了盒与距离，也保证后面的写入
+            // 先把每个候选盒到球心的距离算一遍：既校验了盒与距离，也保证后面的写入
             // 不会半途失败留下部分输出。
-            for (int i = 0; i < count; i++)
+            for (int k = 0; k < candidateCount; k++)
             {
-                if (!candidate[i]) continue;
-                float ignored;
-                if (!TryDistanceToBox(ballCentre, minima[i], maxima[i], out ignored)) return -1;
+                int row = candidateRows[k];
+                if (row < 0 || row >= rowCount) return -1;
+                float distance;
+                if (!TryDistanceToBox(ballCentre, minima[row], maxima[row], out distance))
+                    return -1;
+                distanceByRow[row] = distance;
             }
 
             float stickyRadius = radiusM + stickinessM;
@@ -158,13 +216,14 @@ namespace VRCKatamari.Pickup
             {
                 if (written >= capacity) break;
                 int index = previousIndices[slot];
-                if (index < 0 || index >= count) continue;
+                if (index < 0 || index >= rowCount) continue;
                 if (!candidate[index]) continue;
-                if (ContainsIndex(outIndices, written, index)) continue;
-                float distance = DistanceToBox(ballCentre, minima[index], maxima[index]);
+                // 已取过的行（上一批里的重复下标）距离是 +∞，在这里自然被挡掉。
+                float distance = distanceByRow[index];
                 if (distance > stickyRadius) continue;
                 outIndices[written] = index;
                 outDistances[written] = distance;
+                distanceByRow[index] = float.PositiveInfinity;
                 written = written + 1;
             }
 
@@ -172,21 +231,22 @@ namespace VRCKatamari.Pickup
             {
                 int bestIndex = -1;
                 float bestDistance = 0f;
-                for (int i = 0; i < count; i++)
+                for (int k = 0; k < candidateCount; k++)
                 {
-                    if (!candidate[i]) continue;
-                    if (ContainsIndex(outIndices, written, i)) continue;
-                    float distance = DistanceToBox(ballCentre, minima[i], maxima[i]);
+                    int row = candidateRows[k];
+                    float distance = distanceByRow[row];
                     if (distance > radiusM) continue;
-                    if (bestIndex < 0 || distance < bestDistance)
+                    if (bestIndex < 0 || distance < bestDistance
+                        || (distance == bestDistance && row < bestIndex))
                     {
-                        bestIndex = i;
+                        bestIndex = row;
                         bestDistance = distance;
                     }
                 }
                 if (bestIndex < 0) break;
                 outIndices[written] = bestIndex;
                 outDistances[written] = bestDistance;
+                distanceByRow[bestIndex] = float.PositiveInfinity;
                 written = written + 1;
             }
             return written;
@@ -199,16 +259,6 @@ namespace VRCKatamari.Pickup
             float dy = point.y - Mathf.Clamp(point.y, minimum.y, maximum.y);
             float dz = point.z - Mathf.Clamp(point.z, minimum.z, maximum.z);
             return Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
-        }
-
-        // 输出缓冲很小（挡路容量是几个），线性查重比引入第二份索引表便宜也少状态。
-        private static bool ContainsIndex(int[] indices, int count, int value)
-        {
-            for (int i = 0; i < count; i++)
-            {
-                if (indices[i] == value) return true;
-            }
-            return false;
         }
     }
 }

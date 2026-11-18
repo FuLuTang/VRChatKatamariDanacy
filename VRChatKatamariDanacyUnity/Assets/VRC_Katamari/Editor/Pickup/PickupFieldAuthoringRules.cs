@@ -1202,6 +1202,89 @@ namespace VRCKatamari.Editor.Pickup
             return sanitized;
         }
 
+        // ------------------------------------------------------------- mobile column ---
+
+        /// <summary>
+        /// The item ids of the motion rows whose Transform the motion host may move: a row with
+        /// its own program that writes a pose (every class except none, dragged-along and
+        /// wait-for-player, whose program only runs a trigger gate), and a rider (parent row
+        /// and inherit mode set) whose parent row is itself in the set. A rider on a parent
+        /// that never moves is carried by an identity transform, so it stays where it started.
+        /// </summary>
+        /// <remarks>
+        /// The pickup host reads the Transform of exactly these rows every scan; every other
+        /// row's position is read once (<c>propMobile</c>, PickupFieldHost). The rule is
+        /// deliberately conservative: a path class whose path turns out unusable at run time
+        /// is still listed (it then simply does not move). Rows are in motion-host order,
+        /// parents first (the host refuses any other order), so one forward pass resolves the
+        /// riders. A parent row index that does not precede its rider is ignored (the host
+        /// ignores it too).
+        /// </remarks>
+        public static HashSet<string> FindMobileMotionItemIds(string[] itemIds, int[] parentRow,
+            int[] inherit, int[] motionClass)
+        {
+            var mobile = new HashSet<string>(StringComparer.Ordinal);
+            int count = itemIds == null ? 0 : itemIds.Length;
+            if (count == 0 || parentRow == null || inherit == null || motionClass == null)
+            {
+                return mobile;
+            }
+
+            count = Math.Min(count, Math.Min(parentRow.Length, Math.Min(inherit.Length,
+                motionClass.Length)));
+            var rowMobile = new bool[count];
+            for (int i = 0; i < count; i++)
+            {
+                int cls = motionClass[i];
+                bool movesItself = cls != MotionHostMath.ClassNone
+                    && cls != MotionHostMath.ClassDraggedAlong
+                    && cls != MotionHostMath.ClassWaitForPlayer;
+                int parent = parentRow[i];
+                bool rides = parent >= 0 && parent < i && inherit[i] != MotionHostMath.InheritNone;
+                rowMobile[i] = movesItself || (rides && rowMobile[parent]);
+                if (rowMobile[i] && !string.IsNullOrEmpty(itemIds[i])) mobile.Add(itemIds[i]);
+            }
+
+            return mobile;
+        }
+
+        /// <summary>
+        /// The <c>propMobile</c> column for rows <paramref name="rowIds"/>: true exactly for the
+        /// ids in <paramref name="mobileIds"/> (null = no prop moves).
+        /// </summary>
+        public static bool[] ResolveMobileColumn(string[] rowIds, ISet<string> mobileIds)
+        {
+            int count = rowIds == null ? 0 : rowIds.Length;
+            var column = new bool[count];
+            if (mobileIds == null) return column;
+            for (int i = 0; i < count; i++)
+            {
+                column[i] = !string.IsNullOrEmpty(rowIds[i]) && mobileIds.Contains(rowIds[i]);
+            }
+
+            return column;
+        }
+
+        /// <summary>
+        /// The column a re-sync keeps when nobody declared one: an id that already has a value
+        /// keeps it, an id with none is mobile (true), the safe default - a row the index
+        /// does not know about is read live every scan, which is always correct, only slower.
+        /// </summary>
+        public static bool[] PreserveMobileColumn(string[] rowIds,
+            IDictionary<string, bool> existing)
+        {
+            int count = rowIds == null ? 0 : rowIds.Length;
+            var column = new bool[count];
+            for (int i = 0; i < count; i++)
+            {
+                bool value;
+                column[i] = existing == null || string.IsNullOrEmpty(rowIds[i])
+                    || !existing.TryGetValue(rowIds[i], out value) || value;
+            }
+
+            return column;
+        }
+
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);

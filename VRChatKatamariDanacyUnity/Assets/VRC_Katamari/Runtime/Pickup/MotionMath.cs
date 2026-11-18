@@ -1619,6 +1619,215 @@ namespace VRCKatamari.Pickup
             return false;
         }
 
+        // --- Prepared paths -------------------------------------------------------
+        //
+        // The path steps above re-validate and re-measure the whole polyline on every call
+        // (IsPathOk twice, the total length, a linear segment scan: about 8,000 Udon externs for
+        // a 59-point path, per step). A host that steps the same path every 1/15 s builds the
+        // table below once and calls TryStepPathPrepared, which gives the SAME numbers (the
+        // table holds the very floats the original computes each call, in the same order) for
+        // about 100 externs. Layout of one table (all floats): header, then
+        // cumulative[segments + 1], length[segments], yawFrom[segments], yawDelta[segments],
+        // pitchFrom[segments], pitchDelta[segments].
+
+        /// <summary>Floats before the first array of a prepared path table.</summary>
+        public const int PathTableHeaderFloats = 5;
+        /// <summary>Path step state floats a prepared step needs: clock, distance, segment hint.</summary>
+        public const int PreparedPathStateFloats = 3;
+        public const int PathKindCollision = 0;
+        public const int PathKindSloping = 1;
+        public const int PathKindBackAndForth = 2;
+
+        /// <summary>Size of the table <see cref="BuildPathTable"/> fills for this path.</summary>
+        public static int PathTableFloats(int pointCount, bool closed)
+        {
+            int segments = closed ? pointCount : pointCount - 1;
+            if (segments < 1) segments = 1;
+            return PathTableHeaderFloats + (segments + 1) + 5 * segments;
+        }
+
+        /// <summary>
+        /// Fills <paramref name="table"/> (length <see cref="PathTableFloats"/>) for a path.
+        /// False, with the table's valid flag at 0, when the original's per-call checks would
+        /// refuse the path on every call (non-finite point, segment shorter than
+        /// <see cref="MinimumPathSegmentM"/>, a closed path whose closing segment is degenerate):
+        /// a row on such a path never moves, exactly as before.
+        /// </summary>
+        public static bool BuildPathTable(float[] pathPointsM, int pointCount, bool closed,
+            float[] table)
+        {
+            if (table == null || table.Length < PathTableFloats(pointCount, closed)) return false;
+            table[0] = 0f;
+            if (!IsPathOk(pathPointsM, pointCount)) return false;
+            int segments;
+            if (!TrySegmentCount(pointCount, closed, out segments)) return false;
+
+            int cumulative = PathTableHeaderFloats;
+            int lengths = cumulative + segments + 1;
+            int yawFrom = lengths + segments;
+            int yawDelta = yawFrom + segments;
+            int pitchFrom = yawDelta + segments;
+            int pitchDelta = pitchFrom + segments;
+
+            float total = 0f;
+            table[cumulative] = 0f;
+            for (int segment = 0; segment < segments; segment++)
+            {
+                float length = PathSegmentLength(pathPointsM, pointCount, closed, segment);
+                if (!KatamariMath.IsFiniteFloat(length) || length <= 0f) return false;
+                total = total + length;
+                table[lengths + segment] = length;
+                table[cumulative + segment + 1] = total;
+
+                int previous = PreviousSegment(pointCount, closed, segment);
+                float targetYaw = SegmentYaw(pathPointsM, pointCount, closed, segment);
+                float previousYaw = SegmentYaw(pathPointsM, pointCount, closed, previous);
+                float delta = targetYaw - previousYaw;
+                while (delta > Mathf.PI) delta = delta - TwoPi;
+                while (delta < -Mathf.PI) delta = delta + TwoPi;
+                table[yawFrom + segment] = previousYaw;
+                table[yawDelta + segment] = delta;
+
+                float targetPitch = SegmentPitch(pathPointsM, pointCount, closed, segment);
+                float previousPitch = SegmentPitch(pathPointsM, pointCount, closed, previous);
+                table[pitchFrom + segment] = previousPitch;
+                table[pitchDelta + segment] = targetPitch - previousPitch;
+            }
+            if (!KatamariMath.IsFiniteFloat(total) || !(total > 0f)) return false;
+
+            table[0] = 1f;
+            table[1] = pointCount;
+            table[2] = segments;
+            table[3] = closed ? 1f : 0f;
+            table[4] = total;
+            return true;
+        }
+
+        /// <summary>
+        /// The per-row inputs the original path steps check on every call (speed, half height
+        /// and spawn position finite and non-negative), asked once when the row is configured.
+        /// </summary>
+        public static bool PathRowInputsOk(float speedMps, float halfHeightM, Vector3 spawnPositionM)
+        {
+            return IsNonNegativeFinite(speedMps) && IsNonNegativeFinite(halfHeightM)
+                && KatamariMath.IsFiniteVector(spawnPositionM);
+        }
+
+        /// <summary>
+        /// One step of PathCollision, SlopingPath or BackAndForthNoYaw from a table built by
+        /// <see cref="BuildPathTable"/>; same state layout as the original steps plus the
+        /// segment hint at slot 2 (<see cref="PreparedPathStateFloats"/> floats), same outputs.
+        /// The caller has checked <see cref="PathRowInputsOk"/> and the table's valid flag.
+        /// BackAndForthNoYaw needs a table built with closed = false.
+        /// </summary>
+        public static bool TryStepPathPrepared(int kind, float[] state, float dtFrames,
+            Vector3 spawnPositionM, float[] pathPointsM, float[] table, float speedMps,
+            float halfHeightM, out Vector3 positionM, out Vector3 eulerRad)
+        {
+            positionM = Vector3.zero;
+            eulerRad = Vector3.zero;
+            if (!(dtFrames >= 0f) || !KatamariMath.IsFiniteFloat(dtFrames)) return false;
+
+            int pointCount = (int)table[1];
+            bool closed = table[3] >= 0.5f;
+            if (state[1] < 0f)
+            {
+                if (!TryInitPathDistance(state, spawnPositionM, pathPointsM, pointCount, closed))
+                    return false;
+            }
+            state[0] = state[0] + dtFrames;
+            state[1] = state[1] + speedMps * (dtFrames / GameFramesPerSecond);
+
+            float total = table[4];
+            float travelled = state[1];
+            if (!KatamariMath.IsFiniteFloat(travelled)) return false;
+            if (kind == PathKindBackAndForth)
+            {
+                float folded = travelled % (2f * total);
+                if (folded < 0f) folded = folded + 2f * total;
+                if (folded > total) folded = 2f * total - folded;
+                travelled = folded;
+            }
+            if (closed)
+            {
+                travelled = travelled % total;
+                if (travelled < 0f) travelled = travelled + total;
+            }
+            else
+            {
+                if (travelled < 0f) travelled = 0f;
+                if (travelled > total) travelled = total;
+            }
+
+            int segments = (int)table[2];
+            int cumulative = PathTableHeaderFloats;
+            int segment = (int)state[2];
+            if (segment < 0 || segment >= segments) segment = 0;
+            if (!PreparedSegmentHolds(table, cumulative, segments, segment, travelled))
+            {
+                int next = segment + 1;
+                if (next >= segments) next = 0;
+                if (PreparedSegmentHolds(table, cumulative, segments, next, travelled))
+                {
+                    segment = next;
+                }
+                else
+                {
+                    segment = segments - 1;
+                    for (int k = 0; k < segments - 1; k++)
+                    {
+                        if (travelled <= table[cumulative + k + 1])
+                        {
+                            segment = k;
+                            break;
+                        }
+                    }
+                }
+            }
+            state[2] = segment;
+
+            int lengths = cumulative + segments + 1;
+            int from = segment * 3;
+            int toPoint = segment + 1;
+            if (toPoint >= pointCount) toPoint = 0;
+            int to = toPoint * 3;
+            float along = (travelled - table[cumulative + segment]) / table[lengths + segment];
+            if (along < 0f) along = 0f;
+            if (along > 1f) along = 1f;
+            float x = pathPointsM[from] + (pathPointsM[to] - pathPointsM[from]) * along;
+            float y = pathPointsM[from + 1] + (pathPointsM[to + 1] - pathPointsM[from + 1]) * along;
+            float z = pathPointsM[from + 2] + (pathPointsM[to + 2] - pathPointsM[from + 2]) * along;
+            positionM = new Vector3(x, y - halfHeightM, z);
+            if (kind == PathKindBackAndForth) return true;
+
+            int yawFrom = lengths + segments;
+            int yawDelta = yawFrom + segments;
+            float yaw = NormalizeYaw(table[yawFrom + segment] + table[yawDelta + segment] * along);
+            if (!KatamariMath.IsFiniteFloat(yaw)) return false;
+            float pitch = 0f;
+            if (kind == PathKindSloping)
+            {
+                int pitchFrom = yawDelta + segments;
+                int pitchDelta = pitchFrom + segments;
+                float pitchFraction = along * 4f;
+                if (pitchFraction > 1f) pitchFraction = 1f;
+                pitch = table[pitchFrom + segment] + table[pitchDelta + segment] * pitchFraction;
+                if (!KatamariMath.IsFiniteFloat(pitch)) return false;
+            }
+            eulerRad = new Vector3(pitch, yaw, 0f);
+            return true;
+        }
+
+        // Segment k is the first one with travelled <= its end (or the last one): travelled must
+        // be past the previous segment's end and not past this one's.
+        private static bool PreparedSegmentHolds(float[] table, int cumulative, int segments,
+            int segment, float travelled)
+        {
+            if (segment != segments - 1 && travelled > table[cumulative + segment + 1]) return false;
+            if (segment != 0 && !(travelled > table[cumulative + segment])) return false;
+            return true;
+        }
+
         // --- Shared validation --------------------------------------------------
 
         private static bool IsStateOk(float[] state, int requiredFloats)

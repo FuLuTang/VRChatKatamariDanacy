@@ -25,6 +25,12 @@ namespace VRCKatamari.Editor.Pickup
         public int PropCount;
 
         /// <summary>
+        /// Rows of the <c>propMobile</c> column that are true (read live every scan by the
+        /// pickup host); the rest are looked up by grid cell. A re-sync keeps each id's flag.
+        /// </summary>
+        public int MobileRows;
+
+        /// <summary>
         /// Sum of every written row's growth, in mm^3 (the ledger gain). 64-bit because the
         /// ledger is; the value is derived at sync time from the row's bounds x k x penalty.
         /// </summary>
@@ -116,7 +122,7 @@ namespace VRCKatamari.Editor.Pickup
 
             text.Append(PropCount).Append(" prop(s), ").Append(Kinds.Count).Append(" kind(s), ")
                 .Append(TotalGrowthMm3).Append(" growth mm^3, ").Append(Rejected.Count)
-                .Append(" rejected");
+                .Append(" rejected, ").Append(MobileRows).Append(" mobile");
 
             if (CollidersCreated > 0)
             {

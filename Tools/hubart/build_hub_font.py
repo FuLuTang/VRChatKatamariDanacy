@@ -1,25 +1,19 @@
-"""Writes the hub panels' character set and the subset font the Unity operator turns into the
-panels' TextMesh Pro font asset (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md, "Font").
+"""生成大厅面板和结算卡共用的字符集与子集字体，供 Unity 操作员生成 TMP 字体资产。
+参见 Docs/Design/StoryMode/HUB_PANEL_PREFAB.md「字体」。
 
     python3 Tools/hubart/build_hub_font.py            # charset + font
     python3 Tools/hubart/build_hub_font.py --charset-only
 
-Outputs:
+产物：
   Tools/hubart/hub_panel_charset.txt
-      Every character the panels can show: printable ASCII, every non-ASCII character in the
-      string literals of HubPanelTextMath.cs (all three languages), the level names in
-      Docs/Design/StoryMode/hub_levels.json, and the two settings arrows. One line, sorted.
-      The NUnit test HubPanelCharsetTests checks the real formatter output against this file,
-      so a new word that is missing here fails a test instead of drawing a square.
+      排序后的一行码位：可打印 ASCII、面板与结算卡文案、关名、设置箭头和指定保留字。
+      NUnit 的 HubPanelCharsetTests 用它检查大厅面板格式化器的实际输出。
   VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Art/Hub/Fonts/HubPanelSans-Bold.otf
-      Noto Sans CJK SC Bold reduced to that character set (fontTools subsetter), renamed
-      "HubPanelSans" because a subset is a Modified Version under the SIL Open Font License 1.1;
-      OFL.txt (the licence text) is written next to it. Source: the system's
-      fonts-noto-cjk package (/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc, index 2 =
-      SC). SC covers the kana used by the Japanese strings.
+      取 Noto Sans CJK SC Bold 的子集并按 SIL OFL 1.1 改名为 HubPanelSans。
+      来源为系统 fonts-noto-cjk 包（NotoSansCJK-Bold.ttc 索引 2 为 SC，覆盖日语假名）。
+      同目录保留 OFL.txt；仅在缺少许可文件时生成。
 
-Needs fontTools for the font (pip install fonttools, e.g. in a venv); --charset-only needs
-nothing beyond Python 3.
+生成字体需要 fontTools（可装在虚拟环境里）；--charset-only 只依赖 Python 3。
 """
 
 import json
@@ -29,26 +23,38 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-TEXT_MATH = os.path.join(REPO, "VRChatKatamariDanacyUnity", "Assets", "VRC_Katamari", "Runtime",
-                         "Story", "Hub", "HubPanelTextMath.cs")
+RUNTIME = os.path.join(REPO, "VRChatKatamariDanacyUnity", "Assets", "VRC_Katamari", "Runtime")
+# 新增或移动文案时更新此表，只登记实际写入大厅面板或结算卡的来源；不要扫描目录。
+# 第 2 项是字符串字面量的选取规则。Launcher 只取传入结算卡的导航提示，不取大厅状态或日志。
+# 结算卡的呈交标题、计量、星标和评语来自 Presenter；若之后增加独立的关卡评语覆盖，也要登记其来源。
+STRING_LITERAL = r'"((?:[^"\\\n]|\\.)*)"'
+TEXT_SOURCES = (
+    ("Story/Hub/HubPanelTextMath.cs", STRING_LITERAL),
+    ("Story/StoryResultPresenter.cs", STRING_LITERAL),
+    ("Hub/HubLevelLauncher.cs", r"\bSetReturnHint\(\s*" + STRING_LITERAL + r"\s*\)"),
+)
 LEVELS = os.path.join(REPO, "Docs", "Design", "StoryMode", "hub_levels.json")
 CHARSET = os.path.join(HERE, "hub_panel_charset.txt")
 FONT_DIR = os.path.join(REPO, "VRChatKatamariDanacyUnity", "Assets", "VRC_Katamari", "Art", "Hub",
                         "Fonts")
 FONT_OUT = os.path.join(FONT_DIR, "HubPanelSans-Bold.otf")
 SOURCE_TTC = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
-SOURCE_INDEX = 2  # Noto Sans CJK SC Bold
+SOURCE_INDEX = 2  # 简体中文版 Noto Sans CJK Bold
 SOURCE_LICENCE = "/usr/share/doc/fonts-noto-cjk/copyright"
 FAMILY = "HubPanelSans"
-EXTRA = "◀▶"
+SETTINGS_ARROWS = "◀▶"
+# 本次指定保留的 33 字中，下面这些不来自当前结算卡正文；只保留这些字，不扫描进行中 HUD。
+REQUIRED_EXTRA = "余击剩去坐当流程第"
+# 本次只补字：保留旧字符集已有、当前生成源不再提供的码位，避免共享字体回退。
+LEGACY_EXTRA = "松離"
 
 
 def collect():
     chars = set(chr(c) for c in range(0x20, 0x7F))
-    with open(TEXT_MATH, encoding="utf-8") as fh:
-        source = fh.read()
-    for literal in re.findall(r'"((?:[^"\\\n]|\\.)*)"', source):
-        chars.update(literal)
+    for path, pattern in TEXT_SOURCES:
+        with open(os.path.join(RUNTIME, path), encoding="utf-8") as fh:
+            for literal in re.findall(pattern, fh.read()):
+                chars.update(literal)
     with open(LEVELS, encoding="utf-8") as fh:
         levels = json.load(fh)
 
@@ -63,7 +69,9 @@ def collect():
                 walk(value)
 
     walk(levels)
-    chars.update(EXTRA)
+    chars.update(SETTINGS_ARROWS)
+    chars.update(REQUIRED_EXTRA)
+    chars.update(LEGACY_EXTRA)
     return "".join(sorted(c for c in chars if ord(c) >= 0x20 and c != "\\"))
 
 
@@ -115,8 +123,10 @@ def build_font(charset):
         top.FamilyName = FAMILY
     os.makedirs(FONT_DIR, exist_ok=True)
     font.save(FONT_OUT)
-    with open(os.path.join(FONT_DIR, "OFL.txt"), "w", encoding="utf-8") as fh:
-        fh.write(licence_text())
+    licence = os.path.join(FONT_DIR, "OFL.txt")
+    if not os.path.exists(licence):
+        with open(licence, "x", encoding="utf-8") as fh:
+            fh.write(licence_text())
     cmap = font.getBestCmap()
     missing = [c for c in charset if ord(c) not in cmap and c != " "]
     print("[hubfont] %s bytes=%d glyphs=%d missing=%d%s" % (

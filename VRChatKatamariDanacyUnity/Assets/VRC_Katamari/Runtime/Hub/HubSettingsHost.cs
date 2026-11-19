@@ -140,6 +140,8 @@ namespace VRCKatamari.Hub
 
         public bool IsReduceAutoRotate() { return GetSetting(HubSettingsMath.ReduceAutoRotate) == 1; }
 
+        public bool IsPushCueEnabled() { return GetSetting(HubSettingsMath.PushCue) == 1; }
+
         private void EnsureValues()
         {
             if (values != null) return;

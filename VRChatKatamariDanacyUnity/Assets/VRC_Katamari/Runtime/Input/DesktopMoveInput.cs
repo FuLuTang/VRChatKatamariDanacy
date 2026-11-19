@@ -202,8 +202,9 @@ namespace VRCKatamari.Input
         {
             forward = 0f;
             turn = 0f;
-            // A charge must not survive the station exit, a respawn or a closing gate.
-            if (motor != null) motor.CancelDashCharge();
+            // 非本平台不写共享马达，也不取消另一输入适配器的冲刺。
+            if (IsVrPlayer()) return;
+            if (motor != null) motor.CancelDash();
             PushAxes();
         }
 
@@ -276,21 +277,16 @@ namespace VRCKatamari.Input
                 bool accepted = motor.BeginDashCharge();
                 Debug.Log(accepted
                     ? "[input] dash charge begin"
-                    : "[input] dash charge refused (huff, cooldown or already charging)");
+                    : "[input] dash charge refused (huff, no dash life or dash already active)");
                 return;
             }
 
             if (!InputOpen())
             {
-                motor.CancelDashCharge();
+                motor.CancelDash();
                 return;
             }
-            int released = motor.ReleaseDashCharge();
-            Debug.Log(released == DashMath.ReleaseDash
-                ? "[input] dash fired"
-                : released == DashMath.ReleaseNotFull
-                    ? "[input] dash released, charge not full"
-                    : "[input] dash release ignored");
+            motor.ReleaseDashCharge();
         }
 
         private void BeginDebugDrive()

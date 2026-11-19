@@ -154,7 +154,7 @@ HubBoard_Settings
 │  │  └─ Arrow             TMP「◀」
 │  └─ More                 Image + Button + HubSettingButton（+ UdonBehaviour）
 │     └─ Arrow             TMP「▶」
-├─ SettingRow_01 … SettingRow_10
+├─ SettingRow_01 … SettingRow_11
 ```
 
 | 物体 | pos | size | 字号 | 对齐 | 色 |
@@ -162,7 +162,7 @@ HubBoard_Settings
 | Text_SettingsTitle | (0, 980) | 2800 × 260 | 170 | 居中 | 白 |
 | Text_SettingsHint | (0, 700) | 2800 × 100 | 60 | 居中 | Navy |
 
-行：`SettingRow_NN` 是空 RectTransform，pos (0, y)，size 3000 × 140；NN = 设置 id（00–10，顺序见 HUB_ROOM「设置项」）。y：00 = 580，之后每行 −155（01 = 425，02 = 270，03 = 115，04 = −40，05 = −195，06 = −350，07 = −505，08 = −660，09 = −815，10 = −970）。
+行：`SettingRow_NN` 是空 RectTransform，pos (0, y)，size 3000 × 140；NN = 设置 id（00–11，顺序见 HUB_ROOM「设置项」）。`y = 580 − 145 × NN`（最后一行 `y = −1015`），保留现有板高 2300 与提示行的位置。现有 Prefab 待 Unity 操作员补 `SettingRow_11`：复制 `SettingRow_10`，去掉偶数行专用的 `Stripe`，并重排 12 行到上述坐标；新行两按钮的 `settingId` 都改为 11，确认 `delta` 仍为 −1 / +1 且按钮分别指向复制后自己的 backing UdonBehaviour。
 
 行内子物体（pos 相对行中心）：
 
@@ -192,12 +192,12 @@ HubBoard_Settings
 - EventSystem：场景里正好一个（StoryMode 底板已有一个 `EventSystem` 根物体）；没有时装配器加 `EventSystem` + `StandaloneInputModule`。
 - 实例：根物体名 `HubBoard_<id>`，场景根，位置/旋转/缩放见上表。同名但不是该 Prefab 实例的旧物体会被删掉换成实例。
 - 写入的场景引用：卡片 `HubStartButton.launcher`、`levelIndex`；每个箭头 `HubSettingButton.settings`；`Number` 文字；`HubPanelDisplay` 的全部文字引用（按本页物体名查找）；`HubRoomHost.levelButtons`（卡片根）与 `promptText`（Text_Prompt）。这些是实例覆盖（override），不要 Apply 回 Prefab。
-- 回读（`problems` 计数）：根上 Canvas World Space、VRCUiShape、GraphicRaycaster、BoxCollider、非 UI/UiMenu 层、缩放 0.001–0.01；所有 TMP Raycast Target 关且有字体；没有旧 `Text`；所有 Selectable 的 Navigation = None；每个按钮：Button + 射线 Image、自身没有 Collider、onClick 恰好一条 `SendCustomEvent("Press")` 指向本物体的 backing UdonBehaviour；`HubSettingButton` 22 个，(id, 方向) 覆盖 11 × 2。
+- 回读（`problems` 计数）：根上 Canvas World Space、VRCUiShape、GraphicRaycaster、BoxCollider、非 UI/UiMenu 层、缩放 0.001–0.01；所有 TMP Raycast Target 关且有字体；没有旧 `Text`；所有 Selectable 的 Navigation = None；每个按钮：Button + 射线 Image、自身没有 Collider、onClick 恰好一条 `SendCustomEvent("Press")` 指向本物体的 backing UdonBehaviour；`HubSettingButton` 24 个，(id, 方向) 覆盖 12 × 2。
 
 ## 搭建步骤（Unity 操作员，MCP）
 
 1. 同步源码后让 Unity 导入 `HubPanelSans-Bold.otf`、重编译 C#/UdonSharp（HubStartButton、HubSettingButton 的 program asset 已存在，不需要新建）。
 2. 按「字体」生成 `HubPanelSans SDF.asset`，记下 missing 数（应为 0）。
 3. 建 `Assets/VRC_Katamari/Prefabs/Hub/`。在一个空场景或当前场景的空处按上面三棵树搭三块板：U# 组件用 UdonSharp 的方式加（`gameObject.AddUdonSharpComponent<T>()` 或 Inspector Add Component 后由 UdonSharp 自动配 backing UdonBehaviour）；按钮 onClick 目标选 **UdonBehaviour** 组件（不是 HubStartButton 代理组件）的 `SendCustomEvent(string)`，参数 `Press`。存为 Prefab 后删掉场景里的临时物体。
-4. 每个 Prefab 打开后回读：根组件 7 个（RectTransform、Canvas、CanvasScaler、GraphicRaycaster、VRCUiShape、BoxCollider、Image）；Levels 4 个按钮、Settings 22 个按钮，每个按钮 onClick 一条、参数 `Press`；全部 TMP 的 Font Asset = HubPanelSans SDF。
+4. 每个 Prefab 打开后回读：根组件 7 个（RectTransform、Canvas、CanvasScaler、GraphicRaycaster、VRCUiShape、BoxCollider、Image）；Levels 4 个按钮、Settings 24 个按钮，每个按钮 onClick 一条、参数 `Press`；全部 TMP 的 Font Asset = HubPanelSans SDF。
 5. 打开 AllMapsHub 场景，执行 `VRC Katamari/Hub/Assemble All-Maps Hub`，再执行 `VRC Katamari/Hub/Check Room Wiring`，预期读数见 [HUB_ROOM](<HUB_ROOM.md>)「Unity 操作员」。

@@ -1,6 +1,6 @@
 # 球的操控：双摇杆坦克式与简单模式
 
-owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的坦克式操控，另外提供一个简单模式（仿《从前从前有个块魂》的 Simple）。坐上球后摇杆只负责滚球。Desktop 保留 WASD 前后和转向，Space 留给道具。冲刺（dash）照原作 Charge'n'Roll：按住蓄力、松手出射——VR 用左手扳机，PC 用 Shift（见下文「冲刺」）。
+owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的坦克式操控，另外提供一个简单模式（仿《从前从前有个块魂》的 Simple）。坐上球后摇杆只负责滚球。Desktop 保留 WASD 前后和转向，Space 留给道具。冲刺以 WLK RR+ 的 Charge'n'Roll 为准：长按蓄力，蓄满自动出射——VR 用左手扳机，PC 用 Shift（见下文「冲刺」）。
 
 ## 实现
 
@@ -9,11 +9,11 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 | [TankStickMath.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/TankStickMath.cs) | 纯算法：两根摇杆换算成 (forward, turn, lateral)，包括死区和两套模式 |
 | [VrStickMoveInput.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/VrStickMoveInput.cs) | VR 设备读取：每帧读四个摇杆轴，调用 TankStickMath，再调 `KatamariBallMotor.SetMoveAxes`；**左手扳机**（`InputUse`，只取 `handType == LEFT`）发蓄力的按下/松开。只在 `IsUserInVR()` 时工作 |
 | [DesktopMoveInput.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/DesktopMoveInput.cs) | Desktop 的 WASD 路径（`InputMove*`，映射不受本设计影响）；Shift 长按蓄力、松开出射 |
-| [DashMath.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/DashMath.cs) | 纯算法：蓄力分档时间、原地旋转阈值、出射倍率/时长/冷却、能量与 huff；motor 每固定步推进一次 |
+| [DashMath.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/DashMath.cs) | 纯算法：惯性减速、蓄力分档、空转阈值、一次出射、冷却、能量与喘气；马达每固定步推进一次 |
 | [TankStickTests.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/Input/TankStickTests.cs) | 摇杆映射的 EditMode 测试（含换手、死区与转向倍率） |
-| [DashMathTests.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/BallMotor/DashMathTests.cs) | 冲刺的 EditMode 测试（14 条：分档、旋转阈值、未蓄满不出、出射时长、冷却、能量、回充、huff、重置、坏输入） |
+| [DashMathTests.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/BallMotor/DashMathTests.cs) | 冲刺的 EditMode 测试：覆盖逐步减速、满蓄沿朝向出射且不重复注入速度、短按保留残速、关门取消、分档、空转、能量与喘气 |
 
-两个输入行为喂的是同一个入口 `SetMoveAxes(forward, turn, lateral)`。motor 的约定是：forward +1 向前，turn +1 右转（俯视顺时针），lateral +1 向右横移。两者共用同样的两道门：骑乘门归 `BallRideStation`，回合门归 `StoryRoundController`；蓄力的按下/松开也走这两道门（站着或回合结束后按扳机不会蓄力，关门前已蓄的会被取消）。
+两个输入行为喂的是同一个入口 `SetMoveAxes(forward, turn, lateral)`。motor 的约定是：forward +1 向前，turn +1 右转（俯视顺时针），lateral +1 向右横移。两者共用同样的两道门：骑乘门归 `BallRideStation`，回合门归 `StoryRoundController`；蓄力的按下/松开也走这两道门（站着或回合结束后按扳机不会蓄力，关门会取消蓄力及待出射或进行中的冲刺，不清除已经产生的惯性）。
 
 ## 坦克式映射（默认，`controlMode = 0`）
 
@@ -27,7 +27,7 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 | 单推右杆 | 绕左侧转弯 | (0.5, −0.5, 0) |
 | 横移 | 两杆同向左 / 右推 | (0, 0, ±1) |
 | 斜前推 | 两杆同向斜前 | 前进加横移，例如 (0.71, 0, 0.71) |
-| 冲刺 | 原作：左前右后与左后右前快速交替（Charge'n'Roll，交互推拉） | 本项目照原作逻辑、改用长按：VR 左手扳机 / PC Shift，蓄满 2.0–3.2 s 后松手出射；不在本表的三轴里，见「冲刺」节 |
+| 冲刺 | WLK：两杆交替推拉，达档自动冲，空转后输入超时也可弱冲 | VR 左扳机 / PC Shift 模拟时长；不占操控三轴，见「冲刺」 |
 | 快速转身 | 初代 L3+R3：王子跳到球的另一侧，朝向反转 180° | 本项目不做：摇杆按下在 VRChat 里是 Action Menu |
 | 爬墙 | 贴墙后两杆持续前推 | 普通前进，走现有爬墙路径 |
 
@@ -48,7 +48,7 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 ## 来源
 
 - 初代与 WLK 操作：[psxdatacenter SLPS-25467](https://psxdatacenter.com/psx2/games2/SLPS-25467.html)（Shift = 一推一拉，Dash = 两杆快速上下交替，Quick turn = L3+R3，Roll left/right = 两杆同向横推），[StrategyWiki 初代控制表](https://strategywiki.org/wiki/Katamari_Damacy/Controls)（搜索摘要可读，正文 403），[GameFAQs FAQ](https://gamefaqs.gamespot.com/ps2/918766-katamari-damacy/faqs/32721)（搜索摘要）。
-- 原作冲刺机制（gacha 窗口、5/6/7/8 档位、3 次起旋转、能量 240 帧与 huff 8 s）：[REROLL Speedrun Notes · Boosts](https://shookietea.github.io/reroll-notes/mechanics/boosts/boosts/)（全文可读，属社区资料，不是官方）；原作文档汇编见 [ORIGINAL_BALL_INERTIA 第 5 行](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)。**触发方式是我们的适配**：原作是两根摇杆交替推拉，VR 手柄上照搬不了，owner 2026-11-18 定为「左扳机 / Shift 长按蓄力、松手出射」；出射倍率/时长/冷却与旋转速率是我们的设计值，见 [CONTACT_MODEL_V2 §3.8](../BallMotor/CONTACT_MODEL_V2.md)。
+- 冲刺证据：WLK RR+ v20230608 的 `Game_Core.YmCoreBasicParam` 与 `gsCoreRunParam`，由 `Game_Core$$.cctor` 初始化；字段、取值与项目适配见 [接触模型 §3.8](../BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
 - 简单模式：[Keymap · Once Upon a Katamari](https://keymap.io/controls/once-upon-a-katamari/)（全文可读，第三方站点）。
 
 ## VRChat 平台事实
@@ -62,7 +62,7 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 | **冲突**：同一次扳机按下会**同时**发 `InputUse(true)` 和（准心指着可交互对象时）`Interact()`；社区实测文用日志确认“InputUse 不看你指着什么都会发”。所以蓄力/出射期间准心若对着载具的下车面板等 Interact 按钮，会顺带按下它——已缓解：骑乘时蓄力/出射段的 Interact 被忽略（见「冲刺」节） | [UdonSharp Interact vs Input Events（UhiyamaLab）](https://uhiyama-lab.com/en/notes/vrchat/udonsharp-user-interaction/#basic-interact-event)；官方 Input Events 与 [UdonSharp Events](https://udonsharp.docs.vrchat.com/events/) |
 | 菜单（主菜单 / 快捷菜单 / 文本输入）打开期间 Udon 读不到输入；**关闭菜单时 Udon 会把仍按住的 Unity 输入重新“按下”**，所以 PC 端长按 Shift 跨菜单可能被补一次边沿（平台行为，不是我们的 bug） | 官方 Input Events 同页「Input Detection in VRChat Menus」 |
 | Udon 可以调用 `Input.GetKey` / `GetKeyDown`（官方列出）；SDK 3.6.1 的 ClientSim 曾让 `Input.GetKey` 恒返回 false（真机不受影响，官方确认是 ClientSim bug 并已修）。本项目 SDK 3.10.5 晚于修复，但 **ClientSim 里 Shift 蓄力未验证** | 官方 Input Events 同页「Unity Input Methods and Properties」；[ClientSim issue #117](https://github.com/vrchat-community/ClientSim/issues/117)、[官方反馈帖](https://feedback.vrchat.com/sdk-bug-reports/p/sdk-361-broke-inputgetkey) |
-| 坐在 Station 里是否屏蔽 `InputUse`：官方文档只列「菜单打开时屏蔽」，**没有**座位屏蔽输入事件的条目；Station 只影响移动（PlayerMobility），另有已知缺陷是座位内 `OnPlayerTriggerEnter/Exit/Stay` 不触发（与输入事件不是同一族）。本仓 Station 实验的 **PC 日志**里坐姿下 `InputJump` 正常触发（`Docs/Evidence/StationPlatform/vr_checklist.md`，「坐姿 Jump 不退座 PASS」）；**VR 左扳机在座位内未真机验证** | 官方 Input Events 与官方 [VRC Station](https://creators.vrchat.com/worlds/components/vrc_station/)；[Stations break trigger events](https://vrchat.canny.io/bug-reports/p/stations-break-trigger-events)；本仓证据文件 |
+| 坐在 Station 里是否屏蔽 `InputUse`：官方文档只列「菜单打开时屏蔽」，**没有**座位屏蔽输入事件的条目；Station 只影响移动（PlayerMobility），另有已知缺陷是座位内 `OnPlayerTriggerEnter/Exit/Stay` 不触发（与输入事件不是同一族）。本仓 Station 实验的 **PC 日志**里坐姿下 `InputJump` 正常触发（`Docs/Evidence/StationPlatform/vr_checklist.md`，「坐姿 Jump 不退座 PASS」）；owner 在 `e0f9bb9` 中报告左扳机按下即刹停，与起蓄路径吻合；松开事件尚待真机日志确认 | 官方 Input Events 与官方 [VRC Station](https://creators.vrchat.com/worlds/components/vrc_station/)；[Stations break trigger events](https://vrchat.canny.io/bug-reports/p/stations-break-trigger-events)；本仓证据文件 |
 | PC 为什么选 Shift 而不是照用左键（`InputUse`）：左键在 PC 上同时是 UI/交互键，长按蓄力会与点面板、点世界对象纠缠；Shift 是桌面跑步键，坐着（Immobilize）时移动被禁、Shift 不驱动任何移动，且 `Input.GetKey` 读键盘原始状态。代价：手柄 PC 玩家没有 Shift（手柄两个扳机都报 RIGHT），v1 不支持手柄蓄力 | 官方 [VRC Station](https://creators.vrchat.com/worlds/components/vrc_station/)；官方 Input Events；[手柄 handType 反馈帖](https://vrchat.canny.io/bug-reports/p/inputuse-inputgrab-events-have-incorrect-handtype-for-gamepad-triggers) |
 | Station 的 Immobilize / Immobilize For Vehicle 让玩家坐着时不能移动（左杆的 locomotion 不起作用）；StoryMode 场景里的值是 `PlayerMobility: 1`、`disableStationExit: 1` | 官方 [VRC Station](https://creators.vrchat.com/worlds/components/vrc_station/)；`StoryMode.unity:913` |
 | 右杆 x 默认用来转身（Oculus 键位 Right Thumbstick = Turn）。坐在 Immobilize 座位上时，VRChat 自己的右杆转向（平滑或 snap）是否仍会旋转视角，官方文档没写，**未验证**。座位会固定玩家位置，头部转向不受影响 | [Oculus Touch 键位](https://docs.vrchat.com/docs/touch)；仓内 `Docs/Evidence/StationPlatform/vr_checklist.md` 中该项为 NOT_RUN |
@@ -98,11 +98,12 @@ Unity 操作员步骤：
 | 两杆同时向左 / 向右 | 球向左 / 向右横移，朝向不变 |
 | 两杆一起斜前推 | 斜着前进，不转向 |
 | 松开两杆（摇杆轻微漂移） | 球不被推动 |
-| 按住左扳机不放 | 日志 `[input] dash charge begin`；前 1.2 s 球停住不动，之后原地旋转、不前进 |
-| 按住约 1 s 就松开（小球档要 2.0 s） | 日志 `[input] dash released, charge not full`；球不加速 |
-| 按住 2.0 s（0.3 m 起步球）再松开 | 日志 `[input] dash fired`；球朝当前朝向加速（约 1.6×）约 0.45 s |
-| 出射后 1.2 s 内再按住 | 日志 `[input] dash charge refused (huff, cooldown or already charging)`；不蓄力 |
-| 连续蓄满 3 次以上 | 能量耗尽后日志出现 refused；随后 8 s 内按扳机都不能蓄力（huff） |
+| 平地滚动中按住左扳机 | `[input] dash charge begin`；按普通阻力滑行减速，小球约 1.4 s 后只转球壳、不带动骑手视角 |
+| 小球按住约 1 s 松开 | `[input] dash released before spin`；不冲 |
+| 小球按住约 2 s 松开 | `[input] dash fired (early release)`；朝驾驶朝向弱冲，速度是同球径满蓄的 0.67 倍 |
+| 小球摇杆归中，持续长按约 3.3 s，不松手 | `[input] dash fired (full auto)`；自动沿驾驶朝向冲出；随后松手不再发第二次 |
+| 冲出后后拉，或冲到挡墙 | 后拉退出冲刺并走普通刹车；墙体按既有接触规则阻挡，不重复注入速度 |
+| 冲刺寿命耗尽 | 约 8 s 内按扳机拒绝蓄力，随后寿命回满；不要用固定冲刺次数判定耗尽 |
 | 右扳机按住 | 无反应（只取左手 `handType`） |
 | 蓄力/出射时准心指着下车面板并按扳机 | 面板不响应本次按下（`RideDashInteractMath` 忽略）；松开、dash 结束后再点两次能正常下车 |
 | 蓄力时准心指着结果卡重试（回合结束后不会出现蓄力，作参考） | 同上，重试不会在 dash 中触发 |
@@ -113,26 +114,23 @@ Unity 操作员步骤：
 | 死区调到 0.50，缓推到原始有效轴约 0.4 | 球不受推；改回 0.20 后同样输入应产生移动 |
 | 以同样幅度转向，分别测试 ×0.5 和 ×1.5 | 未到饱和时 ×1.5 的转向轴幅度为 ×0.5 的三倍；轴最大幅度仍为 1，前后与横移轴不变 |
 | 离座或 Respawn | 球立即停止受推 |
-| Desktop 玩家（坐着按住 Shift 约 2.5 s 再松开） | 日志先 `dash charge begin` 再 `dash fired`，球朝朝向加速；按住 1 s 松开只出现 `dash released, charge not full` |
+| Desktop 玩家 | Shift 与 VR 共用相同三档阶段、出射速度和寿命；用同一张平地测试表 |
 
-## 冲刺（dash）：长按蓄力、松手出射
+## 冲刺（WLK 规则与长按适配）
 
-- **现行决定（owner 2026-11-18，覆盖同日更早的「按键触发」版本）**：照原作的 Charge'n'Roll——按住蓄力、松手出射。VR 用**左手扳机**（`InputUse`，只取 `handType == LEFT`）；PC 用 **Shift 长按**（理由见「VRChat 平台事实」）。输入层只发「按下 / 松开」，蓄力、旋转、能量、huff 的规则全在 motor 的 [DashMath.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/DashMath.cs)。
-- **蓄力期间不前进、不转向**：motor 把三根轴按 0 处理并清掉平面速度；蓄满 3 个 gacha 窗口（1.2 s）后球开始原地旋转（原作 count=3 起旋转；转速 180°/s 是 PROVISIONAL，原作转速由玩家交替速度决定、没有公开值）。没蓄满就松手 = 不冲刺，也不进入冷却。
-- **蓄满时间按球径分档**：原作需要 5/6/7/8 次交替，我们把一次交替折算成一个 0.4 s 的 gacha 窗口（窗口是原作「两次交替之间最长还计数」的间隔，所以按一个窗口一次交替折算，既还原原作所需输入时长，也不奖励猛按）。分档与换算依据写在 [CONTACT_MODEL_V2 §3.8](../BallMotor/CONTACT_MODEL_V2.md)，数值：
+VR 长按左扳机（`InputUse` 的 LEFT），桌面长按任一 Shift。只转发按下／抬起；不实现双摇杆交替（owner 2026-11-19）。蓄力时不接收推杆，和松开推杆走同一滑行路径。
 
-| 球径 | 原作 gacha 数 | 我们的蓄满时间 |
+| 球径 | 空转 | 满蓄自动出射 |
 |---|---:|---:|
-| <0.5 m | 5 | 2.0 s |
-| 0.5–5 m | 6 | 2.4 s |
-| 5–10 m | 7 | 2.8 s |
-| ≥10 m | 8 | 3.2 s |
+| <60 m | 3 次等效输入，1.40 s | 7 次，3.27 s |
+| 60–<300 m | 4 次，1.87 s | 8 次，3.73 s |
+| ≥300 m | 5 次，2.33 s | 9 次，4.20 s |
 
-- **出射**：蓄满松手朝当前朝向冲出；冲出段沿用 1.6× 速度 / 0.45 s，冷却 1.2 s（从松手起算）。这三项是我们的设计值，原作没有公开出射倍率与时长；1.2 s 冷却也是我们加的（原作靠能量限制）。冲出时的爬升走既有 v_gate 链（`ComputeDrive` 的 `driveSpeed` → `ClimbMath.GateSpeed` → `ClimbMath`/`SlopeClimbMath`），没有第二条 dash-aware 路径。
-- **能量与 huff（照原作）**：能量 240 帧 = 8 s；从第三个 gacha 窗口起、以及冲出段和松手后 0.4 s 的 gacha 尾巴里按 1 s/s 消耗；100 帧（3.33 s）没用能量后回充 18 帧（0.6 s）；能量到 0 进入 huff 240 帧（8 s），期间拒绝一切蓄力，结束后能量回满 240 帧。
-- **与原作的差异（交 Lead/owner，不擅改）**：REROLL 笔记只给 gacha 档位、gacha 窗口、旋转门槛、能量与 huff，**没有**出射倍率与持续时间——1.6× / 0.45 s 沿用我们早前的设计值；1.2 s 冷却不是原作的；旋转速率是我们的 PROVISIONAL 值。
+- 每次等效输入 = `s16DashInputDuration` 14 帧 / 30 Hz；这是长按换算，不是原作玩家交替用时。空转前松开不冲，空转后提前松开按 `f32DashHelpSpeedCoef=0.67` 弱冲。球壳和吸附物空转，不转驾驶朝向或骑手视角。
+- 沿驾驶朝向一次注入出射速度：本项目的普通满速 × WLK RunParam `SpeedD/SpeedF`（分别插值）。冲刺期间普通输入、转向和阻力仍生效，速度上限和前推加速度分别乘 `SpeedD/SpeedF` 与 `AccD/AccF`。后拉、撞墙、寿命耗尽或关门才结束；没有低速结束或附加冷却。
+- 冲刺消耗 `s16DashLife=90` 帧，耗尽喘气 `s16DashForbidTime=240` 帧，结束回满；非冲刺、非喘气每 `s16DashRecoverTime=10` 帧恢复 1。详见 [接触模型 §3.8](../BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
 - **已知冲突与缓解（已实现）**：扳机同时是 `InputUse` 与 `Interact` 的触发源——蓄力/出射时准心若指着载具的下车面板等 Interact 按钮，会顺带按下它（来源见「VRChat 平台事实」）。owner 2026-11-18 定的缓解：骑乘时（本地玩家坐着）骑乘面板/结果卡上的 Interact 在 motor 蓄力或出射段**忽略本次按下**（`RideDashInteractMath`；`BallRideStation.ShouldIgnoreDashInteract()` 给面板按钮、`StoryRoundController.ShouldIgnoreDashInteract()` 给结果卡重试）。不在 dash 中时行为完全不变。**残留**：同一帧里 `InputUse` 与 `Interact` 的送达顺序没有保证，所以「起蓄」的那一次按下仍可能先被面板收到；下车按钮是两次确认，第二次按下若仍在蓄力/出射段会被忽略，要完成下车必须等 dash 结束再点两次（那时是玩家明确要点）。
-- **交替推拉手势不再实现**：`TankStickMath`/`VrStickMoveInput` 里的 gacha 计数与 `IsDashEdge` 已删，测试同批删除；gacha 的档位数值改由 `DashMath.ChargeGachasFor` 表达，一个逻辑一个实现。
+- 交替推杆不触发冲刺；两杆照常用于驾驶。
 - 快速转身（L3+R3）不做：摇杆按下在 VRChat 里是 Action Menu。
 
 ## 旧代码的去留（按此执行，暂不删）

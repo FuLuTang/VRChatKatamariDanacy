@@ -158,10 +158,7 @@ namespace VRCKatamari.Input
         }
 
         /// <summary>
-        /// The dash charge: left trigger down starts it, release ends it. Only the left hand
-        /// counts (the owner's input); the motor decides whether the charge was long enough
-        /// and whether a burst fires. A press while a gate is closed, or while huffing or
-        /// cooling down, is refused and logged.
+        /// 左扳机只转发按下和抬起；蓄满自动冲，空转后提前松手可触发弱冲刺。
         /// </summary>
         public override void InputUse(bool value, UdonInputEventArgs args)
         {
@@ -171,27 +168,26 @@ namespace VRCKatamari.Input
 
             if (value)
             {
-                if (!InputOpen()) return;
+                if (!InputOpen())
+                {
+                    Debug.Log("[input] left trigger dash refused (rideGate=" + rideGateOpen
+                        + " roundGate=" + roundGateOpen + ")");
+                    return;
+                }
                 bool accepted = motor.BeginDashCharge();
                 Debug.Log(accepted
                     ? "[input] dash charge begin"
-                    : "[input] dash charge refused (huff, cooldown or already charging)");
+                    : "[input] dash charge refused (huff, no dash life or dash already active)");
                 return;
             }
 
-            // The release always reaches the motor, even if a gate closed while charging, so
-            // a latched charge can never survive the button going up.
+            // 松开时即使门已经关闭也清理状态，但不出射。
             if (!InputOpen())
             {
-                motor.CancelDashCharge();
+                motor.CancelDash();
                 return;
             }
-            int released = motor.ReleaseDashCharge();
-            Debug.Log(released == DashMath.ReleaseDash
-                ? "[input] dash fired"
-                : released == DashMath.ReleaseNotFull
-                    ? "[input] dash released, charge not full"
-                    : "[input] dash release ignored");
+            motor.ReleaseDashCharge();
         }
 
         public override void OnStationExited(VRCPlayerApi player)
@@ -234,11 +230,9 @@ namespace VRCKatamari.Input
             forward = 0f;
             turn = 0f;
             lateral = 0f;
-            // A charge must not survive the station exit, a respawn or a closing gate.
-            if (motor != null) motor.CancelDashCharge();
-            // Desktop players never drive through this adapter; pushing a zero there
-            // would fight DesktopMoveInput's axes.
+            // 非本平台不写共享马达，也不取消另一输入适配器的冲刺。
             if (!isVr) return;
+            if (motor != null) motor.CancelDash();
             PushAxes();
         }
 

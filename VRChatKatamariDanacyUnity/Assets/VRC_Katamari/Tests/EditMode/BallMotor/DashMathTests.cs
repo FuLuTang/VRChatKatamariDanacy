@@ -1,17 +1,15 @@
 using NUnit.Framework;
-using VRCKatamari.BallContact;
+using UnityEngine;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Motion;
 
 namespace VRCKatamari.Tests
 {
-    /// <summary>
-    /// The dash rule (CONTACT_MODEL_V2 §3.8, owner 2026-11-18): hold to charge, spin in place
-    /// from the third gacha window on, release only fires a full charge, one burst per charge,
-    /// a cooldown, and the original's boost energy and huff.
-    /// </summary>
     public class DashMathTests
     {
-        private const float Step = 0.02f;  // the motor's 50 Hz fixed step
+        private const float Step = 0.02f;
+        private const float BaseSpeed = 4f;
+        private const float SmallDiameterM = 0.3f;
 
         private static float[] FreshState()
         {
@@ -20,231 +18,241 @@ namespace VRCKatamari.Tests
             return state;
         }
 
-        private static void Advance(float[] state, float seconds)
+        private static bool Advance(float[] state, int steps, bool hitWall = false,
+            float diameterM = SmallDiameterM)
         {
-            int steps = (int)System.Math.Round(seconds / Step);
+            bool autoLaunched = false;
             for (int i = 0; i < steps; i++)
             {
-                Assert.IsTrue(DashMath.TryStep(state, Step));
+                Assert.IsTrue(DashMath.TryStep(state, Step, diameterM, hitWall, out bool fired));
+                if (fired) Assert.IsFalse(autoLaunched, "单次长按只可自动出射一次");
+                autoLaunched |= fired;
             }
+            return autoLaunched;
         }
 
-        [Test]
-        public void TheTiersAreTheOriginalGachaCountsInGachaWindows()
+        [TestCase(59.999f, 3)]
+        [TestCase(60f, 4)]
+        [TestCase(299.999f, 4)]
+        [TestCase(300f, 5)]
+        public void DashTiersUseWlkWheelSpinTable(float diameterM, int spinGachas)
         {
-            // 5/6/7/8 required gachas below 50 cm, up to 5 m, up to 10 m, above (REROLL notes).
-            Assert.AreEqual(5, DashMath.ChargeGachasFor(0.3f));
-            Assert.AreEqual(5, DashMath.ChargeGachasFor(0.49f));
-            Assert.AreEqual(6, DashMath.ChargeGachasFor(0.5f));
-            Assert.AreEqual(6, DashMath.ChargeGachasFor(4.99f));
-            Assert.AreEqual(7, DashMath.ChargeGachasFor(5f));
-            Assert.AreEqual(7, DashMath.ChargeGachasFor(9.99f));
-            Assert.AreEqual(8, DashMath.ChargeGachasFor(10f));
-            Assert.AreEqual(5, DashMath.ChargeGachasFor(float.NaN), "an unusable size uses the smallest tier");
-
-            // One 0.4 s gacha window per required gacha: 2.0 / 2.4 / 2.8 / 3.2 s.
-            Assert.AreEqual(2.0f, DashMath.ChargeSecondsFor(0.3f), 1e-6f);
-            Assert.AreEqual(2.4f, DashMath.ChargeSecondsFor(0.5f), 1e-6f);
-            Assert.AreEqual(2.8f, DashMath.ChargeSecondsFor(5f), 1e-6f);
-            Assert.AreEqual(3.2f, DashMath.ChargeSecondsFor(10f), 1e-6f);
+            Assert.AreEqual(spinGachas, DashMath.SpinGachasFor(diameterM));
+            Assert.AreEqual(spinGachas * 14f / 30f, DashMath.SpinSecondsFor(diameterM), 1e-6f);
+            Assert.AreEqual((spinGachas + 4f) * 14f / 30f, DashMath.ChargeSecondsFor(diameterM), 1e-6f);
         }
 
-        [Test]
-        public void TheSpinStartsAtThreeGachaWindows()
+        [TestCase(0.035f, 27f / 9f)]
+        [TestCase(0.2f, 82f / 33f)]
+        [TestCase(0.3f, (82f + 160f / 3f) / (33f + 64f / 3f))]
+        [TestCase(12f, 2966f / 957f)]
+        [TestCase(400f, (62000f + 38000f / 11f) / (20000f + 20280f / 11f))]
+        public void DashSpeedUsesRatioOfIndependentlyInterpolatedColumns(float diameterM, float scale)
         {
-            float[] state = FreshState();
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsFalse(DashMath.IsSpinning(state), "no spin before the third gacha");
-
-            Advance(state, 1.0f);
-            Assert.IsFalse(DashMath.IsSpinning(state), "still under 1.2 s of charge");
-
-            Advance(state, 0.4f);
-            Assert.IsTrue(DashMath.IsSpinning(state), "spin from gacha count 3 (1.2 s) on");
-            Assert.IsTrue(DashMath.IsCharging(state), "spinning is still charging");
+            DashMath.FullDriveScales(diameterM, out float speed, out _);
+            Assert.AreEqual(scale, speed, 1e-6f);
         }
 
         [Test]
-        public void AShortReleaseDoesNotFireAndCostsNoCooldown()
+        public void ChargingUsesOrdinaryCoastAndReachesSpinWithoutSpendingLife()
         {
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, 1.0f);             // under the 2.0 s tier for a small ball
-            Assert.AreEqual(DashMath.ReleaseNotFull, DashMath.ReleaseCharge(state, 0.3f));
-            Assert.IsFalse(DashMath.IsDashing(state));
-            Assert.AreEqual(1f, DashMath.SpeedScale(state));
-            Assert.IsTrue(DashMath.TryBeginCharge(state), "a short charge leaves no cooldown");
-        }
-
-        [Test]
-        public void AFullReleaseFiresTheBurstAboutDashSeconds()
-        {
-            float[] state = FreshState();
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, DashMath.ChargeSecondsFor(0.3f));
-            Assert.AreEqual(DashMath.ReleaseDash, DashMath.ReleaseCharge(state, 0.3f));
-            Assert.IsTrue(DashMath.IsDashing(state));
-            Assert.AreEqual(ContactTuning.DashSpeedScale, DashMath.SpeedScale(state), 0f);
-            Assert.AreEqual(1.6f, DashMath.SpeedScale(state), 0f, "CONTACT_MODEL_V2 §3.8: 1.6x");
-
-            int steps = 0;
-            while (DashMath.IsDashing(state) && steps < 200)
+            Vector3 velocity = Vector3.forward * BaseSpeed;
+            for (int i = 1; i <= 70; i++)
             {
-                steps++;
-                Assert.IsTrue(DashMath.TryStep(state, Step));
+                Assert.IsTrue(DashMath.IsCharging(state));
+                Assert.IsTrue(BallMotionMath.TryStep(0f, 0f, 0f, 0f, velocity, Step, 1f,
+                    BaseSpeed, 5f, 8f, 1.2f, 1.3f, 2f, 110f, 1.2f,
+                    out _, out Vector3 next, out _));
+                if (i == 1) Assert.AreEqual(4f * Mathf.Exp(-1.2f * Step) - 0.026f, next.z, 1e-6f);
+                if (i < 65) Assert.Greater(next.z, 0f);
+                else Assert.AreEqual(Vector3.zero, next);
+                velocity = next;
+                Assert.IsFalse(Advance(state, 1));
+                Assert.AreEqual(i == 70, DashMath.IsSpinning(state, SmallDiameterM));
             }
+            Assert.AreEqual(3f, DashMath.EnergySeconds(state), 1e-6f);
+        }
+
+        [Test]
+        public void BeforeSpinReleaseDoesNotFireOrPreventNextCharge()
+        {
+            float[] state = FreshState();
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Assert.IsFalse(Advance(state, 69));
+            Assert.AreEqual(DashMath.ReleaseBeforeSpin, DashMath.ReleaseCharge(state, SmallDiameterM));
+            Assert.IsFalse(TakeLaunch(state, 0f, out _));
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+        }
+
+        [Test]
+        public void ReleaseAfterSpinLaunchesAtSixtySevenPercentAlongCurrentHeading()
+        {
+            float[] state = FreshState();
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Assert.IsFalse(Advance(state, 70));
+            Assert.AreEqual(DashMath.ReleaseHelpDash, DashMath.ReleaseCharge(state, SmallDiameterM));
+            Assert.IsTrue(TakeLaunch(state, 90f, out Vector3 launch));
+            Assert.AreEqual(6.675337f, launch.x, 1e-5f);
+            Assert.AreEqual(0f, launch.y, 1e-5f);
+            Assert.AreEqual(0f, launch.z, 1e-5f);
+            Assert.IsFalse(TakeLaunch(state, 90f, out _));
+        }
+
+        [Test]
+        public void FullChargeLaunchesAutomaticallyAndReleaseDoesNotLaunchAgain()
+        {
+            float[] state = FreshState();
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Assert.IsFalse(Advance(state, 163));
+            Assert.IsTrue(Advance(state, 1));
+            Assert.IsFalse(DashMath.IsCharging(state));
+            Assert.IsFalse(DashMath.IsSpinning(state, SmallDiameterM));
+            Assert.IsTrue(DashMath.IsDashing(state));
+            Assert.IsFalse(Advance(state, 1, true), "待出射时不能被零速终止或先耗掉寿命");
+            Assert.AreEqual(3f, DashMath.EnergySeconds(state), 1e-6f);
+            Assert.AreEqual(DashMath.ReleaseNone, DashMath.ReleaseCharge(state, SmallDiameterM));
+            Assert.IsTrue(TakeLaunch(state, 0f, out Vector3 launch));
+            Assert.AreEqual(9.96319f, launch.z, 1e-5f);
+            Assert.IsFalse(TakeLaunch(state, 0f, out _));
+        }
+
+        [Test]
+        public void DashEndsOnWallButNotWhenOrdinaryResistanceBringsItToRest()
+        {
+            float[] state = LaunchedState();
+            Vector3 velocity = Vector3.forward * 9.96319f;
+            DashMath.DriveScales(state, SmallDiameterM, out float speed, out float acceleration);
+            for (int i = 0; i < 99; i++)
+            {
+                Assert.IsTrue(BallMotionMath.TryStep(0f, 0f, 0f, 0f, velocity, Step, 1f,
+                    BaseSpeed * speed, 5f * acceleration, 8f, 1.2f, 1.3f, 2f, 110f, 1.2f,
+                    out _, out Vector3 next, out _));
+                Advance(state, 1);
+                velocity = next;
+            }
+            Assert.AreEqual(Vector3.zero, velocity);
+            Assert.IsTrue(DashMath.IsDashing(state));
+            Advance(state, 1, true);
             Assert.IsFalse(DashMath.IsDashing(state));
-            Assert.LessOrEqual(System.Math.Abs(steps * Step - ContactTuning.DashSeconds), Step,
-                "the burst is never more than one fixed step off DashSeconds");
+            Assert.IsFalse(TakeLaunch(state, 0f, out _));
         }
 
         [Test]
-        public void AChargeIsRefusedWhileDashingCoolingDownOrHuffing()
+        public void EarlyLaunchIsWeakerButUsesSameDashAccelerationAndSpeedCap()
         {
             float[] state = FreshState();
+            DashMath.DriveScales(state, SmallDiameterM, out float speed, out float acceleration);
+            Assert.AreEqual(1f, speed);
+            Assert.AreEqual(1f, acceleration);
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, DashMath.ChargeSecondsFor(0.3f));
-            Assert.AreEqual(DashMath.ReleaseDash, DashMath.ReleaseCharge(state, 0.3f));
-            Assert.IsFalse(DashMath.TryBeginCharge(state), "no second charge during the burst");
+            Advance(state, 70);
+            Assert.AreEqual(DashMath.ReleaseHelpDash, DashMath.ReleaseCharge(state, SmallDiameterM));
+            DashMath.DriveScales(state, SmallDiameterM, out speed, out acceleration);
+            Assert.AreEqual(2.4907975f, speed, 1e-6f);
+            Assert.AreEqual(4.333333f / 1.1f, acceleration, 1e-6f);
+            Assert.AreEqual(speed * 0.67f, DashMath.LaunchSpeedScale(state, speed), 1e-6f);
+            Assert.IsTrue(BallMotionMath.TryStep(1f, 0f, 0f, 0f, Vector3.zero, Step, 1f,
+                BaseSpeed * speed, 5f * acceleration, 8f, 1.2f, 1.3f, 2f, 110f, 1.2f,
+                out _, out Vector3 next, out _));
+            Assert.AreEqual(5f * acceleration * Step * Mathf.Exp(-1.2f * Step), next.z, 1e-6f);
+        }
 
-            Advance(state, ContactTuning.DashSeconds + 0.1f);
+        [Test]
+        public void WallRequiresInwardSpeedActuallyRemovedNotAParallelOrSeparatingTouch()
+        {
+            Vector3 normal = new Vector3(0f, 0f, -1f);
+            Assert.IsTrue(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, 6f), new Vector3(2f, 0f, 0f)));
+            Assert.IsFalse(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, 6f), new Vector3(0f, 0f, 6f)));
+            Assert.IsFalse(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, 0f), Vector3.zero));
+            Assert.IsFalse(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, -6f), Vector3.zero));
+        }
+
+        [Test]
+        public void BackwardInputBrakesButNeutralDoesNot()
+        {
+            float[] state = LaunchedState();
+            Assert.IsFalse(DashMath.TryBrake(state, 0f));
+            Assert.IsFalse(DashMath.TryBrake(state, 1f));
+            Assert.IsTrue(DashMath.TryBrake(state, -0.5f));
             Assert.IsFalse(DashMath.IsDashing(state));
-            Assert.IsFalse(DashMath.TryBeginCharge(state), "no charge during the cooldown");
-
-            Advance(state, ContactTuning.DashCooldownS);
-            Assert.IsTrue(DashMath.TryBeginCharge(state), "ready again once the cooldown expired");
         }
 
         [Test]
-        public void EnergyDrainsFromTheThirdGachaWindowThroughTheBurst()
+        public void DashUsesNinetyOriginalFramesThenHuffsForEightSeconds()
         {
-            float[] state = FreshState();
-            float capacity = DashMath.EnergyCapacitySeconds;
-            Assert.AreEqual(8f, capacity, 1e-6f, "240 frames at 30 Hz");
-
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, 0.8f);
-            Assert.AreEqual(capacity, DashMath.EnergySeconds(state), 1e-4f,
-                "the first two gacha windows do not drain energy");
-
-            Advance(state, 1.2f);             // charge 2.0 s total
-            Assert.Less(DashMath.EnergySeconds(state), capacity - 0.6f,
-                "the tail of the charge drains energy");
-            Assert.Greater(DashMath.EnergySeconds(state), capacity - 1.1f);
-
-            Assert.AreEqual(DashMath.ReleaseDash, DashMath.ReleaseCharge(state, 0.3f));
-            Advance(state, ContactTuning.DashSeconds + DashMath.GachaWindowSeconds + 0.1f);
-            // 0.8 s of the charge + 0.45 s of the burst = 1.25 s of energy; the gacha tail
-            // (0.4 s) ended inside the burst, so it adds nothing more.
-            Assert.Less(DashMath.EnergySeconds(state), capacity - 1.1f,
-                "the burst and the gacha tail keep draining");
-            Assert.Greater(DashMath.EnergySeconds(state), capacity - 1.4f);
-        }
-
-        [Test]
-        public void TheHuffBeginsAtZeroEnergyAndRefusesChargesUntilItEnds()
-        {
-            float[] state = FreshState();
-            state[DashMath.StateEnergySeconds] = 0.2f;
-
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, 1.5f);             // spin threshold 1.2 s, then 0.2 s of drain
+            float[] state = LaunchedState();
+            Assert.IsFalse(Advance(state, 149));
+            Assert.IsTrue(DashMath.IsDashing(state));
+            Assert.AreEqual(1f / 30f, DashMath.EnergySeconds(state), 1e-6f);
+            Assert.IsFalse(Advance(state, 1));
+            Assert.IsFalse(DashMath.IsDashing(state));
             Assert.IsTrue(DashMath.IsHuffed(state));
-            Assert.IsFalse(DashMath.IsCharging(state), "the huff drops the charge");
-            Assert.IsFalse(DashMath.TryBeginCharge(state), "huffing: no boost inputs");
-
-            Advance(state, DashMath.HuffSeconds);
-            Assert.IsFalse(DashMath.IsHuffed(state));
-            Assert.AreEqual(DashMath.EnergyCapacitySeconds, DashMath.EnergySeconds(state), 1e-4f,
-                "the original refills the energy when the huff ends");
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-        }
-
-        [Test]
-        public void TheRechargeArrivesAfterHundredIdleFrames()
-        {
-            float[] state = FreshState();
-            state[DashMath.StateEnergySeconds] = 4f;
-
-            Advance(state, 3.3f);             // just under 100 frames (3.333 s)
-            Assert.AreEqual(4f, DashMath.EnergySeconds(state), 1e-4f);
-
-            Advance(state, 0.2f);             // crosses the threshold: one recharge event
-            Assert.AreEqual(4f + DashMath.RechargeEnergySeconds, DashMath.EnergySeconds(state), 1e-3f);
-            Assert.AreEqual(0.6f, DashMath.RechargeEnergySeconds, 1e-6f, "18 frames at 30 Hz");
-        }
-
-        [Test]
-        public void TheRechargeNeverExceedsTheCapacity()
-        {
-            float[] state = FreshState();
-            state[DashMath.StateEnergySeconds] = DashMath.EnergyCapacitySeconds - 0.1f;
-            Advance(state, 4f);
-            Assert.AreEqual(DashMath.EnergyCapacitySeconds, DashMath.EnergySeconds(state), 1e-4f);
-        }
-
-        [Test]
-        public void CancelDropsTheChargeWithoutAFire()
-        {
-            float[] state = FreshState();
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, 1.5f);
-            DashMath.CancelCharge(state);
-            Assert.IsFalse(DashMath.IsCharging(state));
-            Assert.AreEqual(0f, DashMath.ChargeSeconds(state));
-            Assert.AreEqual(DashMath.ReleaseNone, DashMath.ReleaseCharge(state, 0.3f));
-            Assert.IsFalse(DashMath.IsDashing(state));
-        }
-
-        [Test]
-        public void ReleaseWithoutAChargeIsNone()
-        {
-            float[] state = FreshState();
-            Assert.AreEqual(DashMath.ReleaseNone, DashMath.ReleaseCharge(state, 0.3f));
-        }
-
-        [Test]
-        public void ResetClearsEverythingAndRefillsTheEnergy()
-        {
-            float[] state = FreshState();
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, DashMath.ChargeSecondsFor(0.3f));
-            Assert.AreEqual(DashMath.ReleaseDash, DashMath.ReleaseCharge(state, 0.3f));
-            Assert.IsTrue(DashMath.TryReset(state));
-            Assert.IsFalse(DashMath.IsCharging(state));
-            Assert.IsFalse(DashMath.IsDashing(state));
-            Assert.IsFalse(DashMath.IsHuffed(state));
-            Assert.AreEqual(0f, DashMath.ChargeSeconds(state));
-            Assert.AreEqual(DashMath.EnergyCapacitySeconds, DashMath.EnergySeconds(state), 1e-6f);
-            Assert.AreEqual(1f, DashMath.SpeedScale(state));
-        }
-
-        [Test]
-        public void ABadStateArrayOrDeltaIsRefused()
-        {
-            float[] state = FreshState();
-            Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsFalse(DashMath.TryStep(state, float.NaN));
-            Assert.IsFalse(DashMath.TryStep(state, -0.02f));
-            Assert.IsTrue(DashMath.IsCharging(state), "a refused step changes nothing");
-
-            Assert.IsFalse(DashMath.TryStep(null, Step));
-            Assert.IsFalse(DashMath.TryStep(new float[3], Step));
-            Assert.IsFalse(DashMath.TryBeginCharge(null));
-            Assert.IsFalse(DashMath.TryBeginCharge(new float[3]));
-            Assert.IsFalse(DashMath.TryReset(null));
-            Assert.IsFalse(DashMath.IsCharging(null));
-            Assert.AreEqual(1f, DashMath.SpeedScale(null), 0f, "an unusable state never speeds the ball up");
-            Assert.AreEqual(DashMath.ReleaseNone, DashMath.ReleaseCharge(null, 0.3f));
-        }
-
-        [Test]
-        public void ANonFiniteStateIsRefused()
-        {
-            float[] state = FreshState();
-            state[DashMath.StateChargeSeconds] = float.NaN;
             Assert.IsFalse(DashMath.TryBeginCharge(state));
-            Assert.IsFalse(DashMath.TryStep(state, Step));
+            Assert.IsFalse(Advance(state, 399));
+            Assert.IsTrue(DashMath.IsHuffed(state));
+            Assert.IsFalse(Advance(state, 1));
+            Assert.IsFalse(DashMath.IsHuffed(state));
+            Assert.AreEqual(3f, DashMath.EnergySeconds(state), 1e-6f);
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+        }
+
+        [Test]
+        public void DashRecoversOneLifePerTenOriginalFramesOutsideDashOrHuff()
+        {
+            float[] state = LaunchedState();
+            Advance(state, 10); // 消耗 6 帧。
+            Assert.IsTrue(DashMath.TryBrake(state, -1f));
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Advance(state, 16);
+            Assert.AreEqual(84f / 30f, DashMath.EnergySeconds(state), 1e-6f);
+            Advance(state, 1);
+            Assert.AreEqual(85f / 30f, DashMath.EnergySeconds(state), 1e-6f);
+        }
+
+        [Test]
+        public void GateCancellationStopsBothActiveChargeAndPendingLaunch()
+        {
+            float[] state = FreshState();
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Advance(state, 70);
+            DashMath.Cancel(state);
+            Assert.AreEqual(DashMath.ReleaseNone, DashMath.ReleaseCharge(state, SmallDiameterM));
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Assert.IsTrue(Advance(state, 164));
+            DashMath.Cancel(state);
+            Assert.IsFalse(DashMath.IsDashing(state));
+            Assert.IsFalse(TakeLaunch(state, 0f, out _));
+        }
+
+        [Test]
+        public void DashRejectsInvalidStatesAndDeltaWithoutCreatingLaunch()
+        {
+            float[] state = FreshState();
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Assert.IsFalse(DashMath.TryStep(state, float.NaN, SmallDiameterM, false, out _));
+            Assert.AreEqual(0f, DashMath.ChargeSeconds(state));
+            Assert.IsFalse(DashMath.TryBeginCharge(new float[1]));
+            Assert.IsFalse(DashMath.TryReset(null));
+            state[0] = float.NaN;
+            Assert.IsFalse(DashMath.IsCharging(state));
+            Assert.IsFalse(DashMath.IsDashing(state));
+        }
+
+        private static bool TakeLaunch(float[] state, float yaw, out Vector3 velocity)
+        {
+            DashMath.DriveScales(state, SmallDiameterM, out float speed, out _);
+            return DashMath.TryTakeLaunch(state, yaw, BaseSpeed, speed, out velocity);
+        }
+
+        private static float[] LaunchedState()
+        {
+            float[] state = FreshState();
+            Assert.IsTrue(DashMath.TryBeginCharge(state));
+            Assert.IsTrue(Advance(state, 164));
+            Assert.IsTrue(TakeLaunch(state, 0f, out _));
+            return state;
         }
     }
 }

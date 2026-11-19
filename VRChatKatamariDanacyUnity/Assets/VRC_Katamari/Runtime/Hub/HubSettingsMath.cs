@@ -32,9 +32,10 @@ namespace VRCKatamari.Hub
         public const int LowEffects = 8;
         public const int ReduceAutoRotate = 9;
         public const int Language = 10;
+        public const int PushCue = 11;
 
         /// <summary>Number of settings; ids are 0..Count-1.</summary>
-        public const int Count = 11;
+        public const int Count = 12;
 
         public const int LangZh = 0;
         public const int LangEn = 1;
@@ -58,7 +59,7 @@ namespace VRCKatamari.Hub
         public static int Max(int id)
         {
             if (id == ControlMode || id == SwapHands || id == LowEffects
-                || id == ReduceAutoRotate) return 1;
+                || id == ReduceAutoRotate || id == PushCue) return 1;
             if (id == Deadzone) return 10;
             if (id == TurnSensitivity) return 15;
             if (id == MusicVolume || id == EffectsVolume || id == VoiceVolume) return 10;
@@ -76,6 +77,7 @@ namespace VRCKatamari.Hub
             if (id == MusicVolume || id == EffectsVolume || id == VoiceVolume) return 8;
             if (id == Haptics) return 2;
             if (id == Language) return LangZh;
+            if (id == PushCue) return 1;
             return 0;
         }
 
@@ -86,7 +88,7 @@ namespace VRCKatamari.Hub
         public static bool Wraps(int id)
         {
             return id == ControlMode || id == SwapHands || id == LowEffects
-                || id == ReduceAutoRotate || id == Language;
+                || id == ReduceAutoRotate || id == Language || id == PushCue;
         }
 
         public static int Clamp(int id, int value)
@@ -126,6 +128,7 @@ namespace VRCKatamari.Hub
             if (id == LowEffects) return "vrck.set.lowEffects";
             if (id == ReduceAutoRotate) return "vrck.set.reduceAutoRotate";
             if (id == Language) return "vrck.set.language";
+            if (id == PushCue) return "vrck.set.pushCue";
             return "";
         }
 
@@ -137,7 +140,8 @@ namespace VRCKatamari.Hub
         public static bool HasConsumer(int id)
         {
             return id == ControlMode || id == SwapHands || id == Deadzone
-                || id == TurnSensitivity || id == Language || id == EffectsVolume || id == Haptics;
+                || id == TurnSensitivity || id == Language || id == EffectsVolume || id == Haptics
+                || id == PushCue;
         }
 
         /// <summary>The nearest deadzone step for a deadzone value (0.2 = step 4).</summary>

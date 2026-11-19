@@ -133,7 +133,7 @@
 - **移除 80 ms 核心追赶弹簧** — 开着仍被读成「跳一下」，真因是价值定价（单件涨幅过大），不是缺平滑。见 [PARITY_AUDIT 的「球核心视觉」行](Design/Parity/PARITY_AUDIT.md)、[VISUAL_GROWTH_AUDIT](Design/BallPresentation/VISUAL_GROWTH_AUDIT.md)。
 - **骑球 = 站姿手推球，触地点—球顶—视点成相似三角形**（owner 2026-11-18，VR 实测反馈「不是手在推着球，球在我脚底下」之后的决定；原作的小王子不缩放，骑手随球缩放是本项目的选择）— 玩家站在球后、脚在地上，手从肩向前下 45° 按在球背、手臂沿半径指向球心；眼高 E = 2.6546·r，眼点在球心上 1.6546·r、后 1.1768·r，全部正比于球半径（相似变换，任何球径同一幅画面、同样够得着）。站姿用玩家真实身体的比例（VR 的手是控制器），avatar 只经实测 η（站立头高 ÷ 眼高）修正眼高；Station 为站立式，座位让脚落地。骑乘面板（HUD、结果卡、下车面板）是随 E/1.64 缩放的世界空间面板，HUD 在左下球旁。推导、数字与 Unity 验证见 [RIDE_GEOMETRY](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md)；η 的实际值、手到球面的实测距离、面板在头显里的可读性待 owner 亲测。
 - **全局球径上限 400 m（owner 2026-11-18），所有地图适用。** 详见 (n) 与 [PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)。
-- **冲刺 = 按住蓄力、松手出射（原作 Charge'n'Roll）；VR 左手扳机 / PC Shift 长按**（owner 2026-11-18；同日更早的「单键触发」版本作废） — VR 用左手扳机（`InputUse`，只取 `handType == LEFT`），PC 用 Shift 长按（PC 上 `InputUse` 就是鼠标左键，会与 UI/Interact 纠缠；坐着时 Shift 不驱动移动）。蓄力期间球原地旋转、不前进；蓄满时间按球径分档 **2.0 / 2.4 / 2.8 / 3.2 s**（原作 <0.5 m 5 次、0.5–5 m 6 次、5–10 m 7 次、≥10 m 8 次交替，按一次交替 = 一个 0.4 s gacha 窗口折算，换算依据写在 §3.8）；没蓄满松手不冲刺；蓄满松手朝当前朝向以 1.6× 冲出 0.45 s、冷却 1.2 s；另按原作做能量 240 帧（8 s）与 huff 240 帧（8 s，期间拒绝蓄力）。**与原作不同的三项**（交 owner 复核）：① 出射倍率 1.6× 与时长 0.45 s——原作未公开，沿用本仓设计值；② 1.2 s 冷却——原作没有（原作只靠能量）；③ 蓄力转速 180°/s——原作转速由玩家交替速度决定、无公开值，我们的 PROVISIONAL 值。骑乘时蓄力/出射段的 Interact 一律忽略，避免扳机顺带按下车/重试按钮（`RideDashInteractMath`）。见 [CONTACT_MODEL_V2 §3.8](Design/BallMotor/CONTACT_MODEL_V2.md)、[ControlIntent README](Design/ControlIntent/README.md)。
+- **冲刺以《We Love Katamari REROLL+ Royal Reverie》为准；VR 不做双摇杆交替手势**（owner 2026-11-19）——用左扳机／桌面 Shift 长按替代交替输入：每次等效 `s16DashInputDuration=14` 帧，按 `s32DashWheelSpinData` 分档（3/4/5 次空转，+4 次自动出射）。空转后提前松手以 `f32DashHelpSpeedCoef=0.67` 弱冲，空转前松开不冲。蓄力复用普通滑行；出射倍率按球径来自 `s32SpeedD/s32SpeedF`，方向沿驾驶朝向；冲刺继续走普通推进，放大速度上限和前推加速；反推／撞墙退出，不按低速终止。寿命 `s16DashLife=90` 帧，耗尽喘气 `s16DashForbidTime=240` 帧，非冲刺非喘气每 `s16DashRecoverTime=10` 帧回 1。骑乘面板仍用 `RideDashInteractMath` 避免冲刺途中误触。见 [接触模型 §3.8](Design/BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
 - **吸附物冻结、不随球长大外移** — 与原作一致，外移会破坏「吸附瞬间定姿」的契约。见 [PARITY_AUDIT 的「吸附物位姿」行](Design/Parity/PARITY_AUDIT.md)。
 - **球芯显示等体积直径跟随当前碰撞直径（owner 2026-11-17）** — 为消除粘附件与核之间的空腔，核随吸收/缩小直接更新，不用平滑弹簧。REROLL 玩家观察核会变大并吞入旧件，开发者确认镜头随球变大拉远；证据强度为“玩家观察 + 开发者镜头说法”，不是原作核/碰撞比例实测。`core_XX` 仍是按关卡命名的皮肤，不是尺寸档；先用 `core_01`，关卡对应未知。见 [核皮肤与证据](Design/BallPresentation/CORE_SKIN.md)、[视觉核心差异行](Design/Parity/PARITY_AUDIT.md)。
 - **道具行为按原作的分列结构：`kind` 与 `behaviour` 两列、纯重力坠落、落定不倾斜、v1 不做 `carry`、单父指针、父件被吃子件坠落** — 原作本来就是「内容分类」和「怎么动」两轴；「掉」比「带」少一轮体积门与重复计收益的工作量。见 [PROP_BEHAVIOURS §10.1–§10.3、§10.9](Design/PickupAbsorb/PROP_BEHAVIOURS.md)；其中坠落传播见上方 (s) 条，不在此重复。
@@ -187,6 +187,14 @@
 - **C25 受阻不算卡住，不做按进度释放（owner 2026-11-17）** — 墙与顶棚夹角里往前推不动正常，玩家靠后退脱出；见 [TERRAIN_CLIMB §6.7](Design/BallMotor/TERRAIN_CLIMB.md#67-墙与顶棚夹角受阻不等于卡住2026-11-17-拍板)。
 - **C08/C09/C10 的 5/7.5/10 cm 台阶都能上，符合预期（owner 2026-11-17）** — 主人确认靠爬墙通道上去没有问题；见 [PHYSICS_TEST_FIELD §4.2](Design/BallMotor/PHYSICS_TEST_FIELD.md#42-台阶组-c07c12高度与球半径的关系)。
 - **陡坡改体力制、与爬墙分开（owner 2026-11-17）** — θ≤45°正常滚不变；45°<θ≤60°慢坡爬、无固定高度上限，越陡/持续越久消耗越大，平地立即满，大球更容易；θ>60°墙仍保持1.5D上限与到顶掉落。60°为工程试验，不是原作值；保留速度门，冲刺通过同一门速度增速减耗。C06 50°/0.60m板的0.30m球在体力足够时应爬完。理由：REROLL逆向显示独立坡体力结构，统一墙cap不适用于坡；见[TERRAIN_CLIMB §0.1](Design/BallMotor/TERRAIN_CLIMB.md#01-体力坡爬2026-11-17-当前决定)。
+
+### Owner decisions 2026-11-19（还原基准与 VR 复测）
+
+- **还原基准改为「越新越好」：首选 We Love Katamari REROLL+ Royal Reverie（2023）（owner 2026-11-19）** — 手感、数值、资源、界面都可能在新版里优化过，所以新版是首选来源，初代 REROLL 数据退为对照。当前关「蟹座小院」也要评估能否换成新版数据：差异太大就先不换、先做其他工作，但最终要换。新版程序只读、提取物只放本机 `~/KatamariRef/wlkrr/`，不进仓库、不上传；每条采用的数值要注明来源版本。原作优先原则里的「原作」从此指这一版。
+- **蟹座小院的可吸收判定不放宽（owner 2026-11-19）** — 沿用原作 1.2 m 判定，石灯笼、拉门、圆桌、云在本关吸不到属正常。
+- **推进方向箭头保留原含义，改为跟随视角显示（owner 2026-11-19）** — 仍是球前方那个指推进方向的箭头，不改成指目标或下一区域；只是不再挂在球上（人物随球缩小后会飘到空中），改放在玩家视线正前上方。
+- **VR 冲刺只用左扳机，不支持双摇杆交替摇（owner 2026-11-19）** — 原作的 gacha 计数折算成按住时长。
+- **体积回收曲线按新版做（owner 2026-11-19）** — 采用 WLK REROLL+ 数据里的回收比曲线；拿到数据前维持全局 0.8。
 
 ### Still open
 

@@ -32,8 +32,8 @@
 | 选关板 · 预览 | 卡片左侧的预览位（现为编号色块） | 后续：各关缩略图需要截图资产；位置与节点已留 |
 | 选关板 · 提示行 / 制作信息 | 怎么开始（桌面左键 / VR 扳机）；底部一行「粉丝制作、与官方无关」 | 本轮 |
 | 怎么玩板 | 五条规则：滚动吸附、比球小才能吸、越滚越大、限时与自动结算、8 秒后回大厅、菜单 Respawn = 放弃回大厅 | 本轮 |
-| 怎么玩板 · 操作 | VR 与桌面两栏：移动（随所选 VR 操作方式换文案）、冲刺（VR 长按左扳机蓄力松手冲出；桌面键位未定，显示「冲刺键」）、道具 = Jump、下车 = 按住 Jump 1.5 秒、选择方式 | 本轮（文字）；冲刺本身由另一代理实现 |
-| 设置板 | 11 行，每行 ◀ 值 ▶，改了自动保存 | 见下表 |
+| 怎么玩板 · 操作 | VR 与桌面两栏：移动（随所选 VR 操作方式换文案）、冲刺（VR 长按左扳机、桌面长按 Shift，蓄满自动冲出）、道具 = Jump、下车 = 按住 Jump 1.5 秒、选择方式 | 文案与运行时键位一致；动作规则见 [冲刺](../ControlIntent/README.md#冲刺wlk-规则与长按适配) |
+| 设置板 | 12 行，每行 ◀ 值 ▶，改了自动保存 | 推进方向箭头的第 12 行待更新 Prefab；见下表 |
 | 后续 | 收藏/图鉴、玩家外观、成就、排行榜、教程关、多人房间 | 后续 |
 
 设置项（`HubSettingsMath` id 顺序；档位与默认值即代码常量）：
@@ -51,6 +51,7 @@
 | 8 | 低特效 | 关/开 | 视效读 `IsLowEffects()` | 待接 |
 | 9 | 减弱自动转向 | 关/开 | 跟随镜头/骑乘视角读 `IsReduceAutoRotate()` | 待接 |
 | 10 | 语言 简体中文 / English / 日本語 | 无存档时按客户端语言（`VRCPlayerApi.GetCurrentLanguage`：ja→日、zh→中、其他→英） | 三块板与提示行 | 本轮 |
+| 11 | 推进方向箭头 | 关 / 开，默认开 | `PushDirectionCue` 读 `IsPushCueEnabled()`；`vrck.set.pushCue` | 代码已接，面板 Prefab 待新增一行 |
 
 板上每一行都能调、能保存，不对玩家显示「待接」；哪些还没有消费方只记在本表和 `HubSettingsMath.HasConsumer`（接上一个就把对应 id 改成 true，两处同步）。消费方接法二选一：在 Inspector 里加进 `HubSettingsHost.listeners`（收到 `OnHubSettingsChanged` 自定义事件后读 getter），或在需要用到设置时比较 `GetRevision()`。VR 摇杆用后者：`VrStickMoveInput.settings` 引用本大厅的设置宿主，第一帧有效 VR 输入与修订号变化时读三项，不注册 listener；因此在输入门关闭时调设置或恢复存档，也不会漏掉更新。PlayerData 键 `vrck.set.*`、`vrck.rec.<levelId>.{bestD,bestN,lastD,lastN,plays}` 一经发布不再改名（平台不能删键）。
 
@@ -84,7 +85,7 @@ Unity 侧（HubAssembler.Room）：
 2. FBX 导入设置：Scale Factor 1、Convert Units 开、Bake Axis Conversion 关（默认值）。
 3. 按 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「字体」生成 `HubPanelSans SDF.asset`（记 Characters missing，应为 0），再按「搭建步骤」建三个 Prefab，并按其第 4 步回读。
 4. 打开 AllMapsHub 场景，执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（大厅装配后自动跑骑乘装配）。预期 `problems=0`；报告里应有 `hub art anchors: 3 of 3 within 2 cm`；缺 Udon variables 时按已有流程：编译 → 保存 → 重开 → 重建。
-5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期 `0 problem(s), 4 level card(s), 4 level entry/entries, 22 setting arrow(s)`。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`。
+5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期 `0 problem(s), 4 level card(s), 4 level entry/entries, 24 setting arrow(s)`。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`。
 6. Inspector 回读：`LevelCard_0..3` 的 HubStartButton.levelIndex = 0/1/2/3（蟹座、野餐、地图0、地形实验室），Button On Click 一条：目标 = 同物体 UdonBehaviour、函数 SendCustomEvent、参数 `Press`；`SettingRow_NN/Less` delta=-1、`/More` delta=+1、settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput，VrStickMoveInput.settings = HubSettings；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings。
 7. EditMode：HubSettingsMathTests、HubRecordMathTests、HubPanelTextMathTests、HubPanelCharsetTests、HubRoomMathTests 及现有 Hub/Story 测试；报告发现/通过/失败数。
 8. Play（ClientSim）：桌面视角对准面板应出现 UI 指针；鼠标左键点各按钮，日志：点蟹座卡片 `[hub-panel] level card 0 pressed`，随后是 launcher 的开始日志；点设置板语言行 ▶ 两次，三块板与提示行依次变英文、日文，日志 `[hub-settings] vrck.set.language=1/2`；点 VR 操作方式 ▶，日志 `[input] stick mode=simple`，操作表 VR 栏的移动行变成简单模式文案。音乐/提示音等待接项值能改、能保存（行上不显示待接标记）。面板上中日文无方块字。

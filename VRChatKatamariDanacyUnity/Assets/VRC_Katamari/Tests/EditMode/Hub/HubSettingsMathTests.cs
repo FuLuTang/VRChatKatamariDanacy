@@ -87,14 +87,14 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void OnlyVrStickLanguageAndPickupFeedbackSettingsHaveConsumers()
+        public void ActiveSettingConsumersMatchTheHubContract()
         {
             for (int id = 0; id < HubSettingsMath.Count; id++)
             {
                 bool expected = id == HubSettingsMath.ControlMode || id == HubSettingsMath.SwapHands
                     || id == HubSettingsMath.Deadzone || id == HubSettingsMath.TurnSensitivity
                     || id == HubSettingsMath.Language || id == HubSettingsMath.EffectsVolume
-                    || id == HubSettingsMath.Haptics;
+                    || id == HubSettingsMath.Haptics || id == HubSettingsMath.PushCue;
                 Assert.AreEqual(expected, HubSettingsMath.HasConsumer(id), "id " + id);
             }
         }

@@ -103,6 +103,8 @@ namespace VRCKatamari.BallContact
         public const float SlopeMinimumSpeedFactor = 0.35f;
         public const float SlopeRestSeconds = 0.3f;
         public const float SlopeRestSpeedMps = 0.05f;
+        // 坡爬体力消耗系数下限为 1 / 1.6，与冲刺出射速度无关。
+        public const float SlopeEffortFloorScale = 1.6f;
 
         // ---- Wall climb (sections 3.2, 3.3, 3.5) ----
 
@@ -214,17 +216,6 @@ namespace VRCKatamari.BallContact
 
         /// <summary>The project's gravity, the same value the motor integrates.</summary>
         public const float Gravity = 9.81f;
-
-        // ---- Dash (section 3.8, owner decision 4) ----
-
-        /// <summary>Dash speed multiplier on the motion layer's target speed.</summary>
-        public const float DashSpeedScale = 1.6f;
-
-        /// <summary>Dash duration in seconds.</summary>
-        public const float DashSeconds = 0.45f;
-
-        /// <summary>Dash cooldown in seconds.</summary>
-        public const float DashCooldownS = 1.2f;
 
         // ---- Broadphase window (sections 5.2, 5.4, owner decision 12) ----
 

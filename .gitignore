@@ -190,6 +190,7 @@ Thumbs.db
 # See /home/fulutang/KatamariRef/PROVENANCE.md (outside this repo) for provenance.
 /KatamariRef/
 /VRChatKatamariDanacyUnity/Assets/_RefUnlicensed/
+/VRChatKatamariDanacyUnity/Assets/_RefUnlicensed.meta
 /Docs/Design/Levels/_ref_*/
 
 # Parity corpora are exports of unlicensed data mines of a commercial game: local only.

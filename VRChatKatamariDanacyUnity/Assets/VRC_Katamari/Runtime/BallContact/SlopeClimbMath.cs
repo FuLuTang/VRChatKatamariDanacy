@@ -26,7 +26,7 @@ namespace VRCKatamari.BallContact
             // and less drain per second, without a second dash/stamina state machine.
             float effort = Mathf.Clamp(ContactTuning.ClimbVGateRef /
                 Mathf.Max(gateSpeed, ContactTuning.ClimbVGateRef),
-                1f / ContactTuning.DashSpeedScale, 1f);
+                1f / ContactTuning.SlopeEffortFloorScale, 1f);
             return ContactTuning.SlopeDrainPerSecond * steepness * fatigue * effort / size;
         }
 

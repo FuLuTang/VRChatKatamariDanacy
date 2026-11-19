@@ -1431,49 +1431,40 @@ namespace VRCKatamari.BallMotor
             //    and the only place a menu suppresses it.
             StepInput();
 
-            // 2. BallMotionMath: planar velocity and the requested displacement.
-            //    The request is handed on unclipped; stopping a fast ball is the
-            //    sweep's job, not this layer's. A burst multiplies this step's target
-            //    speed through the one DashMath multiplier (owner 2026-11-18).
-            //
-            //    While a charge is held the ball does not roll at all: every axis is
-            //    handed on as 0 and the velocity is dropped, so the player cannot drive
-            //    or steer during the charge. From the spin threshold on, the ball turns in
-            //    place instead (stage 2.4), which is the original's spin at gacha count 3.
+            // 2. 首步注入真实出射速度；冲刺中仍走普通推进、转向和阻力。
+            float sizeScale = CurrentSizeScale();
+            float diameterM = semanticDiameterWorldM;
+            float baseSpeedMps = maxSpeedMps * sizeScale;
+            DashMath.TryBrake(dashState, inputForward);
             bool charging = DashMath.IsCharging(dashState);
-            float stepForward = charging ? 0f : inputForward;
-            float stepTurn = charging ? 0f : inputTurn;
-            float stepLateral = charging ? 0f : inputLateral;
-            if (charging) planarVelocity = Vector3.zero;
-
+            float speedScale;
+            float accelerationScale;
+            DashMath.DriveScales(dashState, diameterM, out speedScale, out accelerationScale);
             Vector3 requestedDisplacement = Vector3.zero;
-            float nextHeading;
             Vector3 nextVelocity;
+            float nextHeading;
             Vector3 stepDisplacement;
-            if (BallMotionMath.TryStep(stepForward, stepTurn, stepLateral,
-                headingDegrees, planarVelocity, dt, CurrentSizeScale(),
-                maxSpeedMps * DashMath.SpeedScale(dashState),
-                accelerationMps2, brakingMps2, frictionPerSecond,
-                rollingResistanceMps2, lateralGripPerSecond, turnRateDegreesPerSecond, maxLateralMps, out nextHeading, out nextVelocity, out stepDisplacement))
+            if (DashMath.TryTakeLaunch(dashState, headingDegrees, baseSpeedMps, speedScale, out nextVelocity))
+            {
+                planarVelocity = nextVelocity;
+                requestedDisplacement = nextVelocity * dt;
+            }
+            else if (BallMotionMath.TryStep(charging ? 0f : inputForward,
+                charging ? 0f : inputTurn, charging ? 0f : inputLateral,
+                headingDegrees, planarVelocity, dt, sizeScale, maxSpeedMps * speedScale,
+                accelerationMps2 * accelerationScale, brakingMps2, frictionPerSecond, rollingResistanceMps2,
+                lateralGripPerSecond, turnRateDegreesPerSecond, maxLateralMps,
+                out nextHeading, out nextVelocity, out stepDisplacement))
             {
                 headingDegrees = nextHeading;
                 planarVelocity = nextVelocity;
                 requestedDisplacement = stepDisplacement;
             }
 
-            // 2.4. The charge's spin: from the spin threshold on, the ball turns in place. It
-            //      is applied here, after the motion layer wrote the heading and before the
-            //      contact solve reads the drive direction, so the spinning ball's facing is
-            //      what the contact pass and the follow rig see. The visual rotation gets the
-            //      same yaw, because the attached props live on the rolling root: heading
-            //      alone would turn the camera while the props stood still. The rate is
-            //      DashMath's PROVISIONAL value; the original's spin speed is the player's
-            //      alternation speed and has no published number.
-            if (DashMath.IsSpinning(dashState))
+            // 2.4. 空转只转球壳和吸附物，不扫动骑手视角，也不改变出射朝向。
+            if (DashMath.IsSpinning(dashState, diameterM))
             {
                 float spinDegrees = DashMath.SpinRateDegreesPerSecond * dt;
-                headingDegrees = headingDegrees + spinDegrees;
-                if (headingDegrees >= 360f) headingDegrees = headingDegrees - 360f;
                 visualRollRotation = Quaternion.Euler(0f, spinDegrees, 0f) * visualRollRotation;
             }
 
@@ -1482,8 +1473,9 @@ namespace VRCKatamari.BallMotor
             Vector3 groundedCenter = Vector3.zero;
             Vector3 followCenter = Vector3.zero;
             Vector3 supportNormal = groundPlaneNormal;
-            StepContactV2(dt, requestedDisplacement, out groundedCenter, out followCenter,
-                out supportNormal);
+            bool hitWall;
+            StepContactV2(dt, requestedDisplacement, speedScale, out groundedCenter, out followCenter,
+                out supportNormal, out hitWall);
 
             // 5. PickupAbsorbMath: a decision per candidate, at the final position
             //    only, so nothing is absorbed through a wall or from the old centre.
@@ -1524,10 +1516,12 @@ namespace VRCKatamari.BallMotor
             ballCenterWorld = groundedCenter;
             discontinuous = false;
 
-            // The dash clock (charge, burst, cooldown, energy, recharge, huff) advances once
-            // per fixed step, after every stage that read it this step. The step counters
-            // (stepsThisFrame) are independent of it.
-            DashMath.TryStep(dashState, dt);
+            // 以本步的球径快照推进计时；普通减速或坡面速度变低不结束冲刺。
+            bool autoLaunched;
+            if (DashMath.TryStep(dashState, dt, diameterM, hitWall, out autoLaunched) && autoLaunched)
+            {
+                Debug.Log("[input] dash fired (full auto)");
+            }
         }
 
 
@@ -1722,14 +1716,16 @@ namespace VRCKatamari.BallMotor
         /// (design §2.8).
         /// </para>
         /// </remarks>
-        private void StepContactV2(float dt, Vector3 requestedDisplacement,
-            out Vector3 groundedCenter, out Vector3 followCenter, out Vector3 supportNormal)
+        private void StepContactV2(float dt, Vector3 requestedDisplacement, float dashSpeedScale,
+            out Vector3 groundedCenter, out Vector3 followCenter, out Vector3 supportNormal,
+            out bool hitWall)
         {
             double stepStartSeconds = WallClockSeconds();
             contactV2ClockSeconds = contactV2ClockSeconds + dt;
             groundedCenter = ballCenterWorld;
             followCenter = ballCenterWorld;
             supportNormal = groundPlaneNormal;
+            hitWall = false;
 
             float radius = collisionRadiusWorldM;
             if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f)
@@ -1756,7 +1752,7 @@ namespace VRCKatamari.BallMotor
             // second dash-aware path.
             float driveSpeed;
             Vector3 intentDirection;
-            ComputeDrive(out contactDriveDirection, out intentDirection, out driveSpeed);
+            ComputeDrive(dashSpeedScale, out contactDriveDirection, out intentDirection, out driveSpeed);
 
             // A climb whose gate has closed (input released, or the push turned away)
             // leaves the channel here, so the ball slides back instead of hovering
@@ -1785,6 +1781,7 @@ namespace VRCKatamari.BallMotor
 
             Vector3 center = ballCenterWorld;
             Vector3 planar = planarVelocity;
+            Vector3 beforeContact = planar;
             float vertical = contactVerticalVelocity;
             int contactCount;
             int dominantSurfaceId;
@@ -1945,6 +1942,19 @@ namespace VRCKatamari.BallMotor
             // whole ball out and merge into the contact log as their own records.
             ResolveNeedleContacts(ref center, radius, v2CoreContactCount);
             ApplyNeedleVelocityResponse(v2CoreContactCount);
+            if (DashMath.IsDashing(dashState))
+            {
+                // 不做第二次查询：只看求解器本步的接触记录和实际法向速度修正。
+                for (int i = 0; i < v2ContactCount; i++)
+                {
+                    if (contactClassesV2[i] != ContactCodes.ClassClimb ||
+                        contactDepthsV2[i] <= 0f ||
+                        (climbActive && contactSurfaceIdsV2[i] == climbSurfaceId)) continue;
+                    if (!DashMath.IsBlockedByWall(contactNormalsV2[i], beforeContact, planarVelocity)) continue;
+                    hitWall = true;
+                    break;
+                }
+            }
 
             // Deep embed recovery (design §2.8, reason 3): a penetration larger than the
             // radius cannot be pushed out this step, so the ball goes back to its last
@@ -2179,8 +2189,7 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// The player's drive intent magnitude, for the ramp rest latch and the push-blocked
-        /// test: zero while a dash charge is held, because the charge pins the ball in place
-        /// and a held stick must not read as a push.
+        /// test: no stick drive during charge; a running burst counts as forward drive.
         /// </summary>
         private float DriveIntentMagnitude()
         {
@@ -2204,11 +2213,10 @@ namespace VRCKatamari.BallMotor
         /// velocity (a ball wedged between two faces swaps sideways every step) but not
         /// the intent, so the recovery's "is this push blocked" test reads the intent.
         /// </remarks>
-        private void ComputeDrive(out Vector3 direction, out Vector3 intentDirection,
+        private void ComputeDrive(float dashSpeedScale, out Vector3 direction, out Vector3 intentDirection,
             out float speed)
         {
-            // A charge holds the ball in place: the climb gate and the protrusion estimate
-            // must not see a push the player is not actually making.
+            // 蓄力滑行不是推力；冲刺只提高有输入时的目标速度，首步初速度由接触层直接读取。
             bool charging = DashMath.IsCharging(dashState);
             float headingRadians = headingDegrees * Mathf.Deg2Rad;
             float forwardIntent = charging ? 0f : Mathf.Clamp(inputForward, -1f, 1f);
@@ -2225,9 +2233,8 @@ namespace VRCKatamari.BallMotor
                 intentDirection = Vector3.zero;
             }
 
-            float speedCap = maxSpeedMps * CurrentSizeScale() * DashMath.SpeedScale(dashState);
-            float intent = charging ? 0f : Mathf.Abs(Mathf.Clamp(inputForward, -1f, 1f));
-            speed = speedCap * intent;
+            float speedCap = maxSpeedMps * CurrentSizeScale() * dashSpeedScale;
+            speed = speedCap * Mathf.Abs(forwardIntent);
             if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) speed = 0f;
 
             Vector3 planar = new Vector3(planarVelocity.x, 0f, planarVelocity.z);
@@ -3566,9 +3573,7 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Starts a dash charge (the button is held). False while a charge, a burst, the
-        /// cooldown or the huff is running, or with no boost energy left; the input adapter
-        /// logs the refusal and sends nothing else.
+        /// 开始长按蓄力；已经蓄力、正在冲刺、喘气或没有寿命时拒绝。
         /// </summary>
         /// <remarks>
         /// The two input adapters call this when the button goes down - the VR adapter on the
@@ -3584,23 +3589,32 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Ends a charge when the button is released: a full charge fires the burst, a short
-        /// one does nothing. Returns a <ce>DashMath.Release*</ce> code so the input adapter can
-        /// log what happened.
+        /// 空转后、自动出射前松手会触发弱冲刺；否则只结束蓄力或忽略松手。
         /// </summary>
         public int ReleaseDashCharge()
         {
             EnsureDashState();
-            return DashMath.ReleaseCharge(dashState, semanticDiameterWorldM);
+            float held = DashMath.ChargeSeconds(dashState);
+            int released = DashMath.ReleaseCharge(dashState, semanticDiameterWorldM);
+            if (released == DashMath.ReleaseNone)
+            {
+                Debug.Log("[input] dash release ignored (no active charge)");
+            }
+            else
+            {
+                string outcome = released == DashMath.ReleaseHelpDash
+                    ? "dash fired (early release)" : "dash released before spin";
+                Debug.Log("[input] " + outcome + " held=" + held + "s spin=" +
+                    DashMath.SpinSecondsFor(semanticDiameterWorldM) + "s full=" +
+                    GetDashChargeRequiredSeconds() + "s");
+            }
+            return released;
         }
 
-        /// <summary>
-        /// Drops a charge without firing (gate closed, station exit, respawn, new round). Called
-        /// by the adapters' zero path and by <see cref="TryResetForNewRound"/>.
-        /// </summary>
-        public void CancelDashCharge()
+        /// <summary>关门、离座或重生：取消蓄力和待出射/进行中的冲刺，不清零惯性。</summary>
+        public void CancelDash()
         {
-            DashMath.CancelCharge(dashState);
+            DashMath.Cancel(dashState);
         }
 
         /// <summary>Whether the button is held and the charge is running.</summary>
@@ -3610,12 +3624,11 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Whether the charge has reached the spin threshold (gacha count 3 in the original):
-        /// the ball spins in place and stops rolling from here on.
+        /// 是否达到当前球径的空转阈值；空转只影响表现，不改变平移规则。
         /// </summary>
         public bool IsDashSpinning()
         {
-            return DashMath.IsSpinning(dashState);
+            return DashMath.IsSpinning(dashState, semanticDiameterWorldM);
         }
 
         /// <summary>Seconds the current charge has been held (0 when not charging).</summary>
@@ -3637,15 +3650,17 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// The dash's speed multiplier on the motion layer's target speed: 1.6 while dashing,
-        /// 1 otherwise (<see cref="DashMath.SpeedScale"/>).
+        /// 冲刺期间的出射倍率（弱冲刺已乘 0.67），其他时候为 1。
         /// </summary>
         public float GetDashSpeedScale()
         {
-            return DashMath.SpeedScale(dashState);
+            float speed;
+            float acceleration;
+            DashMath.DriveScales(dashState, semanticDiameterWorldM, out speed, out acceleration);
+            return DashMath.LaunchSpeedScale(dashState, speed);
         }
 
-        /// <summary>Boost energy left, in seconds of boost activity (0..8 s).</summary>
+        /// <summary>冲刺剩余寿命，按 30 Hz 折算为秒（0–3 s）。</summary>
         public float GetDashEnergySeconds()
         {
             return DashMath.EnergySeconds(dashState);

@@ -235,9 +235,13 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 眼点由 7 个系数决定，没有离球心常量眼高的字段。模型 `Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧状态），7 个眼点系数是每次调用的参数；测试在 `Docs/tests/ball_follow_rig/` 与 `Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py`。改这里的式子，C# 与 Python 必须同一提交。
 
-### 推球方向浮标（纯视觉，PROVISIONAL）
+### 推进方向箭头（本地视角 HUD）
 
-`Runtime/BallLayers/PushCue/` 的 `PushDirectionCue` 在球前方浮一个方向小箭头，只读本层与 `BallRideStation` 的公开接口：位置 = 球心 + `forward(跟随架 yaw) × (半径 + 间距)`，高度 = 球心 + `半径 + 悬空量`（即贴着球顶上方浮着），朝向 = 跟随架 yaw，大小 = `基准长度 + 直径 × 系数`（夹在护栏内），再叠一个 0.25 Hz / 2.5 cm 的上下浮动；只在本地玩家坐在球上、且（接了控制器时）回合状态为 `StateRunning` 时显示。**方向取跟随架 yaw 而不是球速**：静止时球速为零，而 yaw 就是座位朝向，指示物与座位不会打架。间距/高度/缩放都随**语义直径**线性放大（直径 0.30 m → 球心前方 0.635 m、离地 0.38 m、长 0.22 m；2.00 m → 2.25 m、2.08 m、0.90 m），因此各尺寸下浮标都落在骑士视轴下方约 20°、球轮廓之外；贴地版本在球长大后会被球自己挡住，所以高度从球顶量起。纯表现：不进候选、不登记碰撞/遮挡数组、不参与任何玩法。公式在 `PushCueMath`，测试在 `Tests/EditMode/BallLayers/PushCueTests.cs`。
+`PushDirectionCue` 在眼点前上方显示一个世界空间箭头，VR 和桌面都读本地玩家当前的 `GetTrackingData(Head)`。**位置取头部，朝向取跟随架的世界 yaw**：箭头始终水平指向推进/驾驶方向，静止时也有指向；它不指球速、视线、目标或下一区域。
+
+`PushCueMath` 的工程起点：相对眼点的直线距离 1.6 m，仰角相对水平面 +12°，名义视角 4°（约 0.112 m 长；水平旋转时允许透视缩短）。头部平移实时跟随；锚点只追 yaw，27° 内不转，超出后 0.4 秒约消去 95% 的角差，进入 1° 后贴到中心。低头、抬头、侧倾不会带着箭头转。距离、仰角、大小不读球径或 avatar 缩放。参数参考 [Meta 的空间 HUD 指南](https://github.com/facebook/immersive-web-sdk/blob/65c0b138da51263b1f58ffe032e88a43e33b4e92/docs/concepts/spatial-ui/hud.md)与 [Unity XRI Lazy Follow](https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.5/manual/lazy-follow.html)，不是原作值，舒适度待真机复测。
+
+只在本地骑乘且回合进行时显示；未接回合控制的实验场只检查骑乘。大厅设置「推进方向箭头」默认开，玩家可以关；场景没有设置宿主时沿用默认开。`RideUxAssembler` 将已有箭头移到独立的单位缩放场景根，不挂球或骑乘面板。箭头没有碰撞，也不参与吸附或其他玩法。几何测试见 `Tests/EditMode/BallLayers/PushCueTests.cs`。
 
 ### 刻意不在这里
 

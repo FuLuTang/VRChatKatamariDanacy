@@ -154,6 +154,7 @@ namespace VRCKatamari.Story.Hub
             if (id == HubSettingsMath.LowEffects) return Pick(lang, "低特效", "Reduced effects", "エフェクト控えめ");
             if (id == HubSettingsMath.ReduceAutoRotate) return Pick(lang, "减弱自动转向", "Less auto-turn", "自動回転ひかえめ");
             if (id == HubSettingsMath.Language) return "语言 / Language / 言語";
+            if (id == HubSettingsMath.PushCue) return Pick(lang, "推进方向箭头", "Push direction arrow", "方向ガイド");
             return "";
         }
 
@@ -163,7 +164,7 @@ namespace VRCKatamari.Story.Hub
             int v = HubSettingsMath.Clamp(id, step);
             if (id == HubSettingsMath.ControlMode) return v == 1 ? Text(Simple, lang) : Text(Tank, lang);
             if (id == HubSettingsMath.SwapHands || id == HubSettingsMath.LowEffects
-                || id == HubSettingsMath.ReduceAutoRotate)
+                || id == HubSettingsMath.ReduceAutoRotate || id == HubSettingsMath.PushCue)
             {
                 return v == 1 ? Text(On, lang) : Text(Off, lang);
             }
@@ -207,8 +208,8 @@ namespace VRCKatamari.Story.Hub
                         "Move: both sticks forward = roll, one forward one back = turn",
                         "移動：両スティック前＝前進、前後逆＝旋回");
                 return "VR\n" + move + "\n"
-                    + Pick(lang, "冲刺：长按左扳机蓄力，松手冲出", "Dash: hold left trigger to charge, release",
-                        "ダッシュ：左トリガー長押しでため、離して発進") + "\n"
+                    + Pick(lang, "冲刺：长按左扳机蓄力，到时自动冲出", "Dash: hold left trigger, launches when charged",
+                        "ダッシュ：左トリガー長押しでため、ためきると自動発進") + "\n"
                     + Pick(lang, "道具：Jump 键", "Item: Jump", "アイテム：Jump") + "\n"
                     + Pick(lang, "下车：按住 Jump 1.5 秒", "Get off: hold Jump 1.5 s", "降りる：Jump 1.5 秒長押し") + "\n"
                     + Pick(lang, "选择：指向后扳机", "Select: point + trigger", "選択：指してトリガー");

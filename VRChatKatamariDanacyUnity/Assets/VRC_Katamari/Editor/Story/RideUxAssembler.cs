@@ -9,7 +9,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
+using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Hub;
 using VRCKatamari.Input;
 using VRCKatamari.Riding;
 using VRCKatamari.Story;
@@ -213,6 +215,7 @@ namespace VRCKatamari.Editor.Story
                 AssembleExitLocation(station, ballRoot, motor, c);
                 AssembleStationLinks(station, motor, ballInteract, panel, hint, rigRoot, panels, c);
                 NormalizePanelLayers(panels, c);
+                AssemblePushCue(rigRoot, station, round, c);
             }
 
             CopyAllToUdon(c);
@@ -419,6 +422,77 @@ namespace VRCKatamari.Editor.Story
             PlacePanel(rect, HudSize, HudPivot, PanelScale, HudAzimuth, HudElevation);
             c.Changed++;
             c.Notes.Add("HUD canvas '" + canvas.name + "' is world-space under " + PanelRootName);
+        }
+
+        // 复用场景中已有的箭头外观；不生成另一套网格或材质。显示根节点独立于球和缩放面板。
+        private static void AssemblePushCue(Transform rigRoot, BallRideStation station,
+            StoryRoundController round, Counters c)
+        {
+            var scene = station.gameObject.scene;
+            PushDirectionCue cue = null;
+            foreach (var candidate in UnityEngine.Object.FindObjectsOfType<PushDirectionCue>(true))
+            {
+                if (candidate.gameObject.scene != scene) continue;
+                if (cue != null)
+                {
+                    c.Problems.Add("more than one PushDirectionCue in the ride scene; none changed");
+                    return;
+                }
+                cue = candidate;
+            }
+            if (cue == null)
+            {
+                c.Notes.Add("no authored PushDirectionCue in the ride scene");
+                return;
+            }
+
+            Transform visual = ReadTransform(cue, "cueRoot");
+            if (visual == null || visual.parent != cue.transform)
+            {
+                c.Problems.Add("PushDirectionCue.cueRoot must be a direct visual child; cue left untouched");
+                return;
+            }
+
+            HubSettingsHost settings = null;
+            foreach (var candidate in UnityEngine.Object.FindObjectsOfType<HubSettingsHost>(true))
+            {
+                if (candidate.gameObject.scene != scene) continue;
+                if (settings != null)
+                {
+                    c.Problems.Add("more than one HubSettingsHost in the ride scene; cue left untouched");
+                    return;
+                }
+                settings = candidate;
+            }
+
+            Transform root = cue.transform;
+            if (root.parent != null)
+            {
+                Undo.SetTransformParent(root, null, "Detach the push cue from the ball");
+                c.Changed++;
+            }
+            if (root.localScale != Vector3.one)
+            {
+                Undo.RecordObject(root, "Keep the push cue in world metres");
+                root.localScale = Vector3.one;
+                c.Changed++;
+            }
+            if (visual.gameObject.activeSelf)
+            {
+                Undo.RecordObject(visual.gameObject, "Hide the push cue until riding");
+                visual.gameObject.SetActive(false);
+                c.Changed++;
+            }
+
+            var so = new SerializedObject(cue);
+            bool changed = SetObject(so, "pushYawSource", rigRoot, c);
+            changed |= SetObject(so, "rideStation", station, c);
+            changed |= SetObject(so, "roundController", round, c);
+            changed |= SetObject(so, "settings", settings, c);
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(cue);
+            c.Notes.Add("push cue is scene-rooted; local settings "
+                + (settings == null ? "absent (default on)" : "wired"));
         }
 
         // --------------------------------------------------------------- result card ---

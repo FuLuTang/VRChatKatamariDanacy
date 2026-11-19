@@ -1,348 +1,297 @@
-using VRCKatamari.BallContact;
+using UnityEngine;
 using VRCKatamari.Core;
 
 namespace VRCKatamari.BallMotor
 {
     /// <summary>
-    /// The dash's rules: hold to charge, spinning in place once the charge is long enough,
-    /// then release to fire the burst only if the charge reached the kickoff tier for the
-    /// ball's size; one burst, a cooldown, and the original's boost energy and huff.
+    /// WLK REROLL+ Royal Reverie（v20230608）的冲刺档位、寿命和喘气。
+    /// 用长按时长代替交替推杆；不在这里计算平移滚阻，沿用 BallMotionMath。
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Owner 2026-11-18: the dash follows the original's Charge'n'Roll logic instead of a
-    /// single button press. VR holds the LEFT trigger (<c>InputUse</c>, left hand only); PC
-    /// holds Shift and releases it. The input layers only send press/release; every rule is
-    /// here, so the two platforms cannot drift.
-    /// </para>
-    /// <para>
-    /// <b>Original mechanics, and where the numbers come from.</b> The REROLL speedrun notes
-    /// (S3 in Docs/Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md, row 5) describe the
-    /// original at a fixed 30 Hz tick: one alternating stick push is a "gacha", counted only
-    /// if the opposite one follows within 12 frames (0.4 s); a boost needs 5 gachas below
-    /// 50 cm, 6 up to 5 m, 7 up to 10 m and 8 above 10 m; a spin starts at gacha count 3 and
-    /// lasts until the count resets; boost energy is 240 frames (8 s) and drains by 1 per
-    /// frame while the count is at least 3; after 100 idle frames (3.33 s) it recharges 18
-    /// energy (0.6 s); at 0 the player huffs for 240 frames (8 s) with all boost inputs
-    /// ignored, and the energy is refilled afterwards.
-    /// </para>
-    /// <para>
-    /// <b>Charge time conversion (our mapping, written down because it is a choice).</b>
-    /// One required gacha becomes one 0.4 s window of holding: the window is the longest gap
-    /// the original still counts between two alternating pushes, so spending one window per
-    /// required push reproduces the original's required input duration and gives no reward
-    /// for mashing. Tiers: 5/6/7/8 windows = <b>2.0 / 2.4 / 2.8 / 3.2 s</b> of hold. The spin
-    /// starts after 3 windows (1.2 s), matching "spin at gacha count 3", and the energy drain
-    /// follows the same threshold. The 0.4 s after the release is the gacha timer's tail, so
-    /// energy keeps draining while it runs, as in the original.
-    /// </para>
-    /// <para>
-    /// <b>What is ours, not the original's (listed for the Lead/owner).</b> The REROLL notes
-    /// give no burst speed multiplier, no burst duration and no cooldown; the burst keeps the
-    /// project's earlier design values 1.6x / 0.45 s / 1.2 s
-    /// (<see cref="ContactTuning.DashSpeedScale"/> etc., CONTACT_MODEL_V2 §3.8), and the
-    /// 1.2 s cooldown is ours (the original spends energy instead). The spin rate is not
-    /// published either: the original's spin speed comes from how fast the player alternates,
-    /// so <see cref="SpinRateDegreesPerSecond"/> is a PROVISIONAL pick.
-    /// </para>
-    /// <para>
-    /// The state is a small float array because UdonSharp has no user structs - the same
-    /// reason the motor's other per-step state is stored in arrays.
-    /// </para>
-    /// </remarks>
     public static class DashMath
     {
-        /// <summary>Floats in a dash state array.</summary>
+        // 状态存为定长数组，供 UdonSharp 与 EditMode 共用。
         public const int StateLength = 8;
+        private const int Charging = 0;
+        private const int HeldSeconds = 1;
+        private const int DashKind = 2; // 1 = 满蓄，2 = 空转后松手；0 = 不在冲刺。
+        private const int LaunchPending = 3;
+        private const int LifeFrames = 4;
+        private const int HuffFrames = 5;
+        private const int FrameClock = 6;
+        private const int RecoverFrames = 7;
+        private const int FullDash = 1;
+        private const int HelpDash = 2;
 
-        /// <summary>State index: 1 while the button is held and the charge is running.</summary>
-        public const int StateCharging = 0;
-
-        /// <summary>State index: seconds the button has been held this charge.</summary>
-        public const int StateChargeSeconds = 1;
-
-        /// <summary>State index: seconds of burst left (0 = not dashing).</summary>
-        public const int StateDashRemaining = 2;
-
-        /// <summary>State index: seconds until the next charge may begin (0 = ready).</summary>
-        public const int StateCooldownRemaining = 3;
-
-        /// <summary>State index: boost energy left, in seconds of boost activity.</summary>
-        public const int StateEnergySeconds = 4;
-
-        /// <summary>State index: seconds of huff left (0 = not huffing).</summary>
-        public const int StateHuffRemaining = 5;
-
-        /// <summary>State index: seconds of post-release activity left (the gacha timer tail).</summary>
-        public const int StateBoostTailSeconds = 6;
-
-        /// <summary>State index: seconds since the last boost-energy use (for the recharge).</summary>
-        public const int StateIdleSeconds = 7;
-
-        /// <summary>The original simulation tick: all frame counts below are at 30 Hz.</summary>
         public const float OriginalTickSeconds = 1f / 30f;
+        public const float GachaWindowSeconds = 14f * OriginalTickSeconds; // s16DashInputDuration
+        public const float HelpSpeedScale = 0.67f; // f32DashHelpSpeedCoef
+        private const int FullChargeAfterSpin = 4; // sDashSetInput
+        public const int LifeCapacityFrames = 90; // s16DashLife
+        public const int HuffDurationFrames = 240; // s16DashForbidTime
+        private const int RecoverAfterFrames = 10; // s16DashRecoverTime
+        private const float TimeTolerance = 1e-5f;
 
-        /// <summary>The gacha window, 12 frames: the longest gap that still counts as a chain.</summary>
-        public const float GachaWindowSeconds = 12f * OriginalTickSeconds;
-
-        /// <summary>
-        /// Slack on the "full charge" compare. The charge time is accumulated one 50 Hz step
-        /// at a time, and float32 accumulation over a 2-3.2 s charge drifts by a few 1e-6 s;
-        /// the tolerance is 0.1 ms, far below anything a player could feel, so a charge that
-        /// really ran the whole tier can never be misread as short.
-        /// </summary>
-        public const float ChargeToleranceSeconds = 1e-4f;
-
-        /// <summary>Gachas after which the original starts spinning (and drains energy).</summary>
-        public const int GachasForSpin = 3;
-
-        /// <summary>Charge time at which the ball starts spinning: 3 gacha windows = 1.2 s.</summary>
-        public const float SpinChargeSeconds = GachasForSpin * GachaWindowSeconds;
-
-        /// <summary>Boost energy capacity, 240 frames = 8 s of boost activity.</summary>
-        public const float EnergyCapacitySeconds = 240f * OriginalTickSeconds;
-
-        /// <summary>Huff length, 240 frames = 8 s.</summary>
-        public const float HuffSeconds = 240f * OriginalTickSeconds;
-
-        /// <summary>Idle time before the original recharges, 100 frames = 3.33 s.</summary>
-        public const float RechargeIdleSeconds = 100f * OriginalTickSeconds;
-
-        /// <summary>Energy recharged per recharge event, 18 frames = 0.6 s.</summary>
-        public const float RechargeEnergySeconds = 18f * OriginalTickSeconds;
-
-        /// <summary>
-        /// PROVISIONAL spin rate while charging. The original's spin speed is the player's
-        /// alternation speed, which has no published value; 180 deg/s turns 1 to 1.6 times
-        /// over a 2.0-3.2 s charge.
-        /// </summary>
+        // 工程表现值，单位是球壳的度/秒；不冒充 WLK 的 f32AccD / mExtraRoll。
         public const float SpinRateDegreesPerSecond = 180f;
 
-        // ---- Release outcomes (ReleaseCharge's return value) ----
-
-        /// <summary>Nothing was charging (a release without a press, or the charge was cancelled).</summary>
         public const int ReleaseNone = 0;
+        public const int ReleaseHelpDash = 1;
+        public const int ReleaseBeforeSpin = 2;
 
-        /// <summary>The charge was full: the burst started.</summary>
-        public const int ReleaseDash = 1;
-
-        /// <summary>The charge was short of the tier: no burst.</summary>
-        public const int ReleaseNotFull = 2;
-
-        /// <summary>
-        /// The gachas the original needs for a boost at this ball diameter: 5 below 50 cm,
-        /// 6 up to 5 m, 7 up to 10 m, 8 above. An unusable diameter uses the smallest tier.
-        /// </summary>
-        public static int ChargeGachasFor(float diameterM)
+        public static int SpinGachasFor(float diameterM)
         {
-            if (!KatamariMath.IsFiniteFloat(diameterM) || diameterM < 0.5f) return 5;
-            if (diameterM < 5f) return 6;
-            if (diameterM < 10f) return 7;
-            return 8;
+            // s32DashWheelSpinData（60,000 / 300,000 mm）。
+            if (!KatamariMath.IsFiniteFloat(diameterM)) return 3;
+            if (diameterM >= 300f) return 5;
+            if (diameterM >= 60f) return 4;
+            return 3;
         }
 
-        /// <summary>
-        /// The hold time that tier needs: one 0.4 s gacha window per required gacha.
-        /// </summary>
+        public static float SpinSecondsFor(float diameterM)
+        {
+            return SpinGachasFor(diameterM) * GachaWindowSeconds;
+        }
+
         public static float ChargeSecondsFor(float diameterM)
         {
-            return ChargeGachasFor(diameterM) * GachaWindowSeconds;
+            return (SpinGachasFor(diameterM) + FullChargeAfterSpin) * GachaWindowSeconds;
         }
 
-        /// <summary>Clears a dash state array (ready: no charge, full energy). False for a null or short array.</summary>
+        /// <summary>在本项目支持的 0–400 m 范围内，先分列插值 WLK RunParam，再取比值。
+        /// 1,000 m 是 340–400 m 查询需要的上端点；不搬 WLK 的绝对速度刻度。</summary>
+        public static void DriveScales(float[] state, float diameterM, out float speed, out float acceleration)
+        {
+            speed = 1f;
+            acceleration = 1f;
+            if (!IsDashing(state)) return;
+            FullDriveScales(diameterM, out speed, out acceleration);
+        }
+
+        public static void FullDriveScales(float diameterM, out float speed, out float acceleration)
+        {
+            // gsCoreRunParam: 每段按 m、SpeedF/D、AccF/D 分别插值。
+            if (!KatamariMath.IsFiniteFloat(diameterM) || diameterM <= 0.05f)
+            {
+                speed = 27f / 9f;
+                acceleration = 5f / 0.4f;
+                return;
+            }
+            if (diameterM <= 0.2f)
+                InterpolateDriveScales(diameterM, 0.05f, 0.2f, 9f, 33f, 27f, 82f, 0.4f, 0.7f, 5f, 4f, out speed, out acceleration);
+            else if (diameterM <= 0.5f)
+                InterpolateDriveScales(diameterM, 0.2f, 0.5f, 33f, 97f, 82f, 242f, 0.7f, 1.9f, 4f, 5f, out speed, out acceleration);
+            else if (diameterM <= 1f)
+                InterpolateDriveScales(diameterM, 0.5f, 1f, 97f, 160f, 242f, 400f, 1.9f, 2.6f, 5f, 5f, out speed, out acceleration);
+            else if (diameterM <= 3f)
+                InterpolateDriveScales(diameterM, 1f, 3f, 160f, 340f, 400f, 850f, 2.6f, 6f, 5f, 30f, out speed, out acceleration);
+            else if (diameterM <= 5f)
+                InterpolateDriveScales(diameterM, 3f, 5f, 340f, 463f, 850f, 1157f, 6f, 6f, 30f, 50f, out speed, out acceleration);
+            else if (diameterM <= 12f)
+                InterpolateDriveScales(diameterM, 5f, 12f, 463f, 957f, 1157f, 2966f, 6f, 18f, 50f, 120f, out speed, out acceleration);
+            else if (diameterM <= 30f)
+                InterpolateDriveScales(diameterM, 12f, 30f, 957f, 1909f, 2966f, 5918f, 18f, 43f, 120f, 300f, out speed, out acceleration);
+            else if (diameterM <= 60f)
+                InterpolateDriveScales(diameterM, 30f, 60f, 1909f, 2799f, 5918f, 8677f, 43f, 60f, 300f, 500f, out speed, out acceleration);
+            else if (diameterM <= 90f)
+                InterpolateDriveScales(diameterM, 60f, 90f, 2799f, 4669f, 8677f, 14474f, 60f, 85f, 500f, 500f, out speed, out acceleration);
+            else if (diameterM <= 340f)
+                InterpolateDriveScales(diameterM, 90f, 340f, 4669f, 20000f, 14474f, 62000f, 85f, 172f, 500f, 500f, out speed, out acceleration);
+            else
+                InterpolateDriveScales(diameterM, 340f, 1000f, 20000f, 40280f, 62000f, 100000f, 172f, 302f, 500f, 500f, out speed, out acceleration);
+        }
+
+        private static void InterpolateDriveScales(float diameterM, float lowM, float highM,
+            float speedFLow, float speedFHigh, float speedDLow, float speedDHigh,
+            float accFLow, float accFHigh, float accDLow, float accDHigh,
+            out float speed, out float acceleration)
+        {
+            float t = Mathf.Clamp01((diameterM - lowM) / (highM - lowM));
+            speed = Mathf.Lerp(speedDLow, speedDHigh, t) / Mathf.Lerp(speedFLow, speedFHigh, t);
+            acceleration = Mathf.Lerp(accDLow, accDHigh, t) / Mathf.Lerp(accFLow, accFHigh, t);
+        }
+
         public static bool TryReset(float[] state)
         {
-            if (!IsValid(state)) return false;
+            if (state == null || state.Length < StateLength) return false;
             for (int i = 0; i < StateLength; i++) state[i] = 0f;
-            state[StateEnergySeconds] = EnergyCapacitySeconds;
+            state[LifeFrames] = LifeCapacityFrames;
             return true;
         }
 
-        /// <summary>
-        /// Starts a charge. False (nothing changes) while already charging, dashing, cooling
-        /// down, huffing, out of energy, or for a bad state array.
-        /// </summary>
         public static bool TryBeginCharge(float[] state)
         {
-            if (!IsValid(state)) return false;
-            if (state[StateCharging] > 0f) return false;
-            if (state[StateDashRemaining] > 0f) return false;
-            if (state[StateCooldownRemaining] > 0f) return false;
-            if (state[StateHuffRemaining] > 0f) return false;
-            if (state[StateEnergySeconds] <= 0f) return false;
-            state[StateCharging] = 1f;
-            state[StateChargeSeconds] = 0f;
+            if (!IsValid(state) || state[Charging] > 0f || state[DashKind] > 0f ||
+                state[HuffFrames] > 0f || state[LifeFrames] <= 0f) return false;
+            state[Charging] = 1f;
+            state[HeldSeconds] = 0f;
             return true;
         }
 
-        /// <summary>Abandons a charge without a burst (gate closed, station exit, respawn).</summary>
-        public static void CancelCharge(float[] state)
+        public static void Cancel(float[] state)
         {
             if (!IsValid(state)) return;
-            state[StateCharging] = 0f;
-            state[StateChargeSeconds] = 0f;
+            EndCharge(state);
+            EndDash(state);
         }
 
-        /// <summary>
-        /// Ends a charge: full charge fires the burst and starts the cooldown; a short charge
-        /// does nothing. Returns one of the <c>Release*</c> codes.
-        /// </summary>
         public static int ReleaseCharge(float[] state, float diameterM)
         {
-            if (!IsValid(state)) return ReleaseNone;
-            if (state[StateCharging] <= 0f) return ReleaseNone;
+            if (!IsCharging(state)) return ReleaseNone;
+            bool spinning = IsSpinning(state, diameterM);
+            EndCharge(state);
+            if (!spinning) return ReleaseBeforeSpin;
+            BeginDash(state, HelpDash);
+            return ReleaseHelpDash;
+        }
 
-            float required = ChargeSecondsFor(diameterM);
-            bool full = state[StateChargeSeconds] + ChargeToleranceSeconds >= required;
-            state[StateCharging] = 0f;
-            state[StateChargeSeconds] = 0f;
-            if (!full) return ReleaseNotFull;
+        private static void EndCharge(float[] state)
+        {
+            state[Charging] = 0f;
+            state[HeldSeconds] = 0f;
+        }
 
-            state[StateDashRemaining] = ContactTuning.DashSeconds;
-            state[StateCooldownRemaining] = ContactTuning.DashCooldownS;
-            state[StateBoostTailSeconds] = GachaWindowSeconds;
-            return ReleaseDash;
+        private static void BeginDash(float[] state, int kind)
+        {
+            EndCharge(state);
+            state[DashKind] = kind;
+            state[LaunchPending] = 1f;
+            state[RecoverFrames] = 0f;
+            state[FrameClock] = 0f;
+        }
+
+        private static void EndDash(float[] state)
+        {
+            if (state[DashKind] <= 0f) return;
+            state[DashKind] = 0f;
+            state[LaunchPending] = 0f;
+            state[FrameClock] = 0f;
+        }
+
+        /// <summary>后拉先退出冲刺，再由普通运动施加反向刹车，不立即清掉惯性。</summary>
+        public static bool TryBrake(float[] state, float forwardIntent)
+        {
+            if (!KatamariMath.IsFiniteFloat(forwardIntent) || forwardIntent >= 0f ||
+                !IsDashing(state) || state[LaunchPending] > 0f) return false;
+            EndDash(state);
+            return true;
+        }
+
+        /// <summary>仅首个运动步注入出射速度；以后只滑行，不覆盖接触结果。</summary>
+        public static bool TryTakeLaunch(float[] state, float headingDegrees, float baseSpeedMps,
+            float speedScale, out Vector3 velocity)
+        {
+            velocity = Vector3.zero;
+            if (!IsDashing(state) || state[LaunchPending] <= 0f ||
+                !KatamariMath.IsFiniteFloat(headingDegrees)) return false;
+            float speed = baseSpeedMps * LaunchSpeedScale(state, speedScale);
+            if (!KatamariMath.IsFiniteFloat(speed) || speed <= 0f) return false;
+            float radians = headingDegrees * Mathf.Deg2Rad;
+            velocity = new Vector3(Mathf.Sin(radians) * speed, 0f, Mathf.Cos(radians) * speed);
+            state[LaunchPending] = 0f;
+            return true;
         }
 
         /// <summary>
-        /// Advances one fixed step: the charge, the burst, the cooldown, the post-release
-        /// tail, the boost energy, the recharge and the huff. False (state untouched) for a
-        /// bad array or a non-finite/negative delta; a zero delta changes nothing.
+        /// 在运动和接触之后推进一次。满蓄返回 autoLaunched，下一运动步才取出射速度。
+        /// 速度跌落不结束冲刺；接触层仅在确认撞墙后传入 hitWall。
         /// </summary>
-        public static bool TryStep(float[] state, float dt)
+        public static bool TryStep(float[] state, float dt, float diameterM, bool hitWall,
+            out bool autoLaunched)
         {
-            if (!IsValid(state)) return false;
-            if (!KatamariMath.IsFiniteFloat(dt) || dt < 0f) return false;
+            autoLaunched = false;
+            if (!IsValid(state) || !KatamariMath.IsFiniteFloat(dt) || dt < 0f) return false;
+            if (dt == 0f || state[LaunchPending] > 0f) return true;
 
-            if (state[StateCharging] > 0f) state[StateChargeSeconds] = state[StateChargeSeconds] + dt;
-            state[StateDashRemaining] = Decrement(state[StateDashRemaining], dt);
-            state[StateCooldownRemaining] = Decrement(state[StateCooldownRemaining], dt);
-            state[StateBoostTailSeconds] = Decrement(state[StateBoostTailSeconds], dt);
+            float clock = state[FrameClock] + dt;
+            if (!KatamariMath.IsFiniteFloat(clock)) return false;
+            float frameCount = Mathf.Floor((clock + TimeTolerance) / OriginalTickSeconds);
+            state[FrameClock] = Mathf.Max(0f, clock - frameCount * OriginalTickSeconds);
 
-            if (state[StateHuffRemaining] > 0f)
+            if (state[HuffFrames] > 0f)
             {
-                // Huffing: all boost input is refused and the energy is refilled when it ends.
-                state[StateHuffRemaining] = Decrement(state[StateHuffRemaining], dt);
-                if (state[StateHuffRemaining] <= 0f)
+                state[HuffFrames] = Mathf.Max(0f, state[HuffFrames] - frameCount);
+                if (state[HuffFrames] <= 0f)
                 {
-                    state[StateHuffRemaining] = 0f;
-                    state[StateEnergySeconds] = EnergyCapacitySeconds;
-                    state[StateIdleSeconds] = 0f;
+                    state[LifeFrames] = LifeCapacityFrames;
+                    state[FrameClock] = 0f;
                 }
                 return true;
             }
 
-            // Boost activity drains energy: while the charge has reached the spin count,
-            // while the burst runs, and for the gacha timer's tail after the release. That is
-            // the original's "count >= 3" window, expressed in seconds.
-            bool active = (state[StateCharging] > 0f
-                    && state[StateChargeSeconds] >= SpinChargeSeconds)
-                || state[StateDashRemaining] > 0f
-                || state[StateBoostTailSeconds] > 0f;
-
-            if (active)
+            if (state[DashKind] > 0f)
             {
-                state[StateIdleSeconds] = 0f;
-                state[StateEnergySeconds] = Decrement(state[StateEnergySeconds], dt);
-                if (state[StateEnergySeconds] <= 0f)
+                state[LifeFrames] = Mathf.Max(0f, state[LifeFrames] - frameCount);
+                if (state[LifeFrames] <= 0f)
                 {
-                    // Out of energy: the charge is dropped and the huff begins. A burst that
-                    // is already running is not cut short (the original's boost keeps going).
-                    state[StateEnergySeconds] = 0f;
-                    state[StateHuffRemaining] = HuffSeconds;
-                    state[StateCharging] = 0f;
-                    state[StateChargeSeconds] = 0f;
+                    EndDash(state);
+                    state[HuffFrames] = HuffDurationFrames;
+                }
+                else if (hitWall)
+                {
+                    EndDash(state);
                 }
                 return true;
             }
 
-            // Idle: after the original's 100 frames, one recharge event adds 18 frames.
-            state[StateIdleSeconds] = state[StateIdleSeconds] + dt;
-            if (state[StateIdleSeconds] >= RechargeIdleSeconds)
+            // 不冲刺也不喘气：蓄力和空转同样可按 WLK 的恢复节拍回寿命。
+            float recovered = state[RecoverFrames] + frameCount;
+            float increments = Mathf.Floor(recovered / RecoverAfterFrames);
+            state[RecoverFrames] = recovered - increments * RecoverAfterFrames;
+            state[LifeFrames] = Mathf.Min(LifeCapacityFrames, state[LifeFrames] + increments);
+
+            if (state[Charging] > 0f)
             {
-                state[StateIdleSeconds] = state[StateIdleSeconds] - RechargeIdleSeconds;
-                float energy = state[StateEnergySeconds] + RechargeEnergySeconds;
-                state[StateEnergySeconds] = energy > EnergyCapacitySeconds
-                    ? EnergyCapacitySeconds : energy;
+                state[HeldSeconds] += dt;
+                if (state[HeldSeconds] + TimeTolerance >= ChargeSecondsFor(diameterM))
+                {
+                    BeginDash(state, FullDash);
+                    autoLaunched = true;
+                }
             }
             return true;
         }
 
-        /// <summary>Whether the button is held and the charge is running.</summary>
         public static bool IsCharging(float[] state)
         {
-            if (!IsValid(state)) return false;
-            return state[StateCharging] > 0f;
+            return IsValid(state) && state[Charging] > 0f;
         }
 
-        /// <summary>
-        /// Whether the charge has reached the spin threshold: the ball spins in place from
-        /// here on, as the original does from gacha count 3.
-        /// </summary>
-        public static bool IsSpinning(float[] state)
+        public static bool IsSpinning(float[] state, float diameterM)
         {
-            return IsCharging(state) && state[StateChargeSeconds] >= SpinChargeSeconds;
+            return IsCharging(state) && state[HeldSeconds] + TimeTolerance >= SpinSecondsFor(diameterM);
         }
 
-        /// <summary>Seconds the button has been held this charge (0 when not charging).</summary>
         public static float ChargeSeconds(float[] state)
         {
-            if (!IsValid(state) || state[StateCharging] <= 0f) return 0f;
-            return state[StateChargeSeconds];
+            return IsCharging(state) ? state[HeldSeconds] : 0f;
         }
 
-        /// <summary>Whether the current charge has reached this diameter's kickoff tier.</summary>
-        public static bool IsChargeFull(float[] state, float diameterM)
-        {
-            if (!IsCharging(state)) return false;
-            return state[StateChargeSeconds] + ChargeToleranceSeconds >= ChargeSecondsFor(diameterM);
-        }
-
-        /// <summary>Whether a burst is running.</summary>
         public static bool IsDashing(float[] state)
         {
-            if (!IsValid(state)) return false;
-            return state[StateDashRemaining] > 0f;
+            return IsValid(state) && state[DashKind] > 0f;
         }
 
-        /// <summary>
-        /// The motion layer's speed multiplier: <see cref="ContactTuning.DashSpeedScale"/>
-        /// while dashing, 1 otherwise (also 1 for an unusable state).
-        /// </summary>
-        public static float SpeedScale(float[] state)
+        public static float LaunchSpeedScale(float[] state, float fullScale)
         {
-            return IsDashing(state) ? ContactTuning.DashSpeedScale : 1f;
+            return IsDashing(state) ? fullScale * (state[DashKind] == HelpDash ? HelpSpeedScale : 1f) : 1f;
         }
 
-        /// <summary>Boost energy left in seconds of boost activity (0..<see cref="EnergyCapacitySeconds"/>).</summary>
+        /// <summary>项目 HitWall 映射：有向墙内的水平入射速度、且该法向实际被接触去除。</summary>
+        public static bool IsBlockedByWall(Vector3 normal, Vector3 before, Vector3 after)
+        {
+            float incoming = before.x * normal.x + before.z * normal.z;
+            float outgoing = after.x * normal.x + after.z * normal.z;
+            return incoming < -1e-4f && outgoing - incoming > 1e-4f;
+        }
+
         public static float EnergySeconds(float[] state)
         {
-            if (!IsValid(state)) return 0f;
-            return state[StateEnergySeconds];
+            return IsValid(state) ? state[LifeFrames] * OriginalTickSeconds : 0f;
         }
 
-        /// <summary>Whether the huff is running: all charge input is refused until it ends.</summary>
         public static bool IsHuffed(float[] state)
         {
-            if (!IsValid(state)) return false;
-            return state[StateHuffRemaining] > 0f;
-        }
-
-        /// <summary>Whether a charge may begin now (ready, no burst, no cooldown, no huff, has energy).</summary>
-        public static bool CanBeginCharge(float[] state)
-        {
-            if (!IsValid(state)) return false;
-            return state[StateCharging] <= 0f
-                && state[StateDashRemaining] <= 0f
-                && state[StateCooldownRemaining] <= 0f
-                && state[StateHuffRemaining] <= 0f
-                && state[StateEnergySeconds] > 0f;
-        }
-
-        private static float Decrement(float value, float dt)
-        {
-            float next = value - dt;
-            return next > 0f ? next : 0f;
+            return IsValid(state) && state[HuffFrames] > 0f;
         }
 
         private static bool IsValid(float[] state)

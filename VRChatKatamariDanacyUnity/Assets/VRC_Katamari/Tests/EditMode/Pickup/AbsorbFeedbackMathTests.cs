@@ -5,16 +5,6 @@ namespace VRCKatamari.Tests.EditMode.Pickup
 {
     public class AbsorbFeedbackMathTests
     {
-        [Test]
-        public void GainIncreasesAndStopsAtFourItems()
-        {
-            Assert.AreEqual(0f, AbsorbFeedbackMath.AudioGain(0));
-            Assert.Less(AbsorbFeedbackMath.AudioGain(1), AbsorbFeedbackMath.AudioGain(2));
-            Assert.Less(AbsorbFeedbackMath.AudioGain(2), AbsorbFeedbackMath.AudioGain(3));
-            Assert.Less(AbsorbFeedbackMath.AudioGain(3), AbsorbFeedbackMath.AudioGain(4));
-            Assert.AreEqual(0.24f, AbsorbFeedbackMath.AudioGain(30));
-        }
-
         [TestCase(0.14f, 0, 0.020f, 0.20f)]
         [TestCase(0.15f, 1, 0.028f, 0.27f)]
         [TestCase(0.30f, 2, 0.035f, 0.35f)]
@@ -27,26 +17,46 @@ namespace VRCKatamari.Tests.EditMode.Pickup
             Assert.AreEqual(0f, AbsorbFeedbackMath.HapticAmplitude(band, 0f));
         }
 
-        [Test]
-        public void AudioAndHapticDeadlinesAreIndependent()
+        [TestCase(0, 4, true, 0, AbsorbFeedbackMath.RollInLayer | AbsorbFeedbackMath.ScreamLayer)]
+        [TestCase(0, -1, true, 0, AbsorbFeedbackMath.RollInLayer)]
+        [TestCase(0, 4, false, 0, AbsorbFeedbackMath.RollInLayer)]
+        [TestCase(0, 4, true, -1, AbsorbFeedbackMath.RollInLayer)]
+        [TestCase(0, 4, true, 2, AbsorbFeedbackMath.RollInLayer)]
+        [TestCase(-1, 4, true, 1, AbsorbFeedbackMath.ScreamLayer)]
+        [TestCase(-1, -1, false, -1, 0)]
+        public void ScreamAddsToRollInWithoutReplacingIt(int rollIn, int scream, bool ready, int slot, int expected)
         {
-            float start = 1f;
-            float audio = start + AbsorbFeedbackMath.AudioWindowSeconds;
-            float haptic = start + AbsorbFeedbackMath.HapticIntervalSeconds;
-            Assert.IsFalse(AbsorbFeedbackMath.IsDue(start + 0.059f, audio));
-            Assert.IsTrue(AbsorbFeedbackMath.IsDue(audio, audio));
-            Assert.IsFalse(AbsorbFeedbackMath.IsDue(audio, haptic));
-            Assert.IsTrue(AbsorbFeedbackMath.IsDue(haptic, haptic));
+            Assert.AreEqual(expected, AbsorbFeedbackMath.PlaybackLayers(rollIn, scream, ready, slot));
         }
 
         [Test]
-        public void ClusterPrefersSpecialThenSizeThenFirstArrival()
+        public void ScreamCooldownIsSharedByVariantsButIndependentOfOtherIds()
         {
-            Assert.IsTrue(AbsorbFeedbackMath.PreferAudioClass(0, 0, 0, 0, 0));
-            Assert.IsTrue(AbsorbFeedbackMath.PreferAudioClass(1, 0, 2, 1, 0));
-            Assert.IsTrue(AbsorbFeedbackMath.PreferAudioClass(2, 1, 0, 2, 1));
-            Assert.IsFalse(AbsorbFeedbackMath.PreferAudioClass(3, 2, 1, 3, 1));
-            Assert.IsFalse(AbsorbFeedbackMath.PreferAudioClass(4, 2, 1, 0, 2));
+            int[] ids = { 0, 0, 0, 12, 12, 13, 18, 18 };
+            int first = AbsorbFeedbackMath.FirstScreamClip(ids, 12);
+            int different = AbsorbFeedbackMath.FirstScreamClip(ids, 13);
+            Assert.AreEqual(3, first);
+            Assert.AreEqual(5, different);
+            Assert.AreEqual(-1, AbsorbFeedbackMath.FirstScreamClip(ids, 0));
+            Assert.AreEqual(-1, AbsorbFeedbackMath.FirstScreamClip(ids, 14));
+            Assert.AreEqual(-1, AbsorbFeedbackMath.FirstScreamClip(ids, 20));
+
+            float start = 5f;
+            float[] deadlines = new float[ids.Length];
+            deadlines[first] = AbsorbFeedbackMath.NextScreamTime(start);
+            Assert.IsFalse(AbsorbFeedbackMath.IsDue(start + 89f / 30f, deadlines[first]));
+            Assert.IsTrue(AbsorbFeedbackMath.IsDue(start + 90f / 30f, deadlines[first]));
+            Assert.IsTrue(AbsorbFeedbackMath.IsDue(start, deadlines[different]));
+        }
+
+        [TestCase(false, false, 0)]
+        [TestCase(false, true, 0)]
+        [TestCase(true, false, 1)]
+        [TestCase(true, true, -1)]
+        public void AtMostTwoScreamsCanPlay(bool firstBusy, bool secondBusy, int expected)
+        {
+            Assert.AreEqual(2, AbsorbFeedbackMath.ScreamVoiceCount);
+            Assert.AreEqual(expected, AbsorbFeedbackMath.FreeScreamSlot(firstBusy, secondBusy));
         }
 
         [Test]
@@ -79,7 +89,7 @@ namespace VRCKatamari.Tests.EditMode.Pickup
         }
 
         [Test]
-        public void ConsecutiveClustersNeverReplayTheSameClip()
+        public void ConsecutiveRollInsNeverReplayTheSameVariant()
         {
             for (int count = 2; count <= 4; count++)
             {

@@ -249,7 +249,7 @@ namespace VRCKatamari.Editor.Hub
             AssembleRide(lines, problems);
             CheckRideVrInput(output, problems);
             if (problems.Count > 0) return Finish(lines, problems, hc, output);
-            AssembleAbsorbFeedback(output, data, hc, lines, problems);
+            AssembleAbsorbFeedback(output, levelSwitch, data, hc, lines, problems);
             if (problems.Count > 0) return Finish(lines, problems, hc, output);
 
             // ---- GPU instancing on the repeated prop materials ----
@@ -312,8 +312,8 @@ namespace VRCKatamari.Editor.Hub
 
         // ------------------------------------------------------------ local pickup feedback ---
 
-        private static void AssembleAbsorbFeedback(Scene output, List<LevelData> levels,
-            HubAssembler.Counters hc, List<string> lines, List<string> problems)
+        private static void AssembleAbsorbFeedback(Scene output, LevelSwitchHost levelSwitch,
+            List<LevelData> levels, HubAssembler.Counters hc, List<string> lines, List<string> problems)
         {
             var ball = IslandImport.FirstIn<KatamariBallMotor>(output);
             var ride = IslandImport.FirstIn<BallRideStation>(output);
@@ -344,7 +344,7 @@ namespace VRCKatamari.Editor.Hub
             var voices = new AudioSource[AbsorbFeedbackMath.VoiceCount];
             for (int i = 0; i < voices.Length; i++)
             {
-                string slotName = "Voice" + (i + 1);
+                string slotName = i == 0 ? "RollIn" : "Scream" + i;
                 Transform slot = anchor.Find(slotName);
                 if (slot == null)
                 {
@@ -365,57 +365,68 @@ namespace VRCKatamari.Editor.Hub
             }
 
             var clips = new List<AudioClip>();
-            var classes = new List<int>();
+            var screamIds = new List<int>();
+            var rollInStarts = new int[levels.Count];
+            var rollInCounts = new int[levels.Count];
             var missingClips = new List<string>();
-            int expectedClips = 0;
-            // Never serialize a reference clip into a tracked output, even if the local
-            // manifest and WAV files happen to be installed on this machine.
+            int rollInClips = 0;
+            // 不把原作音频引用写进正式场景。
             if (HubLevelCatalog.IsUnderRefUnlicensed(output.path))
             {
                 var map = ReferenceAbsorbAudio.Load(out string note);
                 if (note != null) Line(lines, "note: absorb feedback: " + note);
                 if (map != null)
                 {
-                    foreach (var group in map.groups)
-                    foreach (string wav in group.wavs)
+                    var groupStarts = new Dictionary<string, int>(StringComparer.Ordinal);
+                    var groupCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+                    foreach (var group in map.rollInGroups)
                     {
-                        expectedClips++;
-                        AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(
-                            ReferenceAbsorbAudio.ClipAssetFolder + wav);
-                        if (clip == null)
-                        {
-                            missingClips.Add(wav);
-                            continue;
-                        }
-                        clips.Add(clip);
-                        classes.Add(group.soundClass);
+                        groupStarts.Add(group.id, clips.Count);
+                        groupCounts.Add(group.id, AddAbsorbClips(group.wavs, 0, clips, screamIds, missingClips));
                     }
+                    rollInClips = clips.Count;
+                    for (int i = 0; i < levels.Count; i++)
+                    {
+                        string levelId = levels[i].Entry.id;
+                        var level = ReferenceAbsorbAudio.FindLevel(map, levelId);
+                        string groupId = level == null ? map.defaultRollInGroup : level.rollInGroup;
+                        rollInStarts[i] = groupStarts[groupId];
+                        rollInCounts[i] = groupCounts[groupId];
+                        Line(lines, "absorb feedback: level=" + levelId + " rollInGroup=" + groupId
+                            + " variants=" + rollInCounts[i] + (level == null ? " (default)" : ""));
+                    }
+                    // 二分查找要求正编号升序、同号变体连续。
+                    Array.Sort(map.screams, (a, b) => a.screamId.CompareTo(b.screamId));
+                    foreach (var scream in map.screams)
+                        AddAbsorbClips(scream.wavs, scream.screamId, clips, screamIds, missingClips);
                 }
             }
             else Line(lines, "note: absorb feedback: clips omitted from non-reference output");
-            // A missing local WAV is not a problem: the host stays silent for that class, and
-            // the note names the files so the operator can copy exactly them next time.
             if (missingClips.Count > 0)
-                Line(lines, "note: absorb feedback: " + missingClips.Count + "/" + expectedClips
+                Line(lines, "note: absorb feedback: " + missingClips.Count + "/" + (clips.Count + missingClips.Count)
                     + " local clip(s) not imported under " + ReferenceAbsorbAudio.ClipAssetFolder
                     + ": " + string.Join(", ", missingClips.ToArray()));
-            else if (expectedClips > 0)
-                Line(lines, "note: absorb feedback: local clips loaded " + clips.Count + "/"
-                    + expectedClips);
 
             var so = new SerializedObject(feedback);
             HubAssembler.SetObject(so, "ride", ride, hc);
             HubAssembler.SetObject(so, "settings", settings, hc);
+            HubAssembler.SetObject(so, "levelSwitch", levelSwitch, hc);
             HubAssembler.SetObjectArray(so, "voices", voices, hc);
-            HubAssembler.SetObjectArray(so, "clips", clips.ToArray(), hc);
-            HubAssembler.SetIntArray(so, "clipClasses", classes.ToArray(), hc);
+            AudioClip[] clipTable = clips.ToArray();
+            int[] screamIdTable = screamIds.ToArray();
+            HubAssembler.SetObjectArray(so, "clips", clipTable, hc);
+            HubAssembler.SetIntArray(so, "clipClasses", screamIdTable, hc);
+            HubAssembler.SetIntArray(so, "rollInStarts", rollInStarts, hc);
+            HubAssembler.SetIntArray(so, "rollInCounts", rollInCounts, hc);
             so.ApplyModifiedProperties();
             if (!CopyFeedbackProxy(feedback, problems)) return;
 
             int linked = 0;
+            int pickupFields = 0;
             foreach (LevelData row in levels)
             {
                 if (row.Pickup == null) continue;
+                pickupFields++;
                 var field = new SerializedObject(row.Pickup);
                 HubAssembler.SetObject(field, "absorbFeedback", feedback, hc);
                 field.ApplyModifiedProperties();
@@ -425,13 +436,34 @@ namespace VRCKatamari.Editor.Hub
             }
             bool readBack = FeedbackReferenceMatches(feedback, "ride", ride)
                 && FeedbackReferenceMatches(feedback, "settings", settings)
+                && FeedbackReferenceMatches(feedback, "levelSwitch", levelSwitch)
                 && FeedbackArrayMatches(feedback, "voices", voices)
-                && FeedbackArrayMatches(feedback, "clips", clips.ToArray())
-                && FeedbackArrayMatches(feedback, "clipClasses", classes.ToArray());
+                && FeedbackArrayMatches(feedback, "clips", clipTable)
+                && FeedbackArrayMatches(feedback, "clipClasses", screamIdTable)
+                && FeedbackArrayMatches(feedback, "rollInStarts", rollInStarts)
+                && FeedbackArrayMatches(feedback, "rollInCounts", rollInCounts);
             if (!readBack) problems.Add("AbsorbFeedbackHost backing Udon references or clip table did not read back");
-            Line(lines, "absorb feedback: voices=" + voices.Length + " clips=" + clips.Count
-                + " linked pickup fields=" + linked + "/" + levels.Count
+            Line(lines, "absorb feedback: voices=" + voices.Length + " rollInClips=" + rollInClips
+                + " screamClips=" + (clips.Count - rollInClips)
+                + " linked pickup fields=" + linked + "/" + pickupFields
                 + " Udon read-back=" + (readBack ? "verified" : "MISMATCH"));
+        }
+
+        private static int AddAbsorbClips(string[] wavs, int screamId, List<AudioClip> clips,
+            List<int> screamIds, List<string> missingClips)
+        {
+            int start = clips.Count;
+            foreach (string wav in wavs)
+            {
+                AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(ReferenceAbsorbAudio.ClipAssetFolder + wav);
+                if (clip == null) missingClips.Add(wav);
+                else
+                {
+                    clips.Add(clip);
+                    screamIds.Add(screamId);
+                }
+            }
+            return clips.Count - start;
         }
 
         private static bool CopyFeedbackProxy(UdonSharpBehaviour proxy, List<string> problems)

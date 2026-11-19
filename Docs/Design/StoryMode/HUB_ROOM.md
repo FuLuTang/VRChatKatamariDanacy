@@ -33,7 +33,7 @@
 | 选关板 · 提示行 / 制作信息 | 怎么开始（桌面左键 / VR 扳机）；底部一行「粉丝制作、与官方无关」 | 本轮 |
 | 怎么玩板 | 五条规则：滚动吸附、比球小才能吸、越滚越大、限时与自动结算、8 秒后回大厅、菜单 Respawn = 放弃回大厅 | 本轮 |
 | 怎么玩板 · 操作 | VR 与桌面两栏：移动（随所选 VR 操作方式换文案）、冲刺（VR 长按左扳机、桌面长按 Shift，蓄满自动冲出）、道具 = Jump、下车 = 按住 Jump 1.5 秒、选择方式 | 文案与运行时键位一致；动作规则见 [冲刺](../ControlIntent/README.md#冲刺wlk-规则与长按适配) |
-| 设置板 | 12 行，每行 ◀ 值 ▶，改了自动保存 | 推进方向箭头的第 12 行待更新 Prefab；见下表 |
+| 设置板 | 14 行，每行 ◀ 值 ▶，改了自动保存 | 第 12 行已在 Prefab；第 13、14 行（吸物显示名字、显示物理）待 Unity 加行；见下表 |
 | 后续 | 收藏/图鉴、玩家外观、成就、排行榜、教程关、多人房间 | 后续 |
 
 设置项（`HubSettingsMath` id 顺序；档位与默认值即代码常量）：
@@ -51,7 +51,9 @@
 | 8 | 低特效 | 关/开 | 视效读 `IsLowEffects()` | 待接 |
 | 9 | 减弱自动转向 | 关/开 | 跟随镜头/骑乘视角读 `IsReduceAutoRotate()` | 待接 |
 | 10 | 语言 简体中文 / English / 日本語 | 无存档时按客户端语言（`VRCPlayerApi.GetCurrentLanguage`：ja→日、zh→中、其他→英） | 三块板与提示行 | 本轮 |
-| 11 | 推进方向箭头 | 关 / 开，默认开 | `PushDirectionCue` 读 `IsPushCueEnabled()`；`vrck.set.pushCue` | 代码已接，面板 Prefab 待新增一行 |
+| 11 | 推进方向箭头 | 关 / 开，默认开 | `PushDirectionCue` 读 `IsPushCueEnabled()`；`vrck.set.pushCue` | 已接，面板有行 |
+| 12 | 显示吸到的东西 | 关 / 开，默认开 | `CatchNameDisplay` 读 `IsCatchNameEnabled()`；`vrck.set.catchName` | 代码已接，面板 Prefab 待新增一行 |
+| 13 | 显示物理（碰撞线框） | 关 / 开，默认关 | `CollisionWireframe` 轮询设置；只本地 | 代码已接，面板 Prefab 待新增一行 |
 
 板上每一行都能调、能保存，不对玩家显示「待接」；哪些还没有消费方只记在本表和 `HubSettingsMath.HasConsumer`（接上一个就把对应 id 改成 true，两处同步）。消费方接法二选一：在 Inspector 里加进 `HubSettingsHost.listeners`（收到 `OnHubSettingsChanged` 自定义事件后读 getter），或在需要用到设置时比较 `GetRevision()`。VR 摇杆用后者：`VrStickMoveInput.settings` 引用本大厅的设置宿主，第一帧有效 VR 输入与修订号变化时读三项，不注册 listener；因此在输入门关闭时调设置或恢复存档，也不会漏掉更新。PlayerData 键 `vrck.set.*`、`vrck.rec.<levelId>.{bestD,bestN,lastD,lastN,plays}` 一经发布不再改名（平台不能删键）。
 

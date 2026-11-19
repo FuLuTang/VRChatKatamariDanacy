@@ -1,60 +1,25 @@
 # 吸附音效与手柄振动
 
-## 现行设计
+## 播放规则
 
-`PickupFieldHost` 每帧沿现有绝对游标消费电机的确认事件环，然后才扫描下一批候选。不另读环、不从碰撞或拒绝产生反馈。只把本字段正在收集的新确认项交给本地球的 `AbsorbFeedbackHost`；即使视觉附着失败，确认项也给反馈。未骑乘、正在下车、回合停止收集、重试和切关均不保留待播簇。不发网络事件，不影响账本。
+`PickupFieldHost` 消费电机确认事件环，把本字段正在收集的新确认交给球上的 `AbsorbFeedbackHost`。碰撞、拒绝和重复读取不触发；视觉附着失败不撤销确认反馈。反馈只在本地骑乘时播放，不发网络事件，不影响账本。
 
-音效从首件起开 60 ms 窗口，到期播放一次；有可用片段的特殊类优先于默认，同为特殊则保留更大尺寸档（同档取最早）。缺片段的特殊类用默认组；同组有多个不同片段时，用独立本地随机序列排除上次实际播放的片段。四个挂在球根上的 2D 音源各独占一个声部，满时丢新声而不叠加、抢占。件数系数从 0.18 起每件加 0.02，四件封顶 0.24，再乘音效音量；0 会停止已播放的吸附音。2D 是本地验证阶段的选择，不是原作空间化结论。
+**卷入音**按当前关卡选组。每个确认立即用 `PlayOneShot` 发出一次独立播放请求，不合并，不等待上一段播完。组内随机，有多个片段时排除上一个实际播放的片段。**物件叫声**按物件编号查音频，有可用片段才叠加；同编号的所有变体共用 3 秒冷却（WLK 的 90 个 30 Hz 逻辑帧），从实际发起播放时起算。最多两路叫声，各自占一个音源；忙时丢新叫声，不排队、不抢占，也不影响卷入音。存在多个可用叫声片段时在组内随机选，不推断文件名后缀含义。
 
-触觉不等音频窗口。每帧末可向本地正在骑乘的 VR 玩家两手各发一次；每手最短间隔 80 ms，间隔内取最大尺寸档，不叠加。道具自身三边乘积的立方根除以球语义直径，按 0.15、0.30 两个断点分档（20/28/35 ms、强度 0.20/0.27/0.35，频率参数固定 0.5）。设置为关/弱/标准时强度乘 0/0.5/1；桌面不发调用。未绑定设置宿主时，音效 0.8、振动标准。参数均为待试玩的项目值；API 见 [VRChat Player API](https://creators.vrchat.com/worlds/udon/players/#playhapticeventinhand)。
+两层都是本地 2D，名义增益各 0.18，再乘音效设置；音效音量为 0 时停播。增益、声像和卷入音不连续重复是项目试听策略，不是原作实测。下车、停止收集、重试、切关时停止旧声，清掉叫声冷却和上一次卷入片段；会话累计计数保留。依据是 WLK REROLL+ Royal Reverie（2023）的 `YdSeMakiData`、`gYd_SeGmReq_Makikomi`、`MonoInfo.u16Scream` 和 `sScreamTimeCheck`。水下等特殊玩法卷入音、碰到但未吸起时的叫声不在本实现范围。
 
-设置每帧只比一次 `HubSettingsHost.GetRevision()`，变了才重读 `GetEffectsVolume01()` / `GetHaptics01()`；没有设置宿主时用 0.8 与标准档。骑乘结束（下车、重试、切关、回合停止收集）打一条 `[absorb-feedback] confirmed=… audioClusters=… audioPlayed=… poolDrops=… hapticPulses=…`，便于操作员对照；计数是本次会话累计，重开不清零，重复打同一组数会跳过。
+触觉保持独立：每帧末向本地正在骑乘的 VR 玩家两手各发一次，最短间隔 80 ms，间隔内取最大尺寸档。道具自身三边乘积的立方根除以球语义直径，在 0.15、0.30 分档（20/28/35 ms、强度 0.20/0.27/0.35，频率参数 0.5）。关/弱/标准将强度乘 0/0.5/1，桌面不发调用；未绑定设置宿主时音效 0.8、振动标准。
 
-## 音类数据
+## 数据与导入
 
-导入器在常规拾取字段成功写入后，按已落盘的 `itemIds` 顺序另写 `propAbsorbSoundClasses`；音类不是玩法类别。参考关加入时走 placement `prop.def` → 同目录 `original_defs.json` 的 `defs[].mono` → `name_props_0x30.tsv` 中 `nameIndex` 对应的 `0x19` → 本地允许列表。只有明确列出的非零字节写特殊类；未知、缺本地映射或表时写 0。运行时旧关没有音类列、列长不匹配时也用 0。无数据的构建能装配；没有默认片段时静音，不影响振动和吸附。
+[仓库内样例](<../../../Tools/levelbuild/ref_audio_map.json>) 只用假文件名。编辑器读取系统用户目录下 `KatamariRef/audio/ref_audio_map.json`，格式为 `katamari.ref-absorb-audio/2`：`rollInGroups` 定义卷入音组与 WAV 列表，`defaultRollInGroup` 指定无单独配置关卡所用的组；`screams` 将正整数 `screamId` 对应到 WAV 列表；`levels` 以 `levelId` 指定 `rollInGroup` 和按 `def` 连接的 `propScreams`。WAV 列表内只写不重复的文件名，不写路径；组、关卡、叫声和同一关卡内的 `def` 各自唯一。不同版本的数据应使用彼此不冲突的叫声编号。
 
-[仓库内格式样例](<../../../Tools/levelbuild/ref_audio_map.json>) 只用假文件名，不会被读取。编辑器从操作系统用户目录下的 `KatamariRef/audio/ref_audio_map.json` 读取 `schema` 和 `groups`。每组 `soundClass` 为唯一非负整数；0 必须存在且不填 `selectorHex`；其余组必填非零且互异的十六进制字节（建议两位、不带 `0x`）。`wavs` 是该组非空的 WAV 文件名列表，只写文件名，不写路径。其他字段是给操作员看的说明，不参与处理。改组编号/字节后，要重跑参考关导入和合集装配，避免两边不同步。只有输出本身位于 `Assets/_RefUnlicensed/` 时才给它写入原作片段引用。
+现有参考关导入从 placement 所在目录名查关卡（必须与合集关卡 ID 一致），再由 `prop.def` 查叫声编号，按拾取数组 `itemIds` 的落盘顺序写回。兼容序列化字段 `propAbsorbSoundClasses` 存的实际是叫声编号，0 表示没有叫声；它不是玩法标记。同关同定义共享编号，缺映射只省略叫声。更新叫声编号或物件映射后必须重导入参考关，再装配合集；仅调整关卡组或片段列表则重装配即可。
 
-## 参考音频候选
+合集装配按关卡顺序写卷入组的连续片段区间，再按编号升序写叫声片段。运行时以 `LevelSwitchHost` 的活动关索引取组，无磁盘读取。缺少 WAV 时只跳过缺的片段；整组缺失则该关没有卷入音，另外可用的叫声仍可播。清单缺失或非参考输出不接入原作音频，保留振动。蟹座小院不在 WLK 中，本机给该关分配的 A 组仅供试听；取得初代安可原关实证后改数据，不改运行时代码。
 
-扫描包内 125/125 个 WAV 的 PCM。起音定义为首个超过该文件峰值 10% 的采样点，峰值相对满幅；另用 50 ms RMS 观察包络。峰值不等于听感响度。**整表待 owner 试听，文件后缀不等于已知 soundID。**
+## 仅本地试听
 
-| 用途候选 | 文件名 | 推断依据 |
-|---|---|---|
-| 默认三件组，先试听 | `common1.wav`、`common3.wav`、`common4.wav` | `common` 组仅这三件约 0.11–0.14 s；起音约 19/7/1 ms，峰值 0.92/0.89/0.97。后两件较轻且短衰减，第一件峰值靠后、整段 RMS 约 0.39，比另两件的 0.23/0.27 高，可能不是同类。`common2.wav` 三倍长且有两段明显脉冲，暂不选。 |
-| 默认音的对照组 | `game33.wav`、`game34.wav`、`game35.wav`；`etc09.wav`、`etc10.wav`、`etc11.wav` | 两组时长分别成对同为 0.276/0.291/0.142 s，起音 1–4 ms，50 ms 包络也相近；可能是同组三音的不同变体，也可能是通用 UI 动作。 |
-| 旋转/蓄力 | `game20.wav`、`game23.wav`、`game17.wav` | 约 0.81/0.87/2.15 s；前两件有持续段后增强，第三件长而缓起缓落（起音 24 ms）；先对照旋转是否需要持续声。 |
-| 冲刺释放 | `game28.wav`、`game08.wav` | 约 1.21/0.42 s，均约 2 ms 起音、峰值近满幅，前强后弱；先对照冲出的动作边沿。 |
-| 刹车 | `game06.wav`、`game14.wav` | 约 0.34/0.24 s，约 4/2 ms 起音，峰值近满幅且靠前，拖尾短、逐段减弱。 |
-| 特殊吸附，本地先接 | `voice_184.wav`、`voice_192.wav` | 文件编号与 `B8`、`C0` 的十进制值相合；前者 0.472 s、峰值 0.86、起音 2 ms；后者 1.307 s、峰值 0.96、起音 7 ms，峰值靠后。只凭编号和包络不能认出物种或区分碰撞声。 |
-| 特殊吸附，未接 | `voice_183.wav`、`voice_154.wav`、`voice_164.wav` | `voice_183.wav` 在包内（1.197 s，峰值近满幅，起音 3 ms），但现有两参考关没有 `B7` 实例；其余两个文件不在该包，若另有 Character Voices 包再对照。 |
+从本机清单复制 WAV 到 `Assets/_RefUnlicensed/Audio/`，不复制无关样本。只有输出同样在 `Assets/_RefUnlicensed/` 时才装入原作片段。清单实表、WAV 与引用它们的场景不得入 git 或上传（含私有）；实机测试需要另备获准素材。
 
-## 与原作差异与待验证项
-
-REROLL 的社区转录给普通吸附 `4/5/6`、小车 `446`、自行车 `484`；后两点吻合 `118 + 2 × 0x19` 的假设，不足以推导任意物型、零值和一对相邻 ID 的含义。运行时不使用这个公式、不按图鉴类别配音。也没有原作对短窗、池上限、随机分布、大小/振动档位的证据；这些都是当前实现的本地手感策略。旋转、冲刺、刹车等仅列试听候选，不接入吸附通道。待补正式素材及复核发布场景没有任何参考音频依赖。
-
-## 操作员：只在本地验证
-
-参考音频只用于本地试听：**不进 git、不进正式场景、不上传（含私有）**；可发布场景不得引用 `Assets/_RefUnlicensed/` 下的片段。下面是 Unity 操作员在 owner 的 Windows 工程上要做的步骤；实现者没跑过 Unity，预期读数是静态推导，不是实测。
-
-1. 准备本地参考数据（运行 Unity 的账户）：
-   - 把 Linux 工作区的 `~/KatamariRef/audio/ref_audio_map.json` 复制到 `%USERPROFILE%\KatamariRef\audio\ref_audio_map.json`。
-   - 要验证特殊音类时，再把 `~/KatamariRef/meta/tables/raw_reroll_dump__name_props_0x30.tsv` 复制到 `%USERPROFILE%\KatamariRef\meta\tables\`。
-   - 从素材包只复制 5 个 WAV 到工程 `Assets/_RefUnlicensed/Audio/`：`common1.wav`、`common3.wav`、`common4.wav`（默认组）、`voice_184.wav`（B8，风铃）、`voice_192.wav`（C0，布谷钟）。文件名必须和映射里逐字一致（大小写也算）。不要复制到 `Assets/VRC_Katamari/`，不要提交场景、素材或生成的参考文件。
-2. 让新脚本编进 Udon：确认 `Runtime/Pickup/AbsorbFeedbackHost.cs` 旁边生成了 `AbsorbFeedbackHost.asset`（UdonSharp ProgramAsset），Unity 重新编译 U# 无报错。U# 程序过期时装配器会在 `CopyProxyToUdon` 处给出 `absorb feedback: CopyProxyToUdon threw …`，按提示 compile → save → reopen 再跑。
-3. 重新导入两个参考关（每件道具的音类列在拾取数组落盘后写入）：
-   - 蟹座 v2：`VRC Katamari/Level/Import Placement (LevelContent)` 或等效入口。预期行 `propAbsorbSoundClasses on '<host>': 10/510 special rows, Udon read-back verified`（9 个风铃 = 类 1，1 个布谷钟 = 类 2；511 个文档实例里 `sparrow_001` 是无代理贴花、不成行）。
-   - MAS1 v1：预期 `2/648 special rows, Udon read-back verified`（`cuckoo` 与 `cuckoo_clock` 的 `0x19` 都是 C0）。
-   - 没装映射、或不在参考关时预期 `0/<行数> special rows`，仍必须有 `Udon read-back verified`；回读失败会打 `error: absorb audio: …`，不是静默降级。
-4. 重跑 `VRC Katamari/Hub/Assemble All-Maps Hub`（它自己装配骑乘和吸附反馈，不必另跑 Ride UX）。跑前保存并关闭输出场景 `Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`（装配器拒绝在未保存场景上跑）。预期日志 `absorb feedback: voices=4 clips=5 linked pickup fields=N/N Udon read-back=verified`；分母是合集里的关数，分子是其中成功接上反馈的关（没有拾取字段的关不计数）。参考音频缺失时是 `clips=0` 加一条 `note: absorb feedback: …`（说明映射缺失或列出没导入的 WAV 文件名），**不是 PROBLEM**；只有接线或 Udon 回读失败才进 PROBLEM。
-5. Editor/ClientSim 桌面检查（桌面不应发震动）。**在装配出的 `AllMapsHub` 场景里 Play**：反馈宿主是合集装配器建的，单独导入的关卡场景没有它，不会出声也不会震。骑上球吸一件后下车或结束回合，Console 出现 `[absorb-feedback] confirmed=1 audioClusters=1 audioPlayed=1 poolDrops=0 hapticPulses=0`（读两条日志的差；计数器是会话累计）：
-   - 音效音量 0 或没有可用片段时 `audioClusters` 仍增长、`audioPlayed` 不增长。
-   - 撞不可吸物、被拒绝的候选：五个数都不增长。
-   - 密集扫蟹群：`confirmed` 等于实际确认件数，`audioPlayed` 明显小于它（60 ms 合并），`poolDrops` 只在 4 个声部都忙时增长。
-   - 重试、下车、切关后没有旧声；把音效音量调到 0 后不再有新播放，调回恢复。
-6. VR 真机另开获准环境测（不能含未授权素材）：单件应有短脉冲；`hapticPulses` 计调用次数、不随档位变，强度按关/弱/标准缩放；桌面模式 `hapticPulses=0`。ClientSim 与 API 计数不能代替触感实测。
-
-## Owner：试听清单
-
-先盲听默认候选与对照组，再与原作同一普通物型多次吸附的录音或播放日志比对；记录文件名、原作版本、关卡、动作和时间点。风铃及布谷钟各单独测一次，分开记录“撞”和“卷入”；自行车、小车、螃蟹另用能吸到它们的原作关卡测试（蟹座没有可吸的 Transport，Minivan 在本关文件里标不可吸）。用密集道具听音量和节奏，尤其注意合并后是否还能听到特殊声、60 ms 是否显迟；再对照原作旋转、冲刺释放和连刹录音。VR 验证关/弱/标准和分档，只在明确实际发震时记设备结果；听感和震动都以真实 PCVR 为准。
+重编 UdonSharp 并确认程序资产可用，重导入蟹座参考 placement 后保存，再跑 `VRC Katamari/Hub/Assemble All-Maps Hub`。确认音效装配报告的两层片段数、各关组、拾取字段连接和 `Udon read-back=verified`。在装配后的 `AllMapsHub` 测反馈；单独参考关没有这个合集宿主。结束骑乘后看 `[absorb-feedback]` 日志的会话累计差值：`confirmed`、`rollInPlayed`、`screamPlayed`、`screamDuplicates`、`screamPoolDrops`、`hapticPulses`。素材齐备且音效未静音时，桌面单吸普通物件应只增确认和卷入；单吸有编号的物件应再增一个叫声。3 秒内连吸两件同编号物件，确认和卷入各增 2，叫声和去重各增 1（初始无冷却且有空槽时）。桌面振动计数应为 0，实际触感仍需 VR 复测。

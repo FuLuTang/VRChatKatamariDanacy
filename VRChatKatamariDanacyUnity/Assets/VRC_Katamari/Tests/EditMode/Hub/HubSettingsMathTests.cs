@@ -94,7 +94,8 @@ namespace VRCKatamari.Tests
                 bool expected = id == HubSettingsMath.ControlMode || id == HubSettingsMath.SwapHands
                     || id == HubSettingsMath.Deadzone || id == HubSettingsMath.TurnSensitivity
                     || id == HubSettingsMath.Language || id == HubSettingsMath.EffectsVolume
-                    || id == HubSettingsMath.Haptics || id == HubSettingsMath.PushCue;
+                    || id == HubSettingsMath.Haptics || id == HubSettingsMath.PushCue
+                    || id == HubSettingsMath.CatchName || id == HubSettingsMath.CollisionWireframe;
                 Assert.AreEqual(expected, HubSettingsMath.HasConsumer(id), "id " + id);
             }
         }

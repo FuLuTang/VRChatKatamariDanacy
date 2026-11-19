@@ -1,7 +1,18 @@
 {
-  "schema": "katamari.ref-absorb-audio/1",
-  "groups": [
-    { "soundClass": 0, "wavs": ["example_pickup_a.wav", "example_pickup_b.wav", "example_pickup_c.wav"] },
-    { "soundClass": 1, "selectorHex": "01", "wavs": ["example_special.wav"] }
+  "schema": "katamari.ref-absorb-audio/2",
+  "defaultRollInGroup": "example_a",
+  "rollInGroups": [
+    { "id": "example_a", "wavs": ["example_pickup_a1.wav", "example_pickup_a2.wav", "example_pickup_a3.wav"] },
+    { "id": "example_b", "wavs": ["example_pickup_b1.wav", "example_pickup_b2.wav", "example_pickup_b3.wav"] }
+  ],
+  "screams": [
+    { "screamId": 101, "wavs": ["example_scream_a.wav", "example_scream_b.wav"] }
+  ],
+  "levels": [
+    {
+      "levelId": "_ref_example",
+      "rollInGroup": "example_b",
+      "propScreams": [{ "def": "example_prop", "screamId": 101 }]
+    }
   ]
 }

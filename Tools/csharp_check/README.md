@@ -1,27 +1,32 @@
 # csharp_check — 不经过 Unity Editor 的 C# 编译检查
 
-在 Linux 上把 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/` 的 C# 编译一遍，输出和 Unity
-Console 同形的 `文件(行,列): error CSxxxx: 消息`，有错退出码非 0。用于实现者交付前自测，
-省掉 Unity 操作员那一轮。
+在 `pc114514` 的隔离工作树中编译 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`，输出和 Unity
+Console 同形的 `文件(行,列): error CSxxxx: 消息`，并可接着跑不需要引擎的 NUnit 测试。
+Linux 工作机只打包和传输；不要在这台机器直接跑编译或 NUnit。
 
 - `check.py` 只查 **C# 编译**。UdonSharp 的语言子集、场景/prefab/Udon 程序编译都不在范围内
   （见[盲区](#盲区)）。EditMode 测试里不依赖引擎的那一批可以用同目录的
-  [`run_tests.py`](#run_testspy--在本机直接跑不依赖引擎的-nunit-测试) 直接执行。
+  [`run_tests.py`](#run_testspy--不依赖引擎的-nunit-测试底层入口) 直接执行。
 - 不启动、不连接 Unity Editor，不改工程目录里的任何文件；不装任何东西到系统（本地 .NET SDK
   装在 `~/.dotnet`，引用 DLL 和 Roslyn 放在 `~/.cache/vrc-katamari-refasm/`，都在仓库外）。
 
-## 一条命令
+## 一条命令（从 Linux 发起，在 Windows 执行）
 
 ```bash
-python3 Tools/csharp_check/check.py
+python3 Tools/csharp_check/remote_gate.py               # 编译四个程序集，再跑全部纯托管测试
+python3 Tools/csharp_check/remote_gate.py --check-only  # 只编译
+python3 Tools/csharp_check/remote_gate.py --filter Ramp # 编译后，只跑全名含片段的用例（可重复，取并集）
 ```
 
-首次运行会自动：探测 Windows 上的 Unity → 把引用 DLL 和 Unity 版 Roslyn 取到本地缓存 →
-（若本机没有）用官方 `dotnet-install.sh` 把 .NET SDK 8 装到 `~/.dotnet`。需要能
-`ssh pc114514`；下载约 210 MB（SDK）+ 21 MB（Roslyn）+ 65 MB（引用 DLL，从 Windows 拷回）。
-之后每次检查不再联网。实测冷启动约 25 秒（SDK 已装时；装 SDK 另需几分钟，取决于网速）。
+入口用二进制 Git 补丁和未跟踪普通文件打包当前工作区（不含忽略文件和 owner 专用的 `ProjectSettings.asset`），经 SSH 上传。Windows 在 `D:\VRChatKatamariDanacy\.work\gate\checkout\` 建立并复用 detached worktree；只清理这个副本，不写 Unity 工程，不 push、不改 origin。Windows 主仓库缺少 Linux HEAD 才向 origin 按 SHA 抓取；Linux 独有且远端未发布的提交不会自动上传。两端暂存均放仓库根 `.work/gate/`，每次传输包结束后删除，Windows 的引用清单、NUnit 和构建缓存留在 `.work/gate/cache/`。并行调用共享一个远端锁；占用时请稍后重试。
 
-常用参数：
+Windows 使用现成的 Git、Python 3.12、.NET SDK 和 .NET 8 运行时，首跑可能需要从 NuGet 拉 NUnit 和目标框架包。每次只读 Unity 生成的四套 `.csproj` 取得宏和引用路径，直接读 Unity 安装目录、Packages、Library／ScriptAssemblies 的 DLL，不拷 DLL 回 Linux，也不需要 RaiDrive。Windows 的 `check.py` 使用 Unity 自带 Roslyn；`run_tests.py` 使用同一个引用清单，但普通测试宿主固定在 .NET 8。远端 stdout/stderr 直接回传，结论不改写；退出码 `0` 通过，`1` 编译错误或测试失败，`2` 闸门工具失败；SSH 断开时以 SSH 自己的状态退出（通常 `255`）。先编译，编译失败不跑测试。
+
+快照包含其他代理尚未提交的文件；并发修改不会被阻止，也不保证所有文件来自同一瞬间。Windows 不兼容文件名、Git 补丁冲突、未发布 HEAD 会停止，不会悄悄换成别的版本。
+
+## 底层 `check.py` 参数
+
+以下是单独调用 `check.py` 的参数，不是 `remote_gate.py` 的参数。不要在当前 Linux 工作机直接调用底层编译器。
 
 | 参数 | 作用 |
 | --- | --- |
@@ -56,11 +61,13 @@ asmdef**（asmdef 只在 `Editor/MapGreybox/`），它们属于 Unity 的默认 
 Tests；互不依赖的单元并行编译。Runtime 编译失败时，依赖它的单元会被标成 `skipped`，
 不产生级联噪声（和 Unity 的行为一致）。
 
-## 两条路线
+## 底层检查后端
 
-两条都实现、都验证过；默认走 `local`，因为不依赖 Windows 在线，结果也完全一致。
+`remote_gate.py` 把工作区同步到 Windows 后，在 Windows 上调用 `check.py` 的 `local` 后端。这里的 `local` 指脚本进程所在机器；不是让 Linux 工作机编译。
 
-### local（默认）
+### local（底层默认）
+
+Windows 原地调用使用 `.csproj` 指定的绝对 DLL 路径和 Unity 自带的 Roslyn，不生成 DLL 镜像。以下是旧的 Linux 原地后端，用于理解历史结果，不是当前工作机的执行路线。
 
 1. 从 Windows 的 Unity 工程读 Unity 生成的 `*.csproj`：每个 assembly 的 `DefineConstants`、
    `<Reference>` 的 DLL 绝对路径、`<ProjectReference>`（换成 `Library/ScriptAssemblies/*.dll`）。
@@ -105,7 +112,9 @@ Tests；互不依赖的单元并行编译。Runtime 编译失败时，依赖它�
 
 检查的是工作树；检查时若有别的实现者正在改代码，结果会包含他们未提交的状态（用 `git archive` 取出提交再查可避免）。
 
-## run_tests.py — 在本机直接跑不依赖引擎的 NUnit 测试
+## run_tests.py — 不依赖引擎的 NUnit 测试底层入口
+
+下面的命令仅供在已同步的 Windows 闸门副本中调试，正常从 Linux 发起请用 `remote_gate.py`。Windows 从 `PATH` 找 `dotnet.exe`（或用 `VRCK_DOTNET_ROOT` 指定目录）；SDK 可比 8 新，测试进程只在 .NET 8.0 系列内选补丁版本。
 
 ```bash
 python3 Tools/csharp_check/run_tests.py                       # 全部能跑的

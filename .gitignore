@@ -201,3 +201,8 @@ Thumbs.db
 !/Tools/csharp_check/test_runner/test_runner.csproj
 /Tools/csharp_check/test_runner/bin/
 /Tools/csharp_check/test_runner/obj/
+
+# Local work area for generated or temporary files (gate copies, Unity pulls, test
+# XML, screenshots). Everything an agent produces outside the tracked tree goes here,
+# never to a drive root or scattered temp folders.
+/.work/

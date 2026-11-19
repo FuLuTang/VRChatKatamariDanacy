@@ -3534,6 +3534,7 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             SyncAbsorbAudio(host, doc, referencePlacementPath, report);
+            SyncCatchNames(host, doc, referencePlacementPath, report);
 
             report.Note("pickup sync wrote " + sync.PropCount + " row(s) into 8 base columns " +
                         "(+ the optional proxy columns), including propGrowthMm3 (the authored " +

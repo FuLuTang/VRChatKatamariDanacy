@@ -216,6 +216,7 @@ namespace VRCKatamari.Editor.Story
                 AssembleStationLinks(station, motor, ballInteract, panel, hint, rigRoot, panels, c);
                 NormalizePanelLayers(panels, c);
                 AssemblePushCue(rigRoot, station, round, c);
+                AssembleCatchName(station, round, c);
             }
 
             CopyAllToUdon(c);
@@ -493,6 +494,236 @@ namespace VRCKatamari.Editor.Story
             c.Proxies.Add(cue);
             c.Notes.Add("push cue is scene-rooted; local settings "
                 + (settings == null ? "absent (default on)" : "wired"));
+        }
+
+        // ---------------------------------------------------------------- catch name ---
+
+        // 「刚吸到的东西」HUD（CATCH_NAME_HUD.md）：与推进箭头同为场景根独立物体，只接线、
+        // 缺什么建什么。圆底用内置 UI 圆形精灵，小模型槽位不带网格（运行时借用被吸物件的
+        // sharedMesh/sharedMaterials），不新建网格、材质或相机。吸到瞬间的线默认不建。
+        private const string CatchHudName = "CatchNameHud";
+        private const string CatchModelPivotName = "ModelPivot";
+        private const int CatchModelSlots = 4;
+        private const float CatchCanvasUnits = 100f;
+        private const string CatchFontPath = "Assets/VRC_Katamari/Art/Hub/Fonts/HubPanelSans SDF.asset";
+
+        private static void AssembleCatchName(BallRideStation station, StoryRoundController round,
+            Counters c)
+        {
+            var scene = station.gameObject.scene;
+            CatchNameDisplay display = null;
+            foreach (var candidate in UnityEngine.Object.FindObjectsOfType<CatchNameDisplay>(true))
+            {
+                if (candidate.gameObject.scene != scene) continue;
+                if (display != null)
+                {
+                    c.Problems.Add("more than one CatchNameDisplay in the ride scene; none changed");
+                    return;
+                }
+                display = candidate;
+            }
+            if (display == null)
+            {
+                c.Notes.Add("no authored CatchNameDisplay in the ride scene");
+                return;
+            }
+
+            HubSettingsHost settings = null;
+            foreach (var candidate in UnityEngine.Object.FindObjectsOfType<HubSettingsHost>(true))
+            {
+                if (candidate.gameObject.scene != scene) continue;
+                if (settings != null)
+                {
+                    c.Problems.Add("more than one HubSettingsHost in the ride scene; catch name left untouched");
+                    return;
+                }
+                settings = candidate;
+            }
+
+            Transform root = display.transform;
+            if (root.parent != null)
+            {
+                Undo.SetTransformParent(root, null, "Detach the catch-name HUD");
+                c.Changed++;
+            }
+            if (root.localScale != Vector3.one)
+            {
+                Undo.RecordObject(root, "Keep the catch-name HUD in world metres");
+                root.localScale = Vector3.one;
+                c.Changed++;
+            }
+
+            Transform hud = root.Find(CatchHudName);
+            if (hud == null) hud = BuildCatchHud(root, c);
+            Transform pivot = hud.Find(CatchModelPivotName);
+            var filters = pivot != null ? pivot.GetComponentsInChildren<MeshFilter>(true) : new MeshFilter[0];
+            var renderers = new MeshRenderer[filters.Length];
+            for (int i = 0; i < filters.Length; i++) renderers[i] = filters[i].GetComponent<MeshRenderer>();
+            TMPro.TextMeshProUGUI shortText = FindTmp(hud, "ShortName");
+            TMPro.TextMeshProUGUI longText = FindTmp(hud, "LongName");
+            if (pivot == null || filters.Length == 0 || shortText == null || longText == null
+                || Array.IndexOf(renderers, null) >= 0)
+            {
+                c.Problems.Add(CatchHudName + " lacks ModelPivot slots or ShortName/LongName texts;"
+                    + " delete it and run the assembly again");
+                return;
+            }
+            if (hud.gameObject.activeSelf)
+            {
+                Undo.RecordObject(hud.gameObject, "Hide the catch-name HUD until riding");
+                hud.gameObject.SetActive(false);
+                c.Changed++;
+            }
+
+            var so = new SerializedObject(display);
+            bool changed = SetObject(so, "rideStation", station, c);
+            changed |= SetObject(so, "roundController", round, c);
+            changed |= SetObject(so, "settings", settings, c);
+            changed |= SetObject(so, "hudRoot", hud, c);
+            changed |= SetObject(so, "modelPivot", pivot, c);
+            changed |= SetObject(so, "shortNameText", shortText, c);
+            changed |= SetObject(so, "longNameText", longText, c);
+            changed |= SetObjectArray(so, "modelFilters", filters, c);
+            changed |= SetObjectArray(so, "modelRenderers", renderers, c);
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(display);
+            int hosts = WireCatchNameHosts(display, scene, c);
+            c.Notes.Add("catch-name HUD is scene-rooted with " + filters.Length + " model slots; local settings "
+                + (settings == null ? "absent (default on)" : "wired") + "; pickup hosts wired " + hosts);
+        }
+
+        // 每个道具宿主的 catchNameDisplay 指向同一个 HUD。宿主还没有这个字段时只记一条说明。
+        private static int WireCatchNameHosts(CatchNameDisplay display, UnityEngine.SceneManagement.Scene scene,
+            Counters c)
+        {
+            int wired = 0;
+            foreach (var host in UnityEngine.Object.FindObjectsOfType<VRCKatamari.Pickup.PickupFieldHost>(true))
+            {
+                if (host.gameObject.scene != scene) continue;
+                var hostSo = new SerializedObject(host);
+                SerializedProperty field = hostSo.FindProperty("catchNameDisplay");
+                if (field == null)
+                {
+                    c.Notes.Add("PickupFieldHost has no catchNameDisplay field yet; catch-name HUD gets no events");
+                    return 0;
+                }
+                if (field.objectReferenceValue != display)
+                {
+                    field.objectReferenceValue = display;
+                    hostSo.ApplyModifiedPropertiesWithoutUndo();
+                    c.Changed++;
+                    c.Proxies.Add(host);
+                }
+                wired++;
+            }
+            return wired;
+        }
+
+        // 原型：圆底直径 1、中心在原点、正面朝 -Z（观看者一侧）；名字在圆底下方。
+        private static Transform BuildCatchHud(Transform root, Counters c)
+        {
+            var hudGo = new GameObject(CatchHudName);
+            Undo.RegisterCreatedObjectUndo(hudGo, "Create " + CatchHudName);
+            hudGo.transform.SetParent(root, false);
+            hudGo.layer = 8;
+            c.Created++;
+
+            GameObject canvasGo = CreateCanvasChild("Disc", hudGo.transform, new Vector2(CatchCanvasUnits, CatchCanvasUnits * 1.6f));
+            var canvasRect = (RectTransform)canvasGo.transform;
+            canvasRect.localPosition = new Vector3(0f, -0.3f, 0.05f);
+            GameObject discGo = CreateRect("Back", canvasGo.transform);
+            var disc = (RectTransform)discGo.transform;
+            disc.anchorMin = disc.anchorMax = new Vector2(0.5f, 1f);
+            disc.pivot = new Vector2(0.5f, 1f);
+            disc.sizeDelta = new Vector2(CatchCanvasUnits, CatchCanvasUnits);
+            disc.anchoredPosition = Vector2.zero;
+            Image back = discGo.AddComponent<Image>();
+            back.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+            back.color = new Color(0.08f, 0.08f, 0.12f, 0.55f);
+            back.raycastTarget = false;
+            CreateCatchText("ShortName", canvasGo.transform, 22f);
+            CreateCatchText("LongName", canvasGo.transform, 17f);
+
+            var pivotGo = new GameObject(CatchModelPivotName);
+            pivotGo.transform.SetParent(hudGo.transform, false);
+            pivotGo.transform.localPosition = new Vector3(0f, 0f, -0.45f);
+            pivotGo.layer = 8;
+            for (int i = 0; i < CatchModelSlots; i++)
+            {
+                var slot = new GameObject("Slot_" + i, typeof(MeshFilter), typeof(MeshRenderer));
+                slot.transform.SetParent(pivotGo.transform, false);
+                slot.layer = 8;
+                var r = slot.GetComponent<MeshRenderer>();
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                r.enabled = false;
+            }
+            foreach (Transform t in hudGo.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 8;
+            return hudGo.transform;
+        }
+
+        private static GameObject CreateCanvasChild(string name, Transform parent, Vector2 size)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
+            go.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            go.transform.SetParent(parent, false);
+            var rect = (RectTransform)go.transform;
+            rect.sizeDelta = size;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            float scale = 1f / CatchCanvasUnits;
+            rect.localScale = new Vector3(scale, scale, scale);
+            return go;
+        }
+
+        // 名字用大厅面板字体（没有时用 TMP 默认字体）；字体资产外的字（任意中文/日文名）由
+        // VRChat 内置后备字体渲染，Editor 里显示方块属正常（TMP Settings 的 fallback 为空）。
+        private static void CreateCatchText(string name, Transform parent, float size)
+        {
+            GameObject go = CreateRect(name, parent);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(CatchCanvasUnits * 2f, CatchCanvasUnits * 0.55f);
+            rect.anchoredPosition = Vector2.zero;
+            var text = go.AddComponent<TMPro.TextMeshProUGUI>();
+            var font = AssetDatabase.LoadAssetAtPath<TMPro.TMP_FontAsset>(CatchFontPath);
+            if (font != null) text.font = font;
+            text.text = "";
+            text.fontSize = size;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.color = Color.white;
+            text.outlineWidth = 0.2f;
+            text.outlineColor = new Color32(0, 0, 0, 200);
+            text.raycastTarget = false;
+        }
+
+        private static TMPro.TextMeshProUGUI FindTmp(Transform hud, string name)
+        {
+            foreach (var text in hud.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true))
+                if (text.name == name) return text;
+            return null;
+        }
+
+        private static bool SetObjectArray(SerializedObject so, string field, UnityEngine.Object[] values,
+            Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null || !property.isArray)
+            {
+                c.Problems.Add(so.targetObject.GetType().Name + "." + field + " is not a serialized array");
+                return false;
+            }
+            bool changed = property.arraySize != values.Length;
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+            {
+                SerializedProperty element = property.GetArrayElementAtIndex(i);
+                if (element.objectReferenceValue == values[i]) continue;
+                element.objectReferenceValue = values[i];
+                changed = true;
+            }
+            if (changed) c.Changed++;
+            return changed;
         }
 
         // --------------------------------------------------------------- result card ---

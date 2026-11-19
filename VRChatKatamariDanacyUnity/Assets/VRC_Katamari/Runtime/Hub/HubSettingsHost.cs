@@ -142,6 +142,10 @@ namespace VRCKatamari.Hub
 
         public bool IsPushCueEnabled() { return GetSetting(HubSettingsMath.PushCue) == 1; }
 
+        public bool IsCatchNameEnabled() { return GetSetting(HubSettingsMath.CatchName) == 1; }
+
+        public bool IsCollisionWireframeEnabled() { return GetSetting(HubSettingsMath.CollisionWireframe) == 1; }
+
         private void EnsureValues()
         {
             if (values != null) return;

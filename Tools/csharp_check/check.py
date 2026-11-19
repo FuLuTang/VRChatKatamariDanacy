@@ -45,9 +45,18 @@ from pathlib import Path
 CHECK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = CHECK_DIR.parents[1]
 CACHE_ROOT = Path(
-    os.environ.get("VRCK_CSHARP_CHECK_CACHE", Path.home() / ".cache" / "vrc-katamari-refasm")
+    os.environ.get("VRCK_CSHARP_CHECK_CACHE",
+                   REPO_ROOT / ".work" / "gate" / "cache" if os.name == "nt"
+                   else Path.home() / ".cache" / "vrc-katamari-refasm")
 )
-DOTNET_ROOT = Path(os.environ.get("VRCK_DOTNET_ROOT", Path.home() / ".dotnet"))
+def dotnet_executable() -> Path:
+    explicit = os.environ.get("VRCK_DOTNET_ROOT")
+    if os.name == "nt" and explicit is None:
+        binary = shutil.which("dotnet.exe")
+        if binary:
+            return Path(binary)
+        raise CheckError("dotnet.exe not found in PATH; set VRCK_DOTNET_ROOT or install the .NET SDK")
+    return Path(explicit or Path.home() / ".dotnet") / ("dotnet.exe" if os.name == "nt" else "dotnet")
 
 DIAGNOSTIC_RE = re.compile(
     r"^(?P<path>.+?)\((?P<line>\d+),(?P<col>\d+)\): (?P<severity>error|warning) "
@@ -87,19 +96,21 @@ class CheckError(RuntimeError):
     pass
 
 
-def resolve_csc(explicit: Path | None) -> Path:
+def resolve_csc(explicit: Path | None, manifest: dict, dotnet: Path) -> Path:
     """Prefer the Roslyn build Unity ships (4.3.1) so cascading diagnostics match exactly."""
     if explicit:
         if not explicit.exists():
             raise CheckError(f"--csc path does not exist: {explicit}")
         return explicit
+    if os.name == "nt" and manifest.get("unity_csc"):
+        return resolve_csc(Path(manifest["unity_csc"]), manifest, dotnet)
     bundled = CACHE_ROOT / "roslyn" / "csc.dll"
     if bundled.exists() and (CACHE_ROOT / "roslyn" / "Microsoft.CodeAnalysis.CSharp.dll").exists():
         return bundled
-    sdk = sorted((DOTNET_ROOT / "sdk").glob("*/Roslyn/bincore/csc.dll"))
+    sdk = sorted((dotnet.parent / "sdk").glob("*/Roslyn/bincore/csc.dll"))
     if not sdk:
         raise CheckError(
-            f"no csc.dll found (looked for {bundled} and {DOTNET_ROOT / 'sdk'}/*/Roslyn/bincore/)"
+            f"no csc.dll found (looked for {bundled} and {dotnet.parent / 'sdk'}/*/Roslyn/bincore/)"
         )
     return sdk[-1]
 
@@ -109,15 +120,15 @@ def load_manifest(refresh: bool, host: str) -> dict:
     if not manifest_path.exists() or refresh:
         import bootstrap
 
+        windows_project = os.environ.get("VRCK_WINDOWS_PROJECT", bootstrap.DEFAULT_WINDOWS_PROJECT)
         try:
-            bootstrap.bootstrap(
-                host,
-                os.environ.get(
-                    "VRCK_WINDOWS_PROJECT", r"D:\VRChatKatamariDanacy\VRChatKatamariDanacyUnity"
-                ),
-                refresh=refresh,
-            )
-        except (bootstrap.BootstrapError, subprocess.TimeoutExpired) as exc:
+            if os.name == "nt":
+                manifest = bootstrap.windows_manifest(windows_project)
+                CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+                manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+            else:
+                bootstrap.bootstrap(host, windows_project, refresh=refresh)
+        except (bootstrap.BootstrapError, subprocess.TimeoutExpired, OSError) as exc:
             raise CheckError(f"bootstrap failed: {exc}") from exc
     with manifest_path.open(encoding="utf-8") as handle:
         manifest = json.load(handle)
@@ -506,10 +517,10 @@ def main(argv: list[str] | None = None) -> int:
             except bootstrap_error() as exc:
                 raise CheckError(f"windows backend failed: {exc}") from exc
         else:
-            dotnet = DOTNET_ROOT / "dotnet"
+            dotnet = dotnet_executable()
             if not dotnet.exists():
                 raise CheckError(f"{dotnet} is missing; run: python3 {CHECK_DIR / 'bootstrap.py'}")
-            results = run_local(ordered, project, manifest, args, dotnet, resolve_csc(args.csc))
+            results = run_local(ordered, project, manifest, args, dotnet, resolve_csc(args.csc, manifest, dotnet))
         all_errors = [d for result in results for d in result["errors"]]
 
         elapsed = time.perf_counter() - started

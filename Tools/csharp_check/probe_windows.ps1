@@ -14,6 +14,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 function Resolve-Path2([string]$Base, [string]$Path) {
     if (-not $Path) { return $null }

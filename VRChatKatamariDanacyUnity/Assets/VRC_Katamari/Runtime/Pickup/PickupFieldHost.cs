@@ -4,6 +4,7 @@ using VRCKatamari.BallContact;
 using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Core;
+using VRCKatamari.Diagnostics;
 
 namespace VRCKatamari.Pickup
 {
@@ -164,7 +165,9 @@ namespace VRCKatamari.Pickup
 
         [Header("Ball")]
         [SerializeField] private KatamariBallMotor motor;
+        [SerializeField] private BallPerformanceDiagnostics performanceDiagnostics;
         [SerializeField] private AbsorbFeedbackHost absorbFeedback;
+        [SerializeField] private VRCKatamari.BallLayers.CatchNameDisplay catchNameDisplay;
         [Tooltip("This field stores decorative props only and deliberately has no motor.")]
         [SerializeField] private bool decorativeOnly;
 
@@ -176,8 +179,14 @@ namespace VRCKatamari.Pickup
         [SerializeField] private Transform[] propTransforms;
         [SerializeField] private string[] itemIds;
         [SerializeField] private string[] kinds;
-        // Optional presentation column, indexed exactly like itemIds; old fields use class 0.
+        // Optional per-prop scream id (the original's object voice), indexed exactly like
+        // itemIds; 0 = no scream. The serialized name predates the meaning and is kept.
         [SerializeField] private int[] propAbsorbSoundClasses;
+        // Optional catch-name columns, indexed like itemIds; reference levels only (names are
+        // reference material and stay in _RefUnlicensed scenes). Empty or short = no name.
+        [SerializeField] private string[] propCatchNamesZh;
+        [SerializeField] private string[] propCatchNamesEn;
+        [SerializeField] private string[] propCatchNamesJa;
         // propBounds is the prop's WORLD AABB (full edge lengths, metres). The blocking
         // boxes and the support classification read it as an axis-aligned world box, so its
         // meaning must not change. A turned prop's world box is larger than the prop, so it
@@ -522,9 +531,12 @@ namespace VRCKatamari.Pickup
         /// </remarks>
         public void Update()
         {
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long frameStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             UpdateFrame();
             // The gathered rows are only valid for the stages of one Update.
             nearValid = false;
+            if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.PickupFrame, frameStart);
         }
 
         private void UpdateFrame()
@@ -547,9 +559,17 @@ namespace VRCKatamari.Pickup
             // so the two halves cannot disagree.
             if (motor.GetSemanticDiameterWorldM() <= 0f) return;
 
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long phaseStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             ConsumeAbsorbedEvents();
+            if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.AttachmentEvents, phaseStart);
             VerifyStaticRows();
             UpdatePropObstacles();
+            if (profile)
+            {
+                BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.PickupObstacles, phaseStart);
+                performanceDiagnostics._Sample(BallPerformanceMath.Attached, attachedCount);
+            }
             if (!Collecting()) return;
             if (attachmentRoot == null)
             {
@@ -805,12 +825,19 @@ namespace VRCKatamari.Pickup
             return propOwnSizes[index];
         }
 
+        /// <summary>The prop's scream id, or 0 when the column is missing or misaligned.</summary>
         public int GetPropAbsorbSoundClass(int index)
         {
             if (propAbsorbSoundClasses == null || itemIds == null
                 || propAbsorbSoundClasses.Length != itemIds.Length || index < 0
                 || index >= propAbsorbSoundClasses.Length) return 0;
             return propAbsorbSoundClasses[index];
+        }
+
+        private string CatchName(string[] column, int index)
+        {
+            if (column == null || index < 0 || index >= column.Length || column[index] == null) return "";
+            return column[index];
         }
 
         public bool IsCollecting()
@@ -1393,6 +1420,8 @@ namespace VRCKatamari.Pickup
         /// </remarks>
         private void GatherNearRows(Vector3 center, float scanReachM, float pruneReachM)
         {
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long scanStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             int total = 0;
             float gridReach = scanReachM;
             if (pruneReachM >= 0f)
@@ -1457,6 +1486,7 @@ namespace VRCKatamari.Pickup
             nearScanReachM = scanReachM;
             nearPruneReachM = pruneReachM;
             nearValid = true;
+            if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.PickupScan, scanStart);
         }
 
         /// <summary>Static rows found through grid cells (0 when the grid is off).</summary>
@@ -1673,11 +1703,14 @@ namespace VRCKatamari.Pickup
                 if (fallHost != null) fallHost.OnPropAbsorbed(index);
                 if (absorbFeedback != null && Collecting())
                 {
-                    int soundClass = GetPropAbsorbSoundClass(index);
+                    int screamId = GetPropAbsorbSoundClass(index);
                     Vector3 size = GetPropOwnSize(index);
                     float edge = Mathf.Pow(size.x * size.y * size.z, 1f / 3f);
-                    absorbFeedback.RecordConfirmed(soundClass, edge / motor.GetSemanticDiameterWorldM());
+                    absorbFeedback.RecordConfirmed(screamId, edge / motor.GetSemanticDiameterWorldM());
                 }
+                if (catchNameDisplay != null && Collecting())
+                    catchNameDisplay.RecordCatch(propTransforms[index], CatchName(propCatchNamesZh, index),
+                        CatchName(propCatchNamesEn, index), CatchName(propCatchNamesJa, index), 0);
             }
             seenEvents = total;
         }
@@ -1925,6 +1958,8 @@ namespace VRCKatamari.Pickup
             // props, a short list for moving ones); the verdict per row is the same
             // PickupCandidateSelection decision as before, over cached requirements.
             EnsureNearRows(center, activationRadiusM, -1f);
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long phaseStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             float ballMm;
             bool ballMmValid = PickupAbsorbMath.TryFloorMillimetres(ballDiameterM, out ballMm);
 
@@ -1949,6 +1984,7 @@ namespace VRCKatamari.Pickup
                     withinLimit = withinLimit + 1;
             }
 
+            if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.PickupSelect, phaseStart);
             WithdrawUnselected(selected);
 
             for (int i = 0; i < selected; i++)
@@ -1957,6 +1993,12 @@ namespace VRCKatamari.Pickup
                 SubmitProp(nearestIndices[i]);
             }
 
+            if (profile)
+            {
+                BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.PickupSubmit, phaseStart);
+                performanceDiagnostics._Sample(BallPerformanceMath.ScanCandidates, nearCount);
+                performanceDiagnostics._Sample(BallPerformanceMath.SelectedCandidates, selected);
+            }
             lastScanInRange = inRange;
             lastScanWithinLimit = withinLimit;
             lastScanSelected = selected;

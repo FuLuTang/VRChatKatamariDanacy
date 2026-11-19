@@ -6,68 +6,66 @@ using VRCKatamari.Riding;
 
 namespace VRCKatamari.Pickup
 {
-    /// <summary>One local presentation sink for the pickup fields bound to the ridden ball.</summary>
+    /// <summary>本地骑乘球的确认反馈；不接触吸附判定或账本。</summary>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class AbsorbFeedbackHost : UdonSharpBehaviour
     {
         [SerializeField] private BallRideStation ride;
         [SerializeField] private HubSettingsHost settings;
+        [SerializeField] private LevelSwitchHost levelSwitch;
+        // 0 为卷入音源，1、2 各独占一路叫声。
         [SerializeField] private AudioSource[] voices;
-        [SerializeField] private int[] clipClasses;
         [SerializeField] private AudioClip[] clips;
+        // 兼容接线检查的字段名：卷入片段标 0，其余为升序排列的叫声编号。
+        [SerializeField] private int[] clipClasses;
+        [SerializeField] private int[] rollInStarts;
+        [SerializeField] private int[] rollInCounts;
 
-        private int clusterCount;
-        private int clusterClass;
-        private int clusterBand;
-        private float audioDeadline;
         private int hapticBand = -1;
         private float hapticDeadline;
-        private int randomState = 197;
-        private AudioClip previousClip;
+        private int rollInRandomState = 197;
+        private int screamRandomState = 389;
+        private int previousRollInClip = -1;
+        private int lastAudioLevel = -1;
+        private int screamFrame0 = -1;
+        private int screamFrame1 = -1;
+        // 每个叫声只用它首个片段的下标记录截止时间；同号变体共用截止时间。
+        private float[] screamDeadlines;
         private float lastVolume = -1f;
-        // Allocated on first use: an array field initializer is not part of the U# subset.
-        private float[] voiceGain;
         private bool wasRiding;
-        // Settings are read through GetRevision so a frame that changed nothing costs one call.
         private int settingsRevision = -1;
         private float effectsVolume = 0.8f;
         private float haptics = 1f;
 
         private int confirmedCount;
-        private int audioClusterCount;
-        private int audioPlayedCount;
-        private int audioPoolDropCount;
+        private int rollInPlayedCount;
+        private int screamPlayedCount;
+        private int screamDuplicateCount;
+        private int screamPoolDropCount;
         private int hapticPulseCount;
-        private int lastLoggedConfirmed = -1;
+        private int lastLoggedConfirmed;
 
-        // Session counters for ClientSim / live probes; clearing a round does not erase evidence.
         public int GetConfirmedCount() { return confirmedCount; }
-        public int GetAudioClusterCount() { return audioClusterCount; }
-        public int GetAudioPlayedCount() { return audioPlayedCount; }
-        public int GetAudioPoolDropCount() { return audioPoolDropCount; }
+        public int GetRollInPlayedCount() { return rollInPlayedCount; }
+        public int GetScreamPlayedCount() { return screamPlayedCount; }
+        public int GetScreamDuplicateCount() { return screamDuplicateCount; }
+        public int GetScreamPoolDropCount() { return screamPoolDropCount; }
         public int GetHapticPulseCount() { return hapticPulseCount; }
 
-        public void RecordConfirmed(int soundClass, float relativeSize)
+        public void RecordConfirmed(int screamId, float relativeSize)
         {
             if (!IsRiding()) return;
             wasRiding = true;
             confirmedCount++;
             RefreshSettings();
             float now = Time.unscaledTime;
-            FlushAudio(now);
-            int band = AbsorbFeedbackMath.SizeBand(relativeSize);
-            int usableClass = soundClass > 0 && HasClip(soundClass) ? soundClass : 0;
-            if (AbsorbFeedbackMath.PreferAudioClass(clusterCount, clusterClass, clusterBand, usableClass, band))
-            {
-                clusterClass = usableClass;
-                clusterBand = band;
-            }
-            if (clusterCount == 0) audioDeadline = now + AbsorbFeedbackMath.AudioWindowSeconds;
-            clusterCount++;
+            RefreshVoiceVolume();
+            PlayAudio(screamId, now);
 
+            int band = AbsorbFeedbackMath.SizeBand(relativeSize);
             VRCPlayerApi player = Networking.LocalPlayer;
             if (player != null && player.isLocal && player.IsUserInVR()
-                && Haptics() > 0f && band > hapticBand)
+                && haptics > 0f && band > hapticBand)
                 hapticBand = band;
         }
 
@@ -81,9 +79,8 @@ namespace VRCKatamari.Pickup
             RefreshSettings();
             float now = Time.unscaledTime;
             RefreshVoiceVolume();
-            FlushAudio(now);
             if (hapticBand < 0) return;
-            float amplitude = AbsorbFeedbackMath.HapticAmplitude(hapticBand, Haptics());
+            float amplitude = AbsorbFeedbackMath.HapticAmplitude(hapticBand, haptics);
             if (amplitude <= 0f) { hapticBand = -1; return; }
             if (!AbsorbFeedbackMath.IsDue(now, hapticDeadline)) return;
             VRCPlayerApi player = Networking.LocalPlayer;
@@ -100,35 +97,23 @@ namespace VRCKatamari.Pickup
 
         public void ClearFeedback()
         {
-            clusterCount = 0;
             hapticBand = -1;
             wasRiding = false;
-            // Keep the haptic deadline: leaving or retrying must not bypass the hardware rate cap.
-            StopVoices();
-            LogCounters();
+            ClearAudio();
+            // 保留振动截止时间；下车或重试不能绕过硬件频率上限。
+            if (confirmedCount == lastLoggedConfirmed) return;
+            lastLoggedConfirmed = confirmedCount;
+            Debug.Log("[absorb-feedback] confirmed=" + confirmedCount
+                + " rollInPlayed=" + rollInPlayedCount
+                + " screamPlayed=" + screamPlayedCount
+                + " screamDuplicates=" + screamDuplicateCount
+                + " screamPoolDrops=" + screamPoolDropCount
+                + " hapticPulses=" + hapticPulseCount);
         }
 
         public void OnDisable() { ClearFeedback(); }
 
-        // One line when a ride ends and anything happened, so an operator reading the
-        // Console can compare the counters with the absorbs they just heard. Cumulative
-        // for the session: clearing a round does not erase evidence, and an unchanged
-        // count is not logged twice.
-        private void LogCounters()
-        {
-            if (confirmedCount == lastLoggedConfirmed) return;
-            lastLoggedConfirmed = confirmedCount;
-            Debug.Log("[absorb-feedback] confirmed=" + confirmedCount
-                + " audioClusters=" + audioClusterCount
-                + " audioPlayed=" + audioPlayedCount
-                + " poolDrops=" + audioPoolDropCount
-                + " hapticPulses=" + hapticPulseCount);
-        }
-
         private bool IsRiding() { return ride != null && ride.IsLocalPlayerSeated() && !ride.IsExitPending(); }
-        private float Haptics() { return haptics; }
-        private float Volume() { return effectsVolume; }
-        private int ClipCount() { return clips != null && clipClasses != null && clips.Length == clipClasses.Length ? clips.Length : 0; }
 
         private void RefreshSettings()
         {
@@ -146,82 +131,97 @@ namespace VRCKatamari.Pickup
             haptics = settings.GetHaptics01();
         }
 
-        private float[] Gains()
+        private int ChooseRollInClip(int level)
         {
-            if (voiceGain == null) voiceGain = new float[AbsorbFeedbackMath.VoiceCount];
-            return voiceGain;
+            if (level < 0 || rollInStarts == null || rollInCounts == null
+                || level >= rollInStarts.Length || level >= rollInCounts.Length) return -1;
+            int start = rollInStarts[level];
+            int count = rollInCounts[level];
+            if (count <= 0 || start < 0 || start >= clips.Length || count > clips.Length - start) return -1;
+            rollInRandomState = AbsorbFeedbackMath.NextRandomState(rollInRandomState);
+            return start + AbsorbFeedbackMath.ClipRank(rollInRandomState, count, previousRollInClip - start);
         }
 
-        private bool HasClip(int soundClass)
+        private void PlayAudio(int screamId, float now)
         {
-            int n = ClipCount();
-            for (int i = 0; i < n; i++)
-                if (clipClasses[i] == soundClass && clips[i] != null) return true;
-            return false;
-        }
-
-        private AudioClip ChooseClip(int soundClass)
-        {
-            int count = 0;
-            int previousRank = -1;
-            int n = ClipCount();
-            for (int i = 0; i < n; i++)
+            if (effectsVolume <= 0f || voices == null || voices.Length != AbsorbFeedbackMath.VoiceCount
+                || clips == null || clipClasses == null || clips.Length != clipClasses.Length) return;
+            int level = levelSwitch == null ? -1 : levelSwitch.GetActiveLevel();
+            if (level < 0) return;
+            if (level != lastAudioLevel)
             {
-                if (clipClasses[i] != soundClass || clips[i] == null) continue;
-                if (clips[i] == previousClip) previousRank = count;
-                count++;
+                ClearAudio();
+                lastAudioLevel = level;
             }
-            randomState = AbsorbFeedbackMath.NextRandomState(randomState);
-            int rank = AbsorbFeedbackMath.ClipRank(randomState, count, previousRank);
-            for (int i = 0; rank >= 0 && i < n; i++)
-            {
-                if (clipClasses[i] != soundClass || clips[i] == null) continue;
-                if (rank == 0) return clips[i];
-                rank--;
-            }
-            return null;
-        }
 
-        private void FlushAudio(float now)
-        {
-            if (clusterCount == 0 || !AbsorbFeedbackMath.IsDue(now, audioDeadline)) return;
-            int count = clusterCount;
-            clusterCount = 0;
-            audioClusterCount++;
-            float volume = Volume();
-            if (volume <= 0f || voices == null) return;
-            AudioClip clip = ChooseClip(clusterClass);
-            if (clip == null) return;
-            float[] gains = Gains();
-            for (int i = 0; i < voices.Length && i < gains.Length; i++)
+            int rollIn = ChooseRollInClip(level);
+            if (rollIn >= 0 && (voices[0] == null || clips[rollIn] == null)) rollIn = -1;
+            int scream = AbsorbFeedbackMath.FirstScreamClip(clipClasses, screamId);
+            bool screamReady = false;
+            int screamSlot = -1;
+            int frame = Time.frameCount;
+            if (scream >= 0)
             {
-                AudioSource voice = voices[i];
-                if (voice == null || voice.isPlaying) continue;
-                gains[i] = AbsorbFeedbackMath.AudioGain(count);
-                voice.volume = gains[i] * volume;
+                if (screamDeadlines == null) screamDeadlines = new float[clips.Length];
+                screamReady = AbsorbFeedbackMath.IsDue(now, screamDeadlines[scream]);
+                if (!screamReady) screamDuplicateCount++;
+                else
+                {
+                    screamSlot = AbsorbFeedbackMath.FreeScreamSlot(
+                        voices[1] == null || screamFrame0 == frame || voices[1].isPlaying,
+                        voices[2] == null || screamFrame1 == frame || voices[2].isPlaying);
+                    if (screamSlot < 0) screamPoolDropCount++;
+                }
+            }
+
+            int layers = AbsorbFeedbackMath.PlaybackLayers(rollIn, scream, screamReady, screamSlot);
+            if ((layers & AbsorbFeedbackMath.RollInLayer) != 0)
+            {
+                // 不合并确认事件，也不让两路叫声抢占卷入音。
+                voices[0].PlayOneShot(clips[rollIn], AbsorbFeedbackMath.RollInGain);
+                previousRollInClip = rollIn;
+                rollInPlayedCount++;
+            }
+            if ((layers & AbsorbFeedbackMath.ScreamLayer) != 0)
+            {
+                int variants = 1;
+                while (scream + variants < clips.Length && clipClasses[scream + variants] == screamId)
+                    variants++;
+                screamRandomState = AbsorbFeedbackMath.NextRandomState(screamRandomState);
+                AudioClip clip = clips[scream + AbsorbFeedbackMath.ClipRank(screamRandomState, variants, -1)];
+                if (clip == null) return;
+                AudioSource voice = voices[screamSlot + 1];
                 voice.clip = clip;
                 voice.Play();
-                previousClip = clip;
-                audioPlayedCount++;
-                return;
+                if (screamSlot == 0) screamFrame0 = frame;
+                else screamFrame1 = frame;
+                screamDeadlines[scream] = AbsorbFeedbackMath.NextScreamTime(now);
+                screamPlayedCount++;
             }
-            audioPoolDropCount++;
         }
 
         private void RefreshVoiceVolume()
         {
-            float volume = Volume();
-            if (volume == lastVolume) return;
-            lastVolume = volume;
-            if (volume <= 0f) { StopVoices(); return; }
+            if (effectsVolume == lastVolume) return;
+            lastVolume = effectsVolume;
             if (voices == null) return;
-            float[] gains = Gains();
-            for (int i = 0; i < voices.Length && i < gains.Length; i++)
-                if (voices[i] != null && voices[i].isPlaying) voices[i].volume = gains[i] * volume;
+            for (int i = 0; i < voices.Length; i++)
+            {
+                AudioSource voice = voices[i];
+                if (voice == null) continue;
+                voice.volume = i == 0 ? effectsVolume : AbsorbFeedbackMath.ScreamGain * effectsVolume;
+                if (effectsVolume <= 0f) voice.Stop();
+            }
         }
 
-        private void StopVoices()
+        private void ClearAudio()
         {
+            lastAudioLevel = -1;
+            previousRollInClip = -1;
+            screamFrame0 = -1;
+            screamFrame1 = -1;
+            if (screamDeadlines != null)
+                for (int i = 0; i < screamDeadlines.Length; i++) screamDeadlines[i] = 0f;
             if (voices == null) return;
             for (int i = 0; i < voices.Length; i++)
                 if (voices[i] != null) voices[i].Stop();

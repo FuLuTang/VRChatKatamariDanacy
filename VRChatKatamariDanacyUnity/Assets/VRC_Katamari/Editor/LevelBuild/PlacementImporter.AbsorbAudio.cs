@@ -10,7 +10,8 @@ namespace VRCKatamari.Editor.LevelBuild
 {
     public static partial class PlacementImporter
     {
-        // PickupFieldSync owns the base rows. This optional column joins only after that
+        // PickupFieldSync owns the base rows. This optional scream-id column (0 = no scream; the
+        // serialized name propAbsorbSoundClasses is kept) joins only after that
         // sync succeeds, by item ID in the freshly written row order (never document order).
         private static void SyncAbsorbAudio(PickupFieldHost host, PlacementDocument doc,
             string referencePlacementPath, PlacementImportReport report)
@@ -27,13 +28,13 @@ namespace VRCKatamari.Editor.LevelBuild
                         var byDef = ReferenceAbsorbAudio.ClassesByDefinition(referencePlacementPath, map);
                         foreach (PropEntry prop in doc.props)
                             if (prop != null && !string.IsNullOrEmpty(prop.itemId) && prop.def != null
-                                && byDef.TryGetValue(prop.def, out int soundClass))
-                                byItem[prop.itemId] = soundClass;
+                                && byDef.TryGetValue(prop.def, out int screamId))
+                                byItem[prop.itemId] = screamId;
                     }
                     catch (Exception ex)
                     {
                         byItem.Clear();
-                        report.Note("reference absorb data ignored: " + ex.Message + "; using class 0");
+                        report.Note("reference absorb data ignored: " + ex.Message + "; no object screams");
                     }
                 }
             }
@@ -47,14 +48,14 @@ namespace VRCKatamari.Editor.LevelBuild
             }
             int[] expected = new int[ids.arraySize];
             string[] expectedIds = new string[ids.arraySize];
-            int special = 0;
+            int screamRows = 0;
             column.arraySize = expected.Length;
             for (int i = 0; i < expected.Length; i++)
             {
                 expectedIds[i] = ids.GetArrayElementAtIndex(i).stringValue;
                 byItem.TryGetValue(expectedIds[i], out expected[i]);
                 column.GetArrayElementAtIndex(i).intValue = expected[i];
-                if (expected[i] > 0) special++;
+                if (expected[i] > 0) screamRows++;
             }
             so.ApplyModifiedProperties();
             try
@@ -75,8 +76,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Error("absorb audio: Udon read-back mismatch on " + host.name + " (" + expected.Length + " rows)");
                 return;
             }
-            report.Note("propAbsorbSoundClasses on '" + host.name + "': " + special + "/" + expected.Length
-                + " special rows, Udon read-back verified");
+            report.Note("propAbsorbSoundClasses on '" + host.name + "': " + screamRows + "/" + expected.Length
+                + " rows with scream IDs, Udon read-back verified");
         }
 
         // Udon may surface an empty serialized array as a null variable value.

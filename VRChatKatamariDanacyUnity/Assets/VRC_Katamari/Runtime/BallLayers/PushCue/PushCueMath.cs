@@ -60,7 +60,7 @@ namespace VRCKatamari.BallLayers
                 || !KatamariMath.IsFiniteFloat(anchorYawDegrees)
                 || !KatamariMath.IsFiniteFloat(pushYawDegrees)
                 || !KatamariMath.IsFiniteFloat(distanceMeters) || distanceMeters <= 0f
-                || !(elevationDegrees >= 0f && elevationDegrees < 90f)
+                || !(elevationDegrees > -90f && elevationDegrees < 90f)
                 || !(angularSizeDegrees > 0f && angularSizeDegrees < 90f)) return false;
 
             float yaw = anchorYawDegrees * Mathf.Deg2Rad;

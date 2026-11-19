@@ -155,6 +155,9 @@ namespace VRCKatamari.Story.Hub
             if (id == HubSettingsMath.ReduceAutoRotate) return Pick(lang, "减弱自动转向", "Less auto-turn", "自動回転ひかえめ");
             if (id == HubSettingsMath.Language) return "语言 / Language / 言語";
             if (id == HubSettingsMath.PushCue) return Pick(lang, "推进方向箭头", "Push direction arrow", "方向ガイド");
+            if (id == HubSettingsMath.CatchName) return Pick(lang, "显示吸到的东西", "Show caught item", "吸った物を表示");
+            if (id == HubSettingsMath.CollisionWireframe)
+                return Pick(lang, "显示物理", "Show colliders", "あたり表示");
             return "";
         }
 
@@ -164,7 +167,8 @@ namespace VRCKatamari.Story.Hub
             int v = HubSettingsMath.Clamp(id, step);
             if (id == HubSettingsMath.ControlMode) return v == 1 ? Text(Simple, lang) : Text(Tank, lang);
             if (id == HubSettingsMath.SwapHands || id == HubSettingsMath.LowEffects
-                || id == HubSettingsMath.ReduceAutoRotate || id == HubSettingsMath.PushCue)
+                || id == HubSettingsMath.ReduceAutoRotate || id == HubSettingsMath.PushCue
+                || id == HubSettingsMath.CatchName || id == HubSettingsMath.CollisionWireframe)
             {
                 return v == 1 ? Text(On, lang) : Text(Off, lang);
             }

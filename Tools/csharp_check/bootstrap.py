@@ -120,12 +120,16 @@ def probe(host: str, windows_project: str, staging: str) -> dict:
         manifest = json.loads(text[start:])
     except json.JSONDecodeError as exc:
         raise BootstrapError(f"could not parse probe JSON: {exc}\n{text[:2000]}") from exc
+    validate_probe(manifest)
+    return manifest
+
+
+def validate_probe(manifest: dict) -> None:
     missing = [r["path"] for r in manifest["references"] if not r["exists"]]
     for asm in manifest["assemblies"]:
         missing += [pr["path"] for pr in asm.get("project_references", []) if not pr["exists"] and pr["assembly"] not in WINDOWS_ASSEMBLIES]
     if missing:
         raise BootstrapError("reference DLLs missing on Windows:\n  " + "\n  ".join(missing[:20]))
-    return manifest
 
 
 def install_dotnet() -> Path:
@@ -207,12 +211,8 @@ def ensure_dotnet() -> str:
     return str(dotnet)
 
 
-def fetch_references(host: str, windows_project: str, manifest: dict, staging: str) -> Path:
-    """Stage every reference DLL on Windows, tar it, bring it back, extract into the cache."""
-    refs_dir = CACHE_ROOT / "refs"
-    refs_dir.mkdir(parents=True, exist_ok=True)
-
-    # Re-key the manifest by assembly name for the local checker.
+def compile_manifest(host: str, windows_project: str, manifest: dict, *, direct: bool = False) -> dict:
+    """Convert the shared probe to the schema used by the compiler and test runner."""
     by_name: dict[str, dict] = {}
     for ref in manifest["references"]:
         name = ref["assembly"]
@@ -227,10 +227,8 @@ def fetch_references(host: str, windows_project: str, manifest: dict, staging: s
                 {"windows": pr["path"]},
             )
 
-    (CACHE_ROOT / "probe.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     local_manifest = {
         "schema": 1,
-        "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "host": host,
         "windows_project_root": windows_project,
         "unity_version": (manifest.get("unity_version") or "").strip(),
@@ -251,8 +249,44 @@ def fetch_references(host: str, windows_project: str, manifest: dict, staging: s
             "project_references": [pr["assembly"] for pr in asm.get("project_references", [])],
         }
     for name, ref in by_name.items():
-        local_manifest["references"][name] = f"refs/{name}.dll"
+        local_manifest["references"][name] = ref["windows"] if direct else f"refs/{name}.dll"
+    return local_manifest
 
+
+def windows_manifest(windows_project: str) -> dict:
+    """Probe Unity from the same Windows machine without SSH or copying DLLs."""
+    proc = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(CHECK_DIR / "probe_windows.ps1"), "-ProjectRoot", windows_project,
+         "-Assemblies", ",".join(WINDOWS_ASSEMBLIES)],
+        capture_output=True, encoding="utf-8", errors="replace", timeout=300,
+    )
+    if proc.returncode:
+        raise BootstrapError(f"Unity reference probe failed: {proc.stderr.strip()}")
+    try:
+        raw = json.loads(proc.stdout)
+    except ValueError as exc:
+        raise BootstrapError(f"Unity reference probe returned invalid JSON: {exc}") from exc
+    validate_probe(raw)
+    if not raw.get("unity_csc"):
+        raise BootstrapError("Unity's csc.dll was not found through the generated .csproj files")
+    manifest = compile_manifest("localhost", windows_project, raw, direct=True)
+    # Include versions of live DLLs in the test build key, without reading all DLL contents.
+    manifest["reference_stamps"] = {}
+    for name, filename in manifest["references"].items():
+        path = Path(filename)
+        if path.is_file():
+            info = path.stat()
+            manifest["reference_stamps"][name] = [info.st_size, info.st_mtime_ns]
+    return manifest
+
+
+def fetch_references(host: str, windows_project: str, manifest: dict, staging: str) -> Path:
+    """Stage every reference DLL on Windows, tar it, bring it back, extract into the cache."""
+    (CACHE_ROOT / "refs").mkdir(parents=True, exist_ok=True)
+    (CACHE_ROOT / "probe.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    local_manifest = compile_manifest(host, windows_project, manifest)
+    local_manifest["generated_at_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     manifest_path = CACHE_ROOT / "manifest.json"
     manifest_path.write_text(json.dumps(local_manifest, indent=2) + "\n", encoding="utf-8")
 

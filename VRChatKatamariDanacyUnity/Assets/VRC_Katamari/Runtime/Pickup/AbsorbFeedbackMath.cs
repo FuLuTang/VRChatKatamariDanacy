@@ -3,24 +3,48 @@ namespace VRCKatamari.Pickup
     /// <summary>Local feedback tuning, independent of the pickup ledger and Unity state.</summary>
     public static class AbsorbFeedbackMath
     {
-        public const float AudioWindowSeconds = 0.060f;
+        public const int ScreamCooldownFrames = 90;
+        public const int OriginalFramesPerSecond = 30;
+        public const float ScreamCooldownSeconds = (float)ScreamCooldownFrames / OriginalFramesPerSecond;
+        public const int ScreamVoiceCount = 2;
+        public const int VoiceCount = 1 + ScreamVoiceCount;
+        public const float RollInGain = 0.18f;
+        public const float ScreamGain = 0.18f;
         public const float HapticIntervalSeconds = 0.080f;
-        public const int VoiceCount = 4;
+        public const int RollInLayer = 1;
+        public const int ScreamLayer = 2;
 
         public static bool IsDue(float now, float deadline) { return now >= deadline; }
 
-        // Reserve mix headroom even at full volume; three more pickups reach the cap.
-        public static float AudioGain(int count)
+        public static int PlaybackLayers(int rollInClip, int screamClip, bool screamReady, int screamSlot)
         {
-            if (count <= 0) return 0f;
-            if (count >= 4) return 0.24f;
-            return 0.18f + 0.02f * (count - 1);
+            int layers = rollInClip >= 0 ? RollInLayer : 0;
+            if (screamClip >= 0 && screamReady && screamSlot >= 0 && screamSlot < ScreamVoiceCount)
+                layers |= ScreamLayer;
+            return layers;
         }
 
-        public static bool PreferAudioClass(int count, int currentClass, int currentBand,
-            int candidateClass, int candidateBand)
+        public static int FreeScreamSlot(bool firstBusy, bool secondBusy)
         {
-            return count == 0 || (candidateClass > 0 && (currentClass == 0 || candidateBand > currentBand));
+            if (!firstBusy) return 0;
+            return secondBusy ? -1 : 1;
+        }
+
+        public static float NextScreamTime(float now) { return now + ScreamCooldownSeconds; }
+
+        // 卷入片段（编号 0）在前，正叫声编号升序排列；同一编号的变体紧邻。
+        public static int FirstScreamClip(int[] clipClasses, int screamId)
+        {
+            if (clipClasses == null || screamId <= 0) return -1;
+            int low = 0;
+            int high = clipClasses.Length;
+            while (low < high)
+            {
+                int mid = low + (high - low) / 2;
+                if (clipClasses[mid] < screamId) low = mid + 1;
+                else high = mid;
+            }
+            return low < clipClasses.Length && clipClasses[low] == screamId ? low : -1;
         }
 
         // Relative linear size: volume-equivalent edge divided by the ball's diameter.

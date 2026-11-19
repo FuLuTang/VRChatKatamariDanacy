@@ -41,7 +41,6 @@ import test_results as tr  # noqa: E402
 
 REPO_ROOT = check.REPO_ROOT
 CACHE_ROOT = check.CACHE_ROOT
-DOTNET_ROOT = check.DOTNET_ROOT
 RUNNER_DIR = CHECK_DIR / "test_runner"
 KNOWN_DIFFERENCES = CHECK_DIR / "known_differences.json"
 TEST_ASSEMBLY = "VRCKatamari.Tests.EditMode"
@@ -102,7 +101,7 @@ def ensure_nunit(continue_mode: bool = False) -> Path:
 
 
 def dotnet_executable() -> Path:
-    dotnet = DOTNET_ROOT / "dotnet"
+    dotnet = check.dotnet_executable()
     if not dotnet.exists():
         raise ToolError(f"{dotnet} is missing; run: python3 {CHECK_DIR / 'check.py'} (it installs the SDK)")
     return dotnet
@@ -111,7 +110,9 @@ def dotnet_executable() -> Path:
 def _dotnet_env() -> dict:
     return dict(
         os.environ,
-        DOTNET_ROOT=str(DOTNET_ROOT),
+        DOTNET_ROOT=str(dotnet_executable().parent),
+        DOTNET_CLI_HOME=str(CACHE_ROOT),
+        NUGET_PACKAGES=str(CACHE_ROOT / "nuget-packages"),
         DOTNET_NOLOGO="1",
         DOTNET_CLI_TELEMETRY_OPTOUT="1",
         DOTNET_ROLL_FORWARD="LatestMajor",
@@ -124,12 +125,15 @@ def ensure_runner(nunit_dll: Path, continue_mode: bool = False) -> Path:
     dll = out / "test_runner.dll"
     sources = [RUNNER_DIR / "Program.cs", RUNNER_DIR / "test_runner.csproj"]
     newest = max(p.stat().st_mtime for p in sources)
-    if dll.exists() and dll.stat().st_mtime >= newest and (out / "nunit.framework.dll").stat().st_mtime >= nunit_dll.stat().st_mtime:
+    staged_nunit = out / "nunit.framework.dll"
+    if (dll.is_file() and dll.stat().st_mtime >= newest and staged_nunit.is_file()
+            and staged_nunit.stat().st_mtime >= nunit_dll.stat().st_mtime):
         return dll
-    flavor = ["-p:NUnitFlavor=3.14", "-p:IntermediateOutputPath=obj/flavor-3.14/"] if continue_mode else []
+    flavor = ["-p:NUnitFlavor=3.14"] if continue_mode else []
     proc = subprocess.run(
         [str(dotnet_executable()), "build", str(RUNNER_DIR / "test_runner.csproj"), "-c", "Release",
-         "-o", str(out), f"-p:NUnitFrameworkDll={nunit_dll}", "-nologo", "-v:q", *flavor],
+         "-o", str(out), f"-p:BaseIntermediateOutputPath={out / 'obj'}/",
+         f"-p:NUnitFrameworkDll={nunit_dll}", "-nologo", "-v:q", *flavor],
         capture_output=True, text=True, env=_dotnet_env(), timeout=600,
     )
     if proc.returncode != 0 or not dll.exists():
@@ -154,13 +158,14 @@ def source_fingerprint(project: Path) -> str:
         path = CACHE_ROOT / name
         if path.exists():
             digest.update(path.read_bytes())
-    digest.update(str((CHECK_DIR / "check.py").stat().st_mtime_ns).encode())
+    digest.update((CHECK_DIR / "check.py").read_bytes())
     return digest.hexdigest()[:20]
 
 
 def build_assemblies(project: Path, rebuild: bool, ssh_host: str, refresh: bool) -> tuple[Path, bool, float]:
     """Compile (or reuse) the four assemblies; returns (directory, reused, seconds)."""
     started = time.perf_counter()
+    check.load_manifest(refresh, ssh_host)
     key = source_fingerprint(project)
     target = BUILD_ROOT / key
     if target.is_dir() and (target / f"{TEST_ASSEMBLY}.dll").exists() and not rebuild and not refresh:
@@ -169,8 +174,6 @@ def build_assemblies(project: Path, rebuild: bool, ssh_host: str, refresh: bool)
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
     partial = Path(tempfile.mkdtemp(prefix="partial-", dir=BUILD_ROOT))
     argv = ["--project", str(project), "--output-dir", str(partial), "--ssh-host", ssh_host]
-    if refresh:
-        argv.append("--refresh")
     code = check.main(argv)
     if code != 0:
         shutil.rmtree(partial, ignore_errors=True)
@@ -203,7 +206,9 @@ def run_runner(runner_dll: Path, bin_dir: Path, filters: list[str], list_only: b
                continue_mode: bool = False):
     result_xml = workdir / "result.xml"
     events = workdir / "events.json"
-    argv = [str(dotnet_executable()), str(runner_dll), "--bin", str(bin_dir), "--refs", str(CACHE_ROOT / "refs"),
+    # Raise a tool error if .NET 8 is absent; a newer SDK may build the host but must not run it.
+    argv = [str(dotnet_executable()), "exec", "--roll-forward", "LatestPatch", str(runner_dll),
+            "--bin", str(bin_dir), "--refs", str(CACHE_ROOT / "manifest.json"),
             "--assembly", TEST_ASSEMBLY, "--out", str(result_xml), "--events", str(events)]
     for fragment in filters:
         argv += ["--filter", regex_escape(fragment)]

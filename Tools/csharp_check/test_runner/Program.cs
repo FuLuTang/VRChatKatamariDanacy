@@ -138,7 +138,9 @@ internal static class Program
                 RecordRefusal(e.Exception);
         };
 
-        string[] searchDirs = { bin, refs };
+        string referenceRoot = Path.GetDirectoryName(Path.GetFullPath(refs));
+        using var referenceManifest = JsonDocument.Parse(File.ReadAllText(refs));
+        JsonElement referencePaths = referenceManifest.RootElement.GetProperty("references");
         AssemblyLoadContext.Default.Resolving += (context, name) =>
         {
             // The .NET runtime supplies the BCL; Unity's mscorlib/netstandard/System.* facades
@@ -147,12 +149,11 @@ internal static class Program
                 name.Name.StartsWith("System", StringComparison.Ordinal) ||
                 name.Name.StartsWith("Microsoft.", StringComparison.Ordinal))
                 return null;
-            foreach (string dir in searchDirs)
-            {
-                string path = Path.Combine(dir, name.Name + ".dll");
-                if (File.Exists(path)) return context.LoadFromAssemblyPath(path);
-            }
-            return null;
+            string sibling = Path.Combine(bin, name.Name + ".dll");
+            if (File.Exists(sibling)) return context.LoadFromAssemblyPath(sibling);
+            if (!referencePaths.TryGetProperty(name.Name, out var entry)) return null;
+            string path = Path.GetFullPath(entry.GetString(), referenceRoot);
+            return File.Exists(path) ? context.LoadFromAssemblyPath(path) : null;
         };
 
         Assembly assembly = Assembly.LoadFrom(Path.Combine(bin, assemblyName + ".dll"));

@@ -4,6 +4,7 @@ using VRC.SDKBase;
 using VRCKatamari.BallContact;
 using VRCKatamari.BallLayers;
 using VRCKatamari.Core;
+using VRCKatamari.Diagnostics;
 using VRCKatamari.Economy;
 using VRCKatamari.Input;
 using VRCKatamari.Motion;
@@ -68,6 +69,8 @@ namespace VRCKatamari.BallMotor
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class KatamariBallMotor : UdonSharpBehaviour
     {
+        [SerializeField] private BallPerformanceDiagnostics performanceDiagnostics;
+
         // ---- Fixed-step clock (provisional; Docs/Design/BallMotor/README.md 未定项) ----
         [SerializeField] private float fixedStepSeconds = 0.02f;
         [SerializeField] private int maxStepsPerFrame = 5;
@@ -1384,6 +1387,8 @@ namespace VRCKatamari.BallMotor
 
         private void Update()
         {
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long frameStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             localClockSeconds = localClockSeconds + Time.deltaTime;
             fixedStepAccumulator = fixedStepAccumulator + Time.deltaTime;
 
@@ -1407,7 +1412,17 @@ namespace VRCKatamari.BallMotor
                 StepBall(fixedStepSeconds);
                 steps = steps + 1;
             }
+            long poseStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             ApplyPresentation();
+            if (profile)
+            {
+                long frameEnd = BallPerformanceMath.Timestamp();
+                performanceDiagnostics._SampleElapsed(BallPerformanceMath.PoseWrites, poseStart, frameEnd);
+                performanceDiagnostics._SampleElapsed(BallPerformanceMath.MotorFrame, frameStart, frameEnd);
+                performanceDiagnostics._Sample(BallPerformanceMath.BallDiameter, semanticDiameterWorldM);
+                performanceDiagnostics._Sample(BallPerformanceMath.StepsPerFrame, stepsThisFrame);
+                performanceDiagnostics._Sample(BallPerformanceMath.StaticObb, staticObbCount);
+            }
         }
 
         /// <summary>
@@ -1429,7 +1444,10 @@ namespace VRCKatamari.BallMotor
 
             // 1. ControlIntentMath: the only place a raw axis becomes an intent,
             //    and the only place a menu suppresses it.
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long phaseStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             StepInput();
+            if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.Input, phaseStart);
 
             // 2. 首步注入真实出射速度；冲刺中仍走普通推进、转向和阻力。
             float sizeScale = CurrentSizeScale();
@@ -1468,6 +1486,8 @@ namespace VRCKatamari.BallMotor
                 visualRollRotation = Quaternion.Euler(0f, spinDegrees, 0f) * visualRollRotation;
             }
 
+            if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.Motion, phaseStart);
+
             // 2.5 - 4. The position authority for this step: it writes the final centre,
             //     the smooth camera anchor and the visual-roll axis the stages below read.
             Vector3 groundedCenter = Vector3.zero;
@@ -1477,8 +1497,11 @@ namespace VRCKatamari.BallMotor
             StepContactV2(dt, requestedDisplacement, speedScale, out groundedCenter, out followCenter,
                 out supportNormal, out hitWall);
 
+            if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.Contact, phaseStart);
+
             // 5. PickupAbsorbMath: a decision per candidate, at the final position
             //    only, so nothing is absorbed through a wall or from the old centre.
+            int pendingAtEvaluation = profile ? pendingCandidateCount : 0;
             EvaluatePendingCandidates(groundedCenter);
 
             // 6. GrowthLedgerMath: a decision becomes volume only through a commit.
@@ -1493,6 +1516,8 @@ namespace VRCKatamari.BallMotor
             // 7.5 Growth push-out (design §4.2). Absorbing grows the radius inside one
             //     step, so the ball can end a step embedded in the wall it just grew into.
             ApplyGrowthPushOut(ref groundedCenter, ref followCenter, ref supportNormal);
+
+            if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.Absorb, phaseStart);
 
             // 8. VisualRollMath: the actual centre move, with the discontinuity flag
             //    supplied so a teleport frame holds the pose.
@@ -1521,6 +1546,11 @@ namespace VRCKatamari.BallMotor
             if (DashMath.TryStep(dashState, dt, diameterM, hitWall, out autoLaunched) && autoLaunched)
             {
                 Debug.Log("[input] dash fired (full auto)");
+            }
+            if (profile)
+            {
+                BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.StepTail, phaseStart);
+                performanceDiagnostics._Sample(BallPerformanceMath.PendingCandidates, pendingAtEvaluation);
             }
         }
 
@@ -1721,6 +1751,7 @@ namespace VRCKatamari.BallMotor
             out bool hitWall)
         {
             double stepStartSeconds = WallClockSeconds();
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
             contactV2ClockSeconds = contactV2ClockSeconds + dt;
             groundedCenter = ballCenterWorld;
             followCenter = ballCenterWorld;
@@ -1742,7 +1773,9 @@ namespace VRCKatamari.BallMotor
 
             // The needle shape (design §4A.3 step 1): every proxy support clamped into
             // [r, r + cap], and the protruding ones selected longest first.
+            long shapeStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             PrepareNeedleShape(radius);
+            if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.AttachmentShape, shapeStart);
 
             // The drive the climb gate reads is the motion layer's TARGET speed, not the
             // acceleration-limited request: a ball standing against a wall has no actual
@@ -1777,7 +1810,9 @@ namespace VRCKatamari.BallMotor
             float margin = (ContactTuning.Gravity + ContactTuning.ClimbRateLimit) * dt * dt;
             float maxTravel = travel + margin;
             if (!KatamariMath.IsFiniteFloat(maxTravel) || maxTravel < 0f) maxTravel = 0f;
+            long arenaStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             FillNearWindow(radius, maxTravel);
+            if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.ArenaNearObb, arenaStart);
 
             Vector3 center = ballCenterWorld;
             Vector3 planar = planarVelocity;
@@ -1818,8 +1853,10 @@ namespace VRCKatamari.BallMotor
                 float supportLimit;
                 if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
                     stepHeightOverBallDiameter, out supportLimit)) supportLimit = 0f;
+                long supportGridStart = profile ? BallPerformanceMath.Timestamp() : 0L;
                 terrainSupportCandidateCount = CollectTerrainCandidates(ballCenterWorld,
                     collisionRadiusWorldM);
+                if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.TerrainGrid, supportGridStart);
                 int supportCandidates = terrainSupportCandidateCount;
                 int terrainSupportId;
                 Vector3 terrainSupportNormal;
@@ -1827,6 +1864,12 @@ namespace VRCKatamari.BallMotor
                 meshAnswersHere = TryQueryTerrainSupport(ballCenterWorld,
                     ballCenterWorld.y - collisionRadiusWorldM, supportLimit, supportCandidates,
                     out terrainSupportId, out terrainSupportNormal, out terrainSupportHeight);
+                if (profile)
+                {
+                    performanceDiagnostics._Sample(BallPerformanceMath.TerrainSupport, lastTerrainSupportMicros * 0.001f);
+                    performanceDiagnostics._Sample(BallPerformanceMath.TerrainSupportVisited, terrainTrianglesTested);
+                    performanceDiagnostics._Sample(BallPerformanceMath.TerrainSupportFullTests, terrainFullEvals);
+                }
             }
             // THE TERRAIN CONTACT LIST, collected NOW: the ball's footprint plus half of this
             // step's travel plus the contact skin, so a contact at the end of the step is
@@ -1846,9 +1889,17 @@ namespace VRCKatamari.BallMotor
                     ballCenterWorld.x + requestedDisplacement.x * 0.5f,
                     ballCenterWorld.y + requestedDisplacement.y * 0.5f,
                     ballCenterWorld.z + requestedDisplacement.z * 0.5f);
+                long contactGridStart = profile ? BallPerformanceMath.Timestamp() : 0L;
                 terrainContactCandidateCount = CollectTerrainCandidates(terrainWindowCenter,
                     radius + terrainTravel * 0.5f + ContactTuning.ContactSkinM);
+                if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.TerrainGrid, contactGridStart);
                 terrainContactCandidates = terrainContactCandidateCount;
+                if (profile)
+                {
+                    if (terrainContactCandidates >= 0)
+                        performanceDiagnostics._Sample(BallPerformanceMath.TerrainSolveCandidates, terrainContactCandidates);
+                    performanceDiagnostics._Sample(BallPerformanceMath.TerrainSolveFullScan, terrainContactCandidates < 0 ? 1f : 0f);
+                }
             }
             bool solved = ContactSolveMath.TryStep(!meshAnswersHere, groundPlaneNormal, groundPlaneOffset,
                 planeNormalBuffer, planeOffsetBuffer, planeCount, nearObbCenter, nearObbAxisX,
@@ -5078,6 +5129,70 @@ namespace VRCKatamari.BallMotor
         public int GetStaticObbCount()
         {
             return staticObbCount;
+        }
+
+        /// <summary>Copies world-space line pairs from the registered contact tables. Debug only.</summary>
+        public int CopyCollisionWire(int layer, Vector3 near, float range, Vector3[] output)
+        {
+            if (output == null || output.Length < 6) return 0;
+            int used = 0;
+            if (layer == 1)
+            {
+                if (terrainVertices == null || terrainIndices == null) return 0;
+                for (int chunk = 0; chunk < terrainChunkCount && used + 6 <= output.Length; chunk++)
+                {
+                    Vector3 lo = terrainChunkMin[chunk];
+                    Vector3 hi = terrainChunkMax[chunk];
+                    if (!CollisionWireMath.OverlapsWindow(lo, hi, near, range)) continue;
+                    int end = terrainChunkStarts[chunk] + terrainChunkTriangleCounts[chunk];
+                    for (int tri = terrainChunkStarts[chunk]; tri < end && used + 6 <= output.Length; tri++)
+                    {
+                        int corner = tri * 3;
+                        Vector3 a = terrainVertices[terrainIndices[corner]];
+                        Vector3 b = terrainVertices[terrainIndices[corner + 1]];
+                        Vector3 c = terrainVertices[terrainIndices[corner + 2]];
+                        if (!CollisionWireMath.TriangleInWindow(a, b, c, near, range)) continue;
+                        used = CollisionWireMath.AppendTriangle(output, used, a, b, c);
+                    }
+                }
+                return used;
+            }
+            if ((layer != 0 && layer != 2) || staticObbCenter == null) return 0;
+            bool props = layer == 2;
+            bool proxies = props && IsPropProxyContactEnabled() && propProxyCount > 0;
+            int start = props ? staticObbCount : 0;
+            int endBox = props ? start + (proxies ? propProxyCount : propObbCount) : staticObbCount;
+            for (int i = start; i < endBox; i++)
+            {
+                Vector3 center = staticObbCenter[i];
+                float reach = range + staticObbBoundingRadius[i];
+                if ((center - near).sqrMagnitude > reach * reach) continue;
+                int kind = proxies ? staticProxyKind[i] : ProxyContactMath.KindBox;
+                if (kind == ProxyContactMath.KindConvex)
+                {
+                    int faceStart = staticProxyFaceStart[i];
+                    int faceEnd = faceStart + staticProxyFaceCount[i];
+                    int hullStart = staticProxyHullStart[i];
+                    for (int f = faceStart; f < faceEnd && used + 6 <= output.Length; f++)
+                        used = CollisionWireMath.AppendTriangle(output, used,
+                            propProxyHullPoints[hullStart + propProxyFaceA[f]],
+                            propProxyHullPoints[hullStart + propProxyFaceB[f]],
+                            propProxyHullPoints[hullStart + propProxyFaceC[f]]);
+                }
+                else if (kind == ProxyContactMath.KindBox)
+                {
+                    used = CollisionWireMath.AppendBox(output, used, center, staticObbAxisX[i],
+                        staticObbAxisY[i], staticObbAxisZ[i], staticObbHalfExtents[i]);
+                }
+                else
+                {
+                    used = CollisionWireMath.AppendRound(output, used, center, staticObbAxisX[i],
+                        staticObbAxisY[i], staticObbAxisZ[i], staticProxyRadius[i],
+                        kind == ProxyContactMath.KindCapsule ? staticProxyHalfHeight[i] : 0f,
+                        staticProxyAxis[i]);
+                }
+            }
+            return used;
         }
 
         /// <summary>Static OBB capacity (256).</summary>

@@ -2,6 +2,7 @@ using UdonSharp;
 using UnityEngine;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Core;
+using VRCKatamari.Diagnostics;
 
 namespace VRCKatamari.Pickup
 {
@@ -71,6 +72,7 @@ namespace VRCKatamari.Pickup
         [Header("Observer (the ball)")]
         [Tooltip("The ball motor: its centre is the observer for culling and WaitForPlayer. Empty = nothing is culled and no trigger fires.")]
         [SerializeField] private KatamariBallMotor motor;
+        [SerializeField] private BallPerformanceDiagnostics performanceDiagnostics;
 
         [Header("Culling and ownership")]
         [Tooltip("Rows wake within this distance of the ball (PROP_BEHAVIOURS 7.2). NOT WaitForPlayer's trigger gate.")]
@@ -244,6 +246,8 @@ namespace VRCKatamari.Pickup
         {
             if (!ready) return;
 
+            bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
+            long frameStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             float now = Time.time;
             bool haveObserver = false;
             Vector3 observer = Vector3.zero;
@@ -286,6 +290,7 @@ namespace VRCKatamari.Pickup
                 statsSteps = 0;
                 statsWrites = 0;
             }
+            if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.MotionFrame, frameStart);
         }
 
         // --- Public surface (read-only, plus the two ownership calls) ------------

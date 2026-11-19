@@ -416,6 +416,226 @@ def hull_volume(hull_points, hull_faces):
 
 
 # --------------------------------------------------------------------------- #
+# static solids: a sparse model as a few boxes (the motor's static table is OBB-only)
+# --------------------------------------------------------------------------- #
+#: A convex proxy filling less than this share of its own AABB is split into parts.  A
+#: laundry deck (one pole, a foot across the full width, a top tray) fills 0.30: its one
+#: box is a 1.43 m x 2 m wall where the original's level collision has no triangle.  The
+#: 0.6 line keeps every post, fence and box-like body (fill >= 0.69 in Cancer) as one box.
+PART_SPLIT_FILL_MAX = 0.6
+
+#: At most this many boxes per solid.  The static table is 256 OBBs; Cancer holds 35 solids,
+#: so 10 sparse ones at 4 parts each stay far below it (65).
+PART_MAX_COUNT = 4
+
+#: A cut is taken only while it removes at least this share of the whole AABB volume:
+#: below it the extra OBB costs more motor time than the empty space it removes.
+PART_MIN_GAIN_RATIO = 0.02
+
+#: Candidate cut positions per axis per part: ``1..N-1`` of ``N`` equal steps.
+PART_CUT_STEPS = 16
+
+#: No part is thinner than this on any axis (a single quad has zero thickness; the arena
+#: refuses a degenerate box).  1 cm is below the ball's smallest radius.
+PART_MIN_SIZE_M = 0.01
+
+#: Keys of one ``structures.solids[].parts[]`` entry, in write order.
+PART_KEYS = ("center", "size")
+
+
+def hull_fill_ratio(block):
+    """Convex-hull volume / hull-AABB volume of a ``convex`` collider block, else ``None``."""
+    if not isinstance(block, dict) or block.get("type") != "convex":
+        return None
+    points = hull_points(block)
+    if points is None or len(points) < HULL_MIN_POINTS:
+        return None
+    hull = convex_hull(points)
+    if hull is None:
+        return None
+    low, high = _aabb(points)
+    box = (high[0] - low[0]) * (high[1] - low[1]) * (high[2] - low[2])
+    if box <= _EPS:
+        return None
+    return hull_volume(*hull) / box
+
+
+def _clip_polygon(polygon, axis, cut, keep_below):
+    """The part of one convex polygon on one side of the plane ``p[axis] = cut``."""
+    out = []
+    count = len(polygon)
+    for index in range(count):
+        current = polygon[index]
+        following = polygon[(index + 1) % count]
+        a = current[axis] - cut
+        b = following[axis] - cut
+        inside_a = a <= 0.0 if keep_below else a >= 0.0
+        inside_b = b <= 0.0 if keep_below else b >= 0.0
+        if inside_a:
+            out.append(current)
+        if inside_a != inside_b and a != b:
+            t = a / (a - b)
+            point = [current[k] + (following[k] - current[k]) * t for k in range(3)]
+            point[axis] = cut
+            out.append(tuple(point))
+    return out
+
+
+def _polygons_bounds(polygons):
+    low = [math.inf, math.inf, math.inf]
+    high = [-math.inf, -math.inf, -math.inf]
+    for polygon in polygons:
+        for point in polygon:
+            for k in range(3):
+                if point[k] < low[k]:
+                    low[k] = point[k]
+                if point[k] > high[k]:
+                    high[k] = point[k]
+    return low, high
+
+
+def _box_volume(low, high):
+    return (max(0.0, high[0] - low[0]) * max(0.0, high[1] - low[1])
+            * max(0.0, high[2] - low[2]))
+
+
+def split_mesh_into_boxes(vertices, faces, max_parts=PART_MAX_COUNT,
+                          min_gain_ratio=PART_MIN_GAIN_RATIO, cut_steps=PART_CUT_STEPS):
+    """Cover a triangle mesh with at most ``max_parts`` axis-aligned boxes (``(low, high)``).
+
+    Top-down cuts: start from the mesh's AABB; every round tries each current part x each
+    axis x ``cut_steps - 1`` equal cut positions, clips the part's triangles at the plane
+    (so a triangle crossing the cut contributes its exact section to both sides and the two
+    boxes meet without a gap), and keeps the one cut that removes the most empty volume.
+    It stops at ``max_parts`` or when the best cut removes less than ``min_gain_ratio`` of
+    the whole AABB.  Every surface point stays inside some box, so a closed model's solid
+    volume is covered; what disappears is empty space between bars, legs and boards.
+
+    Deterministic: candidates are scanned in a fixed order and a later candidate replaces
+    the best only when it is strictly better.  The boxes are returned sorted by their low
+    corner (y, x, z), so the same mesh always gives the same list in the same order.
+    """
+    polygons = []
+    for a, b, c in _triangles(faces):
+        polygon = [tuple(float(v) for v in vertices[i]) for i in (a, b, c)]
+        if all(_finite_point(point) for point in polygon):
+            polygons.append(polygon)
+    if not polygons:
+        return []
+    whole_low, whole_high = _polygons_bounds(polygons)
+    whole = _box_volume(whole_low, whole_high)
+    groups = [polygons]
+    bounds = [(whole_low, whole_high)]
+    while len(groups) < max(1, int(max_parts)):
+        best = None
+        for index, group in enumerate(groups):
+            low, high = bounds[index]
+            volume = _box_volume(low, high)
+            for axis in range(3):
+                span = high[axis] - low[axis]
+                if span <= _EPS:
+                    continue
+                for step in range(1, cut_steps):
+                    cut = low[axis] + span * step / float(cut_steps)
+                    below = []
+                    above = []
+                    for polygon in group:
+                        part = _clip_polygon(polygon, axis, cut, True)
+                        if len(part) >= 3:
+                            below.append(part)
+                        part = _clip_polygon(polygon, axis, cut, False)
+                        if len(part) >= 3:
+                            above.append(part)
+                    if not below or not above:
+                        continue
+                    below_bounds = _polygons_bounds(below)
+                    above_bounds = _polygons_bounds(above)
+                    gain = volume - _box_volume(*below_bounds) - _box_volume(*above_bounds)
+                    if best is None or gain > best[0]:
+                        best = (gain, index, below, above, below_bounds, above_bounds)
+        # A cut that removes nothing (a flat mesh has no volume to remove) is never taken.
+        if best is None or best[0] <= 0.0 or best[0] < min_gain_ratio * whole:
+            break
+        _, index, below, above, below_bounds, above_bounds = best
+        groups[index:index + 1] = [below, above]
+        bounds[index:index + 1] = [below_bounds, above_bounds]
+    boxes = [(list(low), list(high)) for low, high in bounds]
+    boxes.sort(key=lambda box: (box[0][1], box[0][0], box[0][2], box[1][1], box[1][0],
+                                box[1][2]))
+    return boxes
+
+
+def _floor4(value):
+    return math.floor(value * 10000.0 - 1e-6) / 10000.0
+
+
+def _ceil4(value):
+    return math.ceil(value * 10000.0 + 1e-6) / 10000.0
+
+
+def solid_parts(vertices, faces, max_parts=PART_MAX_COUNT):
+    """``structures.solids[].parts`` for one model: ``[{"center", "size"}, ...]`` or ``[]``.
+
+    The boxes of :func:`split_mesh_into_boxes`, grown to ``PART_MIN_SIZE_M`` on every axis
+    and rounded OUTWARD to 0.1 mm (a rounded part never uncovers the surface it was cut
+    from).  An empty list means "keep the one contact box": the model did not split.
+    """
+    boxes = split_mesh_into_boxes(vertices, faces, max_parts=max_parts)
+    if len(boxes) < 2:
+        return []
+    parts = []
+    for low, high in boxes:
+        low = list(low)
+        high = list(high)
+        for k in range(3):
+            if high[k] - low[k] < PART_MIN_SIZE_M:
+                middle = (low[k] + high[k]) / 2.0
+                low[k] = middle - PART_MIN_SIZE_M / 2.0
+                high[k] = middle + PART_MIN_SIZE_M / 2.0
+        low = [_floor4(value) for value in low]
+        high = [_ceil4(value) for value in high]
+        parts.append({"center": [_round((low[k] + high[k]) / 2.0) for k in range(3)],
+                      "size": [_round(high[k] - low[k]) for k in range(3)]})
+    return parts
+
+
+def solid_parts_errors(parts, size=None):
+    """Schema problems of one ``parts`` list (``size``: the solid's AABB, for containment)."""
+    if not isinstance(parts, list):
+        return ["parts must be an array of {center, size}"]
+    errors = []
+    if not 2 <= len(parts) <= PART_MAX_COUNT:
+        errors.append("parts needs 2..%d boxes, got %d (a single box is the default: "
+                      "leave parts out)" % (PART_MAX_COUNT, len(parts)))
+    half = None
+    if _as_vector3(size) is not None:
+        half = [float(value) / 2.0 for value in size]
+    for index, part in enumerate(parts):
+        if not isinstance(part, dict):
+            errors.append("parts[%d] must be an object" % index)
+            continue
+        for key in part:
+            if key not in PART_KEYS:
+                errors.append("parts[%d].%s is not a part field (allowed: %s)"
+                              % (index, key, ", ".join(PART_KEYS)))
+        center = _as_vector3(part.get("center"))
+        extent = _as_vector3(part.get("size"))
+        if center is None:
+            errors.append("parts[%d].center must be 3 finite numbers" % index)
+        if extent is None or any(value <= 0.0 for value in extent):
+            errors.append("parts[%d].size must be 3 positive finite numbers" % index)
+        if center is None or extent is None or half is None:
+            continue
+        for k in range(3):
+            if (center[k] - extent[k] / 2.0 < -half[k] - 1e-3
+                    or center[k] + extent[k] / 2.0 > half[k] + 1e-3):
+                errors.append("parts[%d] reaches outside the solid's size box on axis %s"
+                              % (index, "xyz"[k]))
+                break
+    return errors
+
+
+# --------------------------------------------------------------------------- #
 # unsigned distance from a point to a surface
 # --------------------------------------------------------------------------- #
 def _point_segment_distance(p, a, b):

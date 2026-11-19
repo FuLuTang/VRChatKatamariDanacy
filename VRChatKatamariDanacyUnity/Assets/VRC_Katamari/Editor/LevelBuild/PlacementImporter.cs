@@ -443,6 +443,14 @@ namespace VRCKatamari.Editor.LevelBuild
             public float[] contactCenter;
             public float[] contactSize;
             /// <summary>
+            /// A split proxy solid's part boxes (§4 <c>parts</c>), metres in the solid's frame,
+            /// as flat <c>3N</c> centres and sizes; null for a one-box solid. When present the
+            /// object carries one <see cref="BoxCollider"/> per part, in this order, instead of
+            /// the one contact box, and every one of them goes into the arena's static table.
+            /// </summary>
+            public float[] contactPartCenters;
+            public float[] contactPartSizes;
+            /// <summary>
             /// True when a prop with this solid's own id carries the visible model, so the solid
             /// is only collision: the cube's <see cref="Renderer"/> is switched off (the
             /// <see cref="BoxCollider"/> stays). Set by the v2 view for a <c>shape:"proxy"</c>
@@ -2527,27 +2535,16 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             bool wantsCollider = WantsBoxCollider(structure);
-            BoxCollider collider = instance.GetComponent<BoxCollider>();
+            BoxCollider[] colliders = instance.GetComponents<BoxCollider>();
 
             // A proxy solid's collider is its contact box in METRES, while the object itself is
             // scaled to the authored AABB (the visual and the support box). A BoxCollider's
             // numbers are local, so the contact box is divided by that scale once - the same
-            // "one conversion, at import" rule the prop proxies follow.
-            Vector3 targetColliderCenter = Vector3.zero;
-            Vector3 targetColliderSize = Vector3.one;
-            if (structure.contactIsProxy && structure.contactCenter != null &&
-                structure.contactCenter.Length == 3 && structure.contactSize != null &&
-                structure.contactSize.Length == 3)
-            {
-                targetColliderCenter = new Vector3(
-                    DivideByContactScale(structure.contactCenter[0], targetScale.x),
-                    DivideByContactScale(structure.contactCenter[1], targetScale.y),
-                    DivideByContactScale(structure.contactCenter[2], targetScale.z));
-                targetColliderSize = new Vector3(
-                    DivideByContactScale(structure.contactSize[0], targetScale.x),
-                    DivideByContactScale(structure.contactSize[1], targetScale.y),
-                    DivideByContactScale(structure.contactSize[2], targetScale.z));
-            }
+            // "one conversion, at import" rule the prop proxies follow. A split solid (§4
+            // parts) gets one box per part, in the document's order.
+            Vector3[] targetCenters;
+            Vector3[] targetSizes;
+            ContactBoxesOf(structure, targetScale, out targetCenters, out targetSizes);
 
             bool poseMatches =
                 Vector3.Distance(instance.transform.position, targetPosition) <= PositionToleranceM &&
@@ -2555,10 +2552,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 RotationDotTolerance &&
                 Vector3.Distance(instance.transform.localScale, targetScale) <= PositionToleranceM;
             bool colliderMatches = wantsCollider
-                ? collider != null &&
-                  Vector3.Distance(collider.center, targetColliderCenter) <= PositionToleranceM &&
-                  Vector3.Distance(collider.size, targetColliderSize) <= PositionToleranceM
-                : collider == null;
+                ? CollidersMatch(colliders, targetCenters, targetSizes)
+                : colliders.Length == 0;
 
             // A solid whose model is a prop is collision only: the cube must not be drawn over
             // the model (an ochre box 3.4 x 4.1 x 2.8 m around a tree). A marker or curve parent
@@ -2585,24 +2580,86 @@ namespace VRCKatamari.Editor.LevelBuild
                 instance.transform.localScale = targetScale;
             }
 
-            if (wantsCollider && collider == null)
+            if (!colliderMatches)
             {
                 // The collider sits on the scaled object, so a unit BoxCollider bakes exactly
-                // the authored size; LevelArenaHost turns those bounds into a motor box.
-                collider = Undo.AddComponent<BoxCollider>(instance);
+                // the authored size; LevelArenaHost turns those bounds into a motor box. Extra
+                // boxes (a solid that lost parts) are removed from the end, missing ones added
+                // at the end, so the surviving boxes keep their order and a re-import of the
+                // same document finds every box already in place.
+                int wanted = wantsCollider ? targetCenters.Length : 0;
+                for (int i = colliders.Length - 1; i >= wanted; i--)
+                {
+                    Undo.DestroyObjectImmediate(colliders[i]);
+                }
+
+                for (int i = 0; i < wanted; i++)
+                {
+                    BoxCollider box = i < colliders.Length
+                        ? colliders[i]
+                        : Undo.AddComponent<BoxCollider>(instance);
+                    Undo.RecordObject(box, UndoLabel);
+                    box.center = targetCenters[i];
+                    box.size = targetSizes[i];
+                }
             }
 
-            if (!wantsCollider && collider != null)
+            return true;
+        }
+
+        /// <summary>
+        /// The local centre/size of every BoxCollider one structure object must carry: one
+        /// unit box (a plain solid), the proxy's contact box, or one box per part.
+        /// </summary>
+        private static void ContactBoxesOf(StructureEntry structure, Vector3 targetScale,
+            out Vector3[] centers, out Vector3[] sizes)
+        {
+            float[] partCenters = structure.contactPartCenters;
+            float[] partSizes = structure.contactPartSizes;
+            if (structure.contactIsProxy && partCenters != null && partSizes != null &&
+                partCenters.Length >= 3 && partCenters.Length % 3 == 0 &&
+                partSizes.Length == partCenters.Length)
             {
-                Undo.DestroyObjectImmediate(collider);
-                collider = null;
+                int count = partCenters.Length / 3;
+                centers = new Vector3[count];
+                sizes = new Vector3[count];
+                for (int i = 0; i < count; i++)
+                {
+                    centers[i] = ToColliderLocal(partCenters, i * 3, targetScale);
+                    sizes[i] = ToColliderLocal(partSizes, i * 3, targetScale);
+                }
+
+                return;
             }
 
-            if (collider != null)
+            centers = new[] { Vector3.zero };
+            sizes = new[] { Vector3.one };
+            if (structure.contactIsProxy && structure.contactCenter != null &&
+                structure.contactCenter.Length == 3 && structure.contactSize != null &&
+                structure.contactSize.Length == 3)
             {
-                Undo.RecordObject(collider, UndoLabel);
-                collider.center = targetColliderCenter;
-                collider.size = targetColliderSize;
+                centers[0] = ToColliderLocal(structure.contactCenter, 0, targetScale);
+                sizes[0] = ToColliderLocal(structure.contactSize, 0, targetScale);
+            }
+        }
+
+        private static Vector3 ToColliderLocal(float[] metres, int offset, Vector3 targetScale)
+        {
+            return new Vector3(
+                DivideByContactScale(metres[offset], targetScale.x),
+                DivideByContactScale(metres[offset + 1], targetScale.y),
+                DivideByContactScale(metres[offset + 2], targetScale.z));
+        }
+
+        /// <summary>True when the object's BoxColliders are exactly the wanted boxes, in order.</summary>
+        private static bool CollidersMatch(BoxCollider[] colliders, Vector3[] centers,
+            Vector3[] sizes)
+        {
+            if (colliders.Length != centers.Length) return false;
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                if (Vector3.Distance(colliders[i].center, centers[i]) > PositionToleranceM) return false;
+                if (Vector3.Distance(colliders[i].size, sizes[i]) > PositionToleranceM) return false;
             }
 
             return true;
@@ -3624,6 +3681,9 @@ namespace VRCKatamari.Editor.LevelBuild
 
             var wallList = new List<Transform>();
             var boxList = new List<BoxCollider>();
+            // The part index of each box on its object: the name sort below is not stable, so
+            // this keeps a split solid's boxes in their document order on every import.
+            var boxOrder = new Dictionary<BoxCollider, int>();
             var rampList = new List<BoxCollider>();
             Vector3 floorNormal = Vector3.up;
             float floorOffset = 0f;
@@ -3697,7 +3757,14 @@ namespace VRCKatamari.Editor.LevelBuild
                         continue;
                     }
 
-                    boxList.Add(collider);
+                    // A split proxy solid (§4 parts) carries one box per part on the same
+                    // object; every one of them is a static OBB.
+                    BoxCollider[] parts = found.GetComponents<BoxCollider>();
+                    for (int part = 0; part < parts.Length; part++)
+                    {
+                        boxList.Add(parts[part]);
+                        boxOrder[parts[part]] = part;
+                    }
                 }
             }
 
@@ -3735,7 +3802,16 @@ namespace VRCKatamari.Editor.LevelBuild
 
             kindList.Sort(StringComparer.Ordinal);
             wallList.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
-            boxList.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
+            boxList.Sort((left, right) =>
+            {
+                int byName = string.CompareOrdinal(left.name, right.name);
+                if (byName != 0) return byName;
+                int leftPart;
+                int rightPart;
+                boxOrder.TryGetValue(left, out leftPart);
+                boxOrder.TryGetValue(right, out rightPart);
+                return leftPart.CompareTo(rightPart);
+            });
             rampList.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
 
             groundNormal.vector3Value = floorNormal;

@@ -324,6 +324,8 @@ namespace VRCKatamari.Editor.LevelBuild
                     contactIsProxy = hasContact,
                     contactCenter = hasContact ? contact.Center : null,
                     contactSize = hasContact ? contact.Size : null,
+                    contactPartCenters = hasContact ? FlattenParts(contact.Parts, true) : null,
+                    contactPartSizes = hasContact ? FlattenParts(contact.Parts, false) : null,
                     bodyIsProp = hasContact && string.Equals(solid.Shape, "proxy", StringComparison.Ordinal) &&
                                  propIds.Contains(solid.Id),
                     curve = solid.Curve == null
@@ -341,6 +343,23 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return view;
+        }
+
+        /// <summary>A solid's part boxes as one flat <c>3N</c> array (centres or sizes).</summary>
+        private static float[] FlattenParts(PlacementV2Rules.PlacementSolidContactBox[] parts,
+            bool centers)
+        {
+            if (parts == null || parts.Length == 0) return null;
+            var flat = new float[parts.Length * 3];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                float[] source = centers ? parts[i].Center : parts[i].Size;
+                flat[i * 3] = source[0];
+                flat[i * 3 + 1] = source[1];
+                flat[i * 3 + 2] = source[2];
+            }
+
+            return flat;
         }
 
         private static ColliderEntry ToColliderEntry(PlacementV2Collider collider)
@@ -443,7 +462,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 if (string.Equals(solid.Role, "box", StringComparison.Ordinal) ||
                     string.Equals(solid.Role, "ramp", StringComparison.Ordinal))
                 {
-                    boxes++;
+                    // A split proxy solid hands the table one OBB per part (§4).
+                    boxes += PlacementV2Rules.SolidStaticObbCount(solid);
                 }
             }
 
@@ -498,6 +518,8 @@ namespace VRCKatamari.Editor.LevelBuild
             int exactBoxProxies = 0;
             int boxedProxies = 0;
             int raisedTops = 0;
+            int splitProxies = 0;
+            int partBoxes = 0;
             int fallbackProxies = 0;
             int legacyPlaneSolids = 0;
             for (int i = 0; i < doc.Solids.Length; i++)
@@ -532,6 +554,13 @@ namespace VRCKatamari.Editor.LevelBuild
                 PlacementV2Rules.PlacementSolidContactBox box;
                 string contactError;
                 if (!PlacementV2Rules.TrySolidContactBox(solid, out box, out contactError)) continue;
+                if (box.Parts != null)
+                {
+                    splitProxies++;
+                    partBoxes += box.Parts.Length;
+                    continue;
+                }
+
                 if (box.Exact) exactBoxProxies++;
                 else boxedProxies++;
                 if (box.TopRaisedToSizeTop) raisedTops++;
@@ -541,6 +570,10 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 report.Note(V2Tag + "[structure_proxy] " + proxySolids + " solid(s) carry a contact " +
                             "proxy: " + exactBoxProxies + " exact box(es)" +
+                            (splitProxies > 0
+                                ? ", " + splitProxies + " split into " + partBoxes +
+                                  " part box(es) cut from the model"
+                                : "") +
                             (boxedProxies > 0
                                 ? ", " + boxedProxies + " boxed to the proxy's local AABB" +
                                   " (the motor's static table is OBB-only; a true convex/sphere/" +

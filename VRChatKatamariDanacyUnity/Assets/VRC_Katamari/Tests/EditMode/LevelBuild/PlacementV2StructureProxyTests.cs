@@ -223,6 +223,116 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(4f, top, 1e-4f, "the contact box's top is the support face");
         }
 
+        // ------------------------------------------------------------- parts ---
+
+        private const string DeckParts =
+            @",""parts"":[{""center"":[0,-1.8,0],""size"":[2,0.4,0.2]}," +
+            @"{""center"":[0,0.5,0],""size"":[0.2,3,0.2]}]";
+
+        private const string DeckHull =
+            @",""collider"":{""type"":""convex"",""hull"":[-1,-2,-1, 1,-2,-1, -1,-2,1, 1,-2,1, " +
+            @"-0.1,2,-0.1, 0.1,2,-0.1, -0.1,2,0.1, 0.1,2,0.1]}";
+
+        [Test]
+        public void SplitSolidHandsTheTableItsPartsAndRaisesOnlyTheHighestToTheSizeTop()
+        {
+            // size 2 x 4 x 2: the support face is y = 2. The pole part ends at y = 2 already,
+            // so nothing is raised; the foot keeps its own top (no full-width slab returns).
+            object solid = Items(Field(Parse(Solid("deck", "proxy", "def", DeckHull + DeckParts)),
+                "Solids"))[0];
+            Assert.IsNull(SolidError(solid));
+            object box = ContactBox(solid);
+            object[] parts = Items(Field(box, "Parts"));
+            Assert.AreEqual(2, parts.Length, "one contact box per part, in document order");
+            Assert.AreEqual(2f, ((float[])Field(parts[0], "Size"))[0], 1e-4f, "foot width");
+            Assert.AreEqual(0.4f, ((float[])Field(parts[0], "Size"))[1], 1e-4f, "foot keeps its top");
+            Assert.AreEqual(0.2f, ((float[])Field(parts[1], "Size"))[0], 1e-4f, "pole width");
+            float poleTop = ((float[])Field(parts[1], "Center"))[1] +
+                            ((float[])Field(parts[1], "Size"))[1] * 0.5f;
+            Assert.AreEqual(2f, poleTop, 1e-4f, "the highest part reaches the support face");
+            StringAssert.Contains("parts", (string)Field(box, "Note"));
+            Assert.AreEqual(2, (int)Invoke(rulesType, "SolidStaticObbCount", new[] { solid }));
+
+            object lower = Items(Field(Parse(Solid("deck", "proxy", "def", DeckHull +
+                @",""parts"":[{""center"":[0,-1.8,0],""size"":[2,0.4,0.2]}," +
+                @"{""center"":[0,0,0],""size"":[0.2,2,0.2]}]")), "Solids"))[0];
+            object[] raised = Items(Field(ContactBox(lower), "Parts"));
+            float top = ((float[])Field(raised[1], "Center"))[1] +
+                        ((float[])Field(raised[1], "Size"))[1] * 0.5f;
+            Assert.AreEqual(2f, top, 1e-4f, "a low crown is raised to the size top");
+            Assert.IsTrue((bool)Field(raised[1], "TopRaisedToSizeTop"));
+            Assert.AreEqual(0.4f, ((float[])Field(raised[0], "Size"))[1], 1e-4f,
+                "only the highest part is raised");
+        }
+
+        [Test]
+        public void PartsAreRefusedOutsideAProxyOrWithABadCount()
+        {
+            object onBox = Items(Field(Parse(Solid("crate", "box", null, DeckParts)), "Solids"))[0];
+            StringAssert.Contains("[structure_proxy]", SolidError(onBox));
+
+            object single = Items(Field(Parse(Solid("deck", "proxy", "def", DeckHull +
+                @",""parts"":[{""center"":[0,0,0],""size"":[1,1,1]}]")), "Solids"))[0];
+            StringAssert.Contains("[structure_proxy]", SolidError(single));
+
+            object flat = Items(Field(Parse(Solid("deck", "proxy", "def", DeckHull +
+                @",""parts"":[{""center"":[0,0,0],""size"":[1,0,1]}," +
+                @"{""center"":[0,1,0],""size"":[1,1,1]}]")), "Solids"))[0];
+            StringAssert.Contains("[structure_proxy]", SolidError(flat));
+
+            object plain = Items(Field(Parse(Solid("tree", "proxy", "def", DeckHull)), "Solids"))[0];
+            Assert.IsNull(Field(ContactBox(plain), "Parts"), "no parts: the one contact box");
+            Assert.AreEqual(1, (int)Invoke(rulesType, "SolidStaticObbCount", new[] { plain }));
+        }
+
+        [Test]
+        public void SplitSolidGetsOneColliderPerPartAndASecondImportWritesNothing()
+        {
+            object doc = Parse(Solid("deck", "proxy", "def", DeckHull + DeckParts) + "," +
+                               Solid("crate", "box", null, "", "[1,1,1]"));
+            object view = Invoke(importerType, "BuildV1View", new[] { doc });
+            var root = new GameObject("PlacementV2StructureProxyTests.Parts");
+            root.hideFlags = HideFlags.DontSave;
+            try
+            {
+                object first = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { view, root.transform, first }), Errors(first));
+                Transform deck = root.transform.Find("deck");
+                BoxCollider[] boxes = deck.GetComponents<BoxCollider>();
+                Assert.AreEqual(2, boxes.Length, "one BoxCollider per part");
+                // The object is scaled to size (2,4,2): the foot part (2 x 0.4 x 0.2 m at y -1.8)
+                // is (1, 0.1, 0.1) local at y -0.45.
+                Assert.AreEqual(1f, boxes[0].size.x, 1e-4f);
+                Assert.AreEqual(0.1f, boxes[0].size.y, 1e-4f);
+                Assert.AreEqual(-0.45f, boxes[0].center.y, 1e-4f);
+                Assert.AreEqual(0.1f, boxes[1].size.x, 1e-4f);
+                Assert.AreEqual(1, root.transform.Find("crate").GetComponents<BoxCollider>().Length);
+
+                object second = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { view, root.transform, second }), Errors(second));
+                Assert.AreEqual(0, Field(second, "StructuresCreated"), "second run creates nothing");
+                Assert.AreEqual(0, Field(second, "StructuresUpdated"), "second run moves nothing");
+                Assert.AreEqual(0, Field(second, "StructuresDeleted"), "second run deletes nothing");
+                Assert.AreEqual(2, deck.GetComponents<BoxCollider>().Length);
+
+                // Dropping the parts returns the solid to its one contact box.
+                object plainView = Invoke(importerType, "BuildV1View",
+                    new[] { Parse(Solid("deck", "proxy", "def", DeckHull) + "," +
+                                  Solid("crate", "box", null, "", "[1,1,1]")) });
+                object third = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { plainView, root.transform, third }), Errors(third));
+                Assert.AreEqual(1, deck.GetComponents<BoxCollider>().Length);
+                Assert.AreEqual(1, Field(third, "StructuresUpdated"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         // ------------------------------------------------------------ scene ---
 
         [Test]
@@ -390,6 +500,8 @@ namespace VRCKatamari.Tests
             int box = 0;
             int convex = 0;
             int raised = 0;
+            int split = 0;
+            int obbs = 0;
             for (int i = 0; i < solids.Length; i++)
             {
                 Assert.IsNull(SolidError(solids[i]), "solid " + Field(solids[i], "Id"));
@@ -401,10 +513,24 @@ namespace VRCKatamari.Tests
                 if (type == "box") box++;
                 else if (type == "convex") convex++;
                 if ((bool)Field(boxInfo, "TopRaisedToSizeTop")) raised++;
+                obbs += (int)Invoke(rulesType, "SolidStaticObbCount", new[] { solids[i] });
 
                 // The support face the ball stands on: the size box's top, to the millimetre.
+                // A split solid offers it on its highest part.
                 float top = ((float[])Field(boxInfo, "Center"))[1] +
                             ((float[])Field(boxInfo, "Size"))[1] * 0.5f;
+                object[] parts = Items(Field(boxInfo, "Parts"));
+                if (parts.Length > 0)
+                {
+                    split++;
+                    Assert.AreEqual("convex", type, "only a convex proxy is split");
+                    top = float.MinValue;
+                    for (int p = 0; p < parts.Length; p++)
+                    {
+                        top = Math.Max(top, ((float[])Field(parts[p], "Center"))[1] +
+                                            ((float[])Field(parts[p], "Size"))[1] * 0.5f);
+                    }
+                }
                 float sizeTop = (float)Invoke(rulesType, "SolidSupportTopY",
                     new[] { solids[i] });
                 Assert.AreEqual(sizeTop, top, 0.001f,
@@ -413,8 +539,10 @@ namespace VRCKatamari.Tests
 
             Assert.AreEqual(17, box, "box proxies");
             Assert.AreEqual(18, convex, "convex proxies");
+            Assert.LessOrEqual(obbs, 256, "the motor's static OBB table");
             Debug.Log("[structure_proxy] reference solids: 35 proxies (17 box, 18 convex), " +
-                      raised + " contact top(s) raised to the size top");
+                      split + " split, " + obbs + " static OBBs, " + raised +
+                      " contact top(s) raised to the size top");
         }
 
         // --------------------------------------------------------------- helpers ---

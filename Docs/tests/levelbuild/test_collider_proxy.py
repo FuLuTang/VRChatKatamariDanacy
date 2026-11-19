@@ -383,5 +383,131 @@ class NoColliderBlockCompatibilityTests(unittest.TestCase):
                              relative)
 
 
+def _box_mesh(low, high):
+    """A closed axis-aligned box as (vertices, triangle faces)."""
+    x0, y0, z0 = low
+    x1, y1, z1 = high
+    vertices = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+                (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
+    quads = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (3, 7, 6, 2), (0, 4, 7, 3),
+             (1, 2, 6, 5)]
+    faces = []
+    for a, b, c, d in quads:
+        faces.append((a, b, c))
+        faces.append((a, c, d))
+    return vertices, faces
+
+
+def _merge(*meshes):
+    vertices, faces = [], []
+    for mesh_vertices, mesh_faces in meshes:
+        base = len(vertices)
+        vertices.extend(mesh_vertices)
+        faces.extend(tuple(base + index for index in face) for face in mesh_faces)
+    return vertices, faces
+
+
+def _deck():
+    """A laundry-deck-like stand: a full-width foot, a thin pole, a tray on top (metres)."""
+    return _merge(_box_mesh((-0.7, -1.0, -0.03), (0.7, -0.85, 0.03)),
+                  _box_mesh((-0.03, -0.85, -0.03), (0.03, 0.8, 0.03)),
+                  _box_mesh((-0.15, 0.8, -0.15), (0.15, 1.0, 0.15)))
+
+
+def _inside_any(point, boxes, margin=1e-9):
+    return any(all(low[k] - margin <= point[k] <= high[k] + margin for k in range(3))
+               for low, high in boxes)
+
+
+class SolidPartsTests(unittest.TestCase):
+    """`split_mesh_into_boxes` / `solid_parts`: the static-solid split (LEVEL_FORMAT_V2 §4)."""
+
+    def test_a_sparse_stand_becomes_its_bars_and_leaves_the_gap_open(self):
+        vertices, faces = _deck()
+        boxes = proxies.split_mesh_into_boxes(vertices, faces)
+        self.assertEqual(len(boxes), 3)
+        total = sum((h[0] - l[0]) * (h[1] - l[1]) * (h[2] - l[2]) for l, h in boxes)
+        whole = 1.4 * 2.0 * 0.3
+        self.assertLess(total / whole, 0.15, boxes)
+        # Every surface point is covered ...
+        for point in vertices:
+            self.assertTrue(_inside_any(point, boxes), point)
+        # ... and the space beside the pole, above the foot, is empty (the old one box
+        # around the whole stand was a wall there).
+        for point in ((0.4, -0.5, 0.0), (-0.4, 0.0, 0.0), (0.4, 0.5, 0.1)):
+            self.assertFalse(_inside_any(point, boxes), point)
+
+    def test_a_solid_box_does_not_split(self):
+        vertices, faces = _box_mesh((-0.5, -0.5, -0.5), (0.5, 0.5, 0.5))
+        self.assertEqual(len(proxies.split_mesh_into_boxes(vertices, faces)), 1)
+        self.assertEqual(proxies.solid_parts(vertices, faces), [])
+
+    def test_the_part_count_is_capped(self):
+        rungs = [_box_mesh((-0.5, y, -0.02), (0.5, y + 0.04, 0.02))
+                 for y in (0.0, 0.3, 0.6, 0.9, 1.2, 1.5)]
+        vertices, faces = _merge(*rungs)
+        self.assertLessEqual(len(proxies.split_mesh_into_boxes(vertices, faces)),
+                             proxies.PART_MAX_COUNT)
+        self.assertEqual(len(proxies.split_mesh_into_boxes(vertices, faces, max_parts=2)), 2)
+
+    def test_parts_are_deterministic_rounded_outward_and_sorted(self):
+        vertices, faces = _deck()
+        first = proxies.solid_parts(vertices, faces)
+        self.assertEqual(first, proxies.solid_parts(list(vertices), list(faces)))
+        self.assertEqual(json.dumps(first), json.dumps(proxies.solid_parts(vertices, faces)))
+        lows = [[part["center"][k] - part["size"][k] / 2.0 for k in range(3)] for part in first]
+        self.assertEqual([low[1] for low in lows], sorted(low[1] for low in lows))
+        boxes = [([p["center"][k] - p["size"][k] / 2.0 for k in range(3)],
+                  [p["center"][k] + p["size"][k] / 2.0 for k in range(3)]) for p in first]
+        for point in vertices:
+            self.assertTrue(_inside_any(point, boxes, margin=1e-6), point)
+        for part in first:
+            self.assertTrue(all(value >= proxies.PART_MIN_SIZE_M - 1e-9
+                                for value in part["size"]), part)
+            self.assertEqual(sorted(part), sorted(proxies.PART_KEYS))
+
+    def test_a_thin_board_gets_the_minimum_thickness(self):
+        # Two 2 mm boards 2 m apart: two parts, each grown to the 1 cm floor (a degenerate
+        # box would be refused by the arena).
+        vertices, faces = _merge(_box_mesh((0.0, 0.0, 0.0), (1.0, 1.0, 0.002)),
+                                 _box_mesh((3.0, 0.0, 0.0), (4.0, 1.0, 0.002)))
+        parts = proxies.solid_parts(vertices, faces)
+        self.assertEqual(len(parts), 2)
+        for part in parts:
+            self.assertAlmostEqual(part["size"][2], proxies.PART_MIN_SIZE_M, places=3)
+
+    def test_a_flat_mesh_is_not_cut(self):
+        vertices = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0),
+                    (3.0, 0.0, 0.0), (4.0, 0.0, 0.0), (4.0, 1.0, 0.0), (3.0, 1.0, 0.0)]
+        faces = [(0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7)]
+        self.assertEqual(proxies.solid_parts(vertices, faces), [])
+
+    def test_fill_ratio_selects_only_sparse_hulls(self):
+        vertices, faces = _deck()
+        hull = proxies.convex_hull(vertices)[0]
+        sparse = {"type": "convex", "center": [0.0, 0.0, 0.0],
+                  "hull": [c for point in hull for c in point]}
+        self.assertLess(proxies.hull_fill_ratio(sparse), proxies.PART_SPLIT_FILL_MAX)
+        cube = {"type": "convex", "center": [0.0, 0.0, 0.0],
+                "hull": [c for point in _box_mesh((0, 0, 0), (1, 1, 1))[0] for c in point]}
+        self.assertAlmostEqual(proxies.hull_fill_ratio(cube), 1.0, places=6)
+        self.assertIsNone(proxies.hull_fill_ratio({"type": "box", "center": [0, 0, 0],
+                                                   "size": [1, 1, 1]}))
+
+    def test_parts_schema(self):
+        good = [{"center": [0.0, -0.9, 0.0], "size": [1.4, 0.2, 0.1]},
+                {"center": [0.0, 0.1, 0.0], "size": [0.1, 1.8, 0.1]}]
+        self.assertEqual(proxies.solid_parts_errors(good, [1.4, 2.0, 0.3]), [])
+        self.assertTrue(proxies.solid_parts_errors(good[:1], [1.4, 2.0, 0.3]))
+        self.assertTrue(proxies.solid_parts_errors(good * 3, [1.4, 2.0, 0.3]))
+        self.assertTrue(proxies.solid_parts_errors(good, [1.0, 2.0, 0.3]))
+        bad = copy.deepcopy(good)
+        bad[0]["size"] = [1.4, 0.0, 0.1]
+        self.assertTrue(proxies.solid_parts_errors(bad, [1.4, 2.0, 0.3]))
+        bad = copy.deepcopy(good)
+        bad[0]["axis"] = "y"
+        self.assertTrue(proxies.solid_parts_errors(bad, [1.4, 2.0, 0.3]))
+
+
 if __name__ == "__main__":
     unittest.main()

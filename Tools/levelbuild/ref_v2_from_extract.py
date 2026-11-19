@@ -738,13 +738,14 @@ def zone_table(collision_lists, doc):
     return zones, names
 
 
-def def_collider(defn, models_root, table):
-    """A fitted collider for one def, or ``None`` when the model cannot be fitted.
+def def_mesh(defn, models_root, table):
+    """``(points, faces, half)``: one def's model in its declared AABB frame, or ``None``.
 
     The extraction's GLBs are raw rips whose axis convention it does not record, so the
-    proxy is fitted on the model's *shape* after one uniform scale that keeps it inside the
-    declared AABB: the result is conservative (never bigger than the box the placement
-    declares) and never guesses a per-axis permutation.
+    model is used by its *shape* after one uniform scale that keeps it inside the declared
+    AABB (centred on the origin, ``half`` = that AABB's half extents): everything fitted on
+    it is conservative (never bigger than the box the placement declares) and never guesses
+    a per-axis permutation.
     """
     if models_root is None:
         return None
@@ -790,6 +791,19 @@ def def_collider(defn, models_root, table):
     shifted = [((point[0] - centre[0]) * scale, (point[1] - centre[1]) * scale,
                 (point[2] - centre[2]) * scale) for point in points]
     half = [float(target[axis]) / 2.0 for axis in range(3)]
+    return shifted, faces, half
+
+
+def def_collider(defn, models_root, table, mesh=None):
+    """A fitted collider for one def, or ``None`` when the model cannot be fitted.
+
+    ``mesh`` is :func:`def_mesh`'s result when the caller already loaded it.
+    """
+    if mesh is None:
+        mesh = def_mesh(defn, models_root, table)
+    if mesh is None:
+        return None
+    shifted, faces, half = mesh
     try:
         fit = collider_proxy.fit_proxy(shifted, faces,
                                        bounds=((-half[0], -half[1], -half[2]),
@@ -803,6 +817,37 @@ def def_collider(defn, models_root, table):
     if collider_proxy.collider_schema_errors(collider):
         return None
     return collider
+
+
+def def_parts(collider, mesh):
+    """``parts`` for one def's static solid: the model as up to 4 boxes, or ``None``.
+
+    Only a convex proxy that fills less than ``PART_SPLIT_FILL_MAX`` of its own AABB is
+    split: the motor's static table is OBB-only, so such a solid otherwise reaches the scene
+    as one box around the whole hull (a laundry deck becomes a 1.43 m x 2 m wall).  The boxes
+    are cut from the model's triangles, not from the hull, because the hull of a pole with
+    a full-width foot is itself a full-width wedge.
+    """
+    if mesh is None:
+        return None
+    fill = collider_proxy.hull_fill_ratio(collider)
+    if fill is None or fill >= collider_proxy.PART_SPLIT_FILL_MAX:
+        return None
+    points, faces, _half = mesh
+    return collider_proxy.solid_parts(points, faces) or None
+
+
+def scaled_parts(parts, scale):
+    """A def's ``parts`` under one instance's uniform ``scale``; ``None`` when non-uniform."""
+    if not parts:
+        return None
+    if len({round(value, 6) for value in scale}) > 1:
+        return None
+    factor = float(scale[0])
+    if factor == 1.0:
+        return parts
+    return [{"center": [n4(value * factor) for value in part["center"]],
+             "size": [n4(value * factor) for value in part["size"]]} for part in parts]
 
 
 def build_structures(placements, boxes, max_diameter_m=DESIGN_MAX_DIAMETER_M):
@@ -838,8 +883,16 @@ def build_structures(placements, boxes, max_diameter_m=DESIGN_MAX_DIAMETER_M):
             collider = entry.get("collider")
             if isinstance(collider, dict):
                 solid["collider"] = collider
+                parts = entry.get("parts")
+                if parts:
+                    solid["parts"] = parts
                 solid["proxySource"] = "def"
                 solid["notes"] += "; contact uses the def's %s proxy" % collider.get("type")
+                if parts:
+                    solid["notes"] += (" as %d static boxes cut from the model (hull fills "
+                                       "%.2f of its box)"
+                                       % (len(parts), collider_proxy.hull_fill_ratio(collider)))
+                    report["splitSolids"] = report.get("splitSolids", 0) + 1
             else:
                 solid["shape"] = "box"
                 solid["proxySource"] = "aabb-fallback"
@@ -929,11 +982,16 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
 
     defs_by_id = {entry["id"]: entry for entry in original.get("defs") or []}
     colliders_by_def = {}
+    parts_by_def = {}
     if with_colliders:
         for def_id, defn in defs_by_id.items():
-            collider = def_collider(defn, models_root, model_table)
+            mesh = def_mesh(defn, models_root, model_table)
+            collider = def_collider(defn, models_root, model_table, mesh=mesh)
             if collider is not None:
                 colliders_by_def[def_id] = collider
+                parts = def_parts(collider, mesh)
+                if parts:
+                    parts_by_def[def_id] = parts
     prepared = ref_stage.prepare(directory, folder, level_doc)
     transforms = (prepared.get("transforms") or {}).get("byItemId") or {}
 
@@ -1032,6 +1090,7 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
             "nonUniform": non_uniform,
             "zone": zone,
             "collider": colliders_by_def.get(prop.get("def")),
+            "parts": scaled_parts(parts_by_def.get(prop.get("def")), scale),
             "motion": motion_by_item.get(prop.get("itemId")),
             "worldAabb": world,
             "notes": notes,
@@ -1181,7 +1240,7 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
             "propCount": len(placements),
             "growthMm3": growth_total,
             "structureCount": len(solids),
-            "staticObbs": len(solids),
+            "staticObbs": placement_v2.static_obb_count(solids),
             "overlapBudget": overlap_budget,
             "terrainTriangles": terrain["stats"]["triangles"],
         },
@@ -1773,9 +1832,11 @@ def main(argv=None):
                  report["props"]["neverAbsorbable"], report["props"]["withParent"],
                  report["defs"]))
         print("  structures: %d solids (of %d never-absorbable props; %d are background "
-              "outside the collision space)"
+              "outside the collision space); %d split into parts, %d static OBBs"
               % (report["structures"]["withSolid"], report["structures"]["neverAbsorbable"],
-                 report["structures"]["background"]))
+                 report["structures"]["background"],
+                 report["structures"].get("splitSolids", 0),
+                 placement_v2.static_obb_count(document["structures"]["solids"])))
         print("  original position: %d props moved in x/z (max %.2f m), %d heights "
               "replaced by the original; %d scales applied"
               % (report["props"]["scavenged"]["positionMoved"],

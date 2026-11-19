@@ -465,6 +465,13 @@ namespace VRCKatamari.Editor.LevelBuild
 
             if (!isProxy)
             {
+                if (solid.Parts != null)
+                {
+                    return "[structure_proxy] " + name + " has shape '" +
+                           (shape.Length == 0 ? ShapeBox : shape) + "' but also writes parts; " +
+                           "only shape:\"proxy\" may split its contact into parts";
+                }
+
                 if (hasCollider)
                 {
                     return "[structure_proxy] " + name + " has shape '" +
@@ -551,6 +558,39 @@ namespace VRCKatamari.Editor.LevelBuild
                        "support face is the size box's top, so it cannot be derived";
             }
 
+            return SolidPartsError(name, solid.Parts);
+        }
+
+        /// <summary>Most boxes one solid's <c>parts</c> may hand the static table (§4).</summary>
+        public const int MaxSolidParts = 4;
+
+        /// <summary>The §4 <c>parts</c> rule: absent, or 2..4 boxes with a positive size.</summary>
+        private static string SolidPartsError(string name, PlacementV2SolidPart[] parts)
+        {
+            if (parts == null) return null;
+            if (parts.Length < 2 || parts.Length > MaxSolidParts)
+            {
+                return "[structure_proxy] " + name + " has " + parts.Length + " parts; a split " +
+                       "solid has 2.." + MaxSolidParts + " (one box is the default: leave parts out)";
+            }
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                PlacementV2SolidPart part = parts[i];
+                if (part == null || part.Center == null || part.Center.Length != 3 ||
+                    !IsFinite(part.Center[0]) || !IsFinite(part.Center[1]) ||
+                    !IsFinite(part.Center[2]))
+                {
+                    return "[structure_proxy] " + name + " parts[" + i + "] has no finite center[3]";
+                }
+
+                if (!HasPositiveSize(part.Size) || !IsFinite(part.Size[0]) ||
+                    !IsFinite(part.Size[1]) || !IsFinite(part.Size[2]))
+                {
+                    return "[structure_proxy] " + name + " parts[" + i + "] has no positive size[3]";
+                }
+            }
+
             return null;
         }
 
@@ -593,6 +633,13 @@ namespace VRCKatamari.Editor.LevelBuild
             public bool TopRaisedToSizeTop;
             /// <summary>Why this is not exact, or null.</summary>
             public string Note;
+            /// <summary>
+            /// The boxes the static table receives instead of this one when the solid carries
+            /// <c>parts</c> (§4), in document order; null for a one-box solid. Each part keeps
+            /// its authored box, except that the highest one's top is raised to the size top
+            /// (the support face), exactly as the single box is.
+            /// </summary>
+            public PlacementSolidContactBox[] Parts;
         }
 
         public static bool TrySolidContactBox(PlacementV2Solid solid,
@@ -682,9 +729,69 @@ namespace VRCKatamari.Editor.LevelBuild
                 ProxyType = type,
                 Exact = exact,
                 TopRaisedToSizeTop = raised,
-                Note = note
+                Note = note,
+                Parts = ContactParts(solid)
             };
+            if (box.Parts != null)
+            {
+                box.Exact = false;
+                box.Note = "[structure_proxy] " + (string.IsNullOrEmpty(solid.Id) ? "solid" : solid.Id) +
+                           " contact is " + box.Parts.Length + " parts cut from the model (the " +
+                           type + " proxy's one box would cover empty space)";
+            }
+
             return true;
+        }
+
+        /// <summary>The part boxes of a validated proxy solid, or null when it has none.</summary>
+        private static PlacementSolidContactBox[] ContactParts(PlacementV2Solid solid)
+        {
+            PlacementV2SolidPart[] parts = solid.Parts;
+            if (parts == null || parts.Length == 0) return null;
+            var boxes = new PlacementSolidContactBox[parts.Length];
+            int highest = 0;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                boxes[i] = new PlacementSolidContactBox
+                {
+                    Center = (float[])parts[i].Center.Clone(),
+                    Size = (float[])parts[i].Size.Clone(),
+                    ProxyType = ShapeBox,
+                    Exact = true
+                };
+                float top = parts[i].Center[1] + parts[i].Size[1] * 0.5f;
+                float best = parts[highest].Center[1] + parts[highest].Size[1] * 0.5f;
+                if (top > best + 1e-6f) highest = i;
+            }
+
+            // The support face stays the size top (§4): only the highest part reaches for it,
+            // so the ball can still stand on the solid without a full-width slab returning.
+            PlacementSolidContactBox crown = boxes[highest];
+            float sizeTop = solid.Size[1] * 0.5f;
+            float crownTop = crown.Center[1] + crown.Size[1] * 0.5f;
+            if (sizeTop > crownTop + 1e-4f)
+            {
+                float bottom = crown.Center[1] - crown.Size[1] * 0.5f;
+                crown.Center[1] = (bottom + sizeTop) * 0.5f;
+                crown.Size[1] = sizeTop - bottom;
+                crown.TopRaisedToSizeTop = true;
+                crown.Exact = false;
+            }
+
+            return boxes;
+        }
+
+        /// <summary>
+        /// How many static OBBs one solid asks for: <c>parts.Length</c> for a split proxy
+        /// solid, otherwise one (§4; <c>meta.expected.staticObbs</c> is the sum).
+        /// </summary>
+        public static int SolidStaticObbCount(PlacementV2Solid solid)
+        {
+            if (solid == null) return 0;
+            bool isProxy = string.Equals(solid.Shape == null ? "" : solid.Shape.Trim(), ShapeProxy,
+                StringComparison.Ordinal);
+            if (isProxy && solid.Parts != null && solid.Parts.Length > 0) return solid.Parts.Length;
+            return 1;
         }
 
         private static void HullBounds(float[] hull, out float[] minimum, out float[] maximum)

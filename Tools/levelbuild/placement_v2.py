@@ -126,9 +126,10 @@ GRID_KEYS = ("cellM", "origin", "cellsX", "cellsZ")
 SEGMENT_KEYS = ("id", "firstIndex", "indexCount", "material")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes",
-                  "collider", "proxySource")
+                  "collider", "proxySource", "parts")
 #: ``shape`` values: a box (the motor's OBB) or a fitted proxy (``collider`` in local space,
-#: ``size`` kept as the support surface's AABB).
+#: ``size`` kept as the support surface's AABB).  A proxy solid may also carry ``parts``:
+#: 2..4 local boxes the static table receives instead of one box around the proxy.
 STRUCTURE_SHAPES = ("box", "proxy")
 PROXY_SOURCES = ("def", "aabb-fallback", "manual")
 SOLIDS_KEYS = ("solids",)
@@ -1254,6 +1255,18 @@ def _check_broadphase(terrain, vertices, indices, count, report):
 
 
 # -- structures ------------------------------------------------------------- #
+def static_obb_count(solids):
+    """The motor's static OBBs for ``structures.solids``: one per solid, ``len(parts)`` for a
+    proxy solid that carries parts (§4)."""
+    total = 0
+    for solid in solids or []:
+        if not isinstance(solid, dict):
+            continue
+        parts = solid.get("parts") if solid.get("shape") == "proxy" else None
+        total += len(parts) if isinstance(parts, list) and parts else 1
+    return total
+
+
 def _check_structures(document, meta, report):
     structures = document.get("structures")
     if not isinstance(structures, dict):
@@ -1316,7 +1329,14 @@ def _check_structures(document, meta, report):
             if solid.get("proxySource") not in PROXY_SOURCES:
                 report.err("[structure_proxy] %s.proxySource: expected one of %s, got %r"
                            % (where, "/".join(PROXY_SOURCES), solid.get("proxySource")))
-        elif collider is not None:
+            if "parts" in solid:
+                for problem in collider_proxy.solid_parts_errors(solid["parts"],
+                                                                 solid.get("size")):
+                    report.err("[structure_proxy] %s.%s" % (where, problem))
+        elif "parts" in solid:
+            report.err("[structure_proxy] %s.parts: expected nothing when shape is not "
+                       "'proxy' (a box solid is its own one box)" % where)
+        if shape != "proxy" and collider is not None:
             report.err("[structure_proxy] %s.collider: expected nothing when shape is 'box', "
                        "got %r" % (where, type(collider).__name__))
         if solid.get("collision") not in (None, "box", "none"):
@@ -2055,9 +2075,10 @@ def _check_expected(document, meta, props, boxes, report):
         report.err("[expected_structure_count] meta.expected.structureCount: expected %d, "
                    "got %r (%+d)" % (len(solids), wanted_solids, len(solids) - wanted_solids))
     wanted_obbs = expected.get("staticObbs")
-    if wanted_obbs is not None and wanted_obbs != len(solids):
+    obbs = static_obb_count(solids)
+    if wanted_obbs is not None and wanted_obbs != obbs:
         report.err("[expected_static_obbs] meta.expected.staticObbs: expected %d, got %r (%+d)"
-                   % (len(solids), wanted_obbs, len(solids) - wanted_obbs))
+                   % (obbs, wanted_obbs, obbs - wanted_obbs))
     terrain = document.get("terrain") or {}
     triangles = (terrain.get("triangles") or {}).get("count")
     wanted_triangles = expected.get("terrainTriangles")

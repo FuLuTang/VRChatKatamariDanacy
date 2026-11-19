@@ -181,6 +181,51 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(solids[0]["collision"], "box")
         self.assertFalse(solids[0]["absorbable"])
 
+    def test_a_sparse_convex_solid_carries_parts_and_counts_them(self):
+        box = ([-2.0, -1.0, -2.0], [2.0, 2.0, 2.0])
+        convex = {"type": "convex", "center": [0.0, 0.0, 0.0],
+                  "hull": [-0.5, -0.5, -0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5, 0.0, 0.5, 0.0]}
+        parts = [{"center": [0.0, -0.4, 0.0], "size": [1.0, 0.2, 1.0]},
+                 {"center": [0.0, 0.1, 0.0], "size": [0.1, 0.8, 0.1]}]
+        entry = {"itemId": "stand_001", "def": "stand", "absorbDiameterReqMm": 5000,
+                 "position": [0.0, 0.5, 0.0], "aabb": [1.0, 1.0, 1.0],
+                 "rotationQuat": [0.0, 0.0, 0.0, 1.0],
+                 "worldAabb": ([-0.5, 0.0, -0.5], [0.5, 1.0, 0.5]),
+                 "collider": convex, "parts": parts}
+        plain = dict(entry, itemId="stand_002", parts=None)
+        solids, report = build.build_structures([entry, plain], [box])
+        self.assertEqual(solids[0]["parts"], parts)
+        self.assertNotIn("parts", solids[1])
+        self.assertEqual(report["splitSolids"], 1)
+        self.assertEqual(build.placement_v2.static_obb_count(solids), 3)
+        self.assertEqual(build.scaled_parts(parts, [2.0, 2.0, 2.0])[1]["size"], [0.2, 1.6, 0.2])
+        self.assertIsNone(build.scaled_parts(parts, [1.0, 2.0, 1.0]))
+        self.assertIs(build.scaled_parts(parts, [1.0, 1.0, 1.0]), parts)
+
+    def test_def_parts_split_only_a_sparse_hull(self):
+        foot = [(-0.7, -1.0, -0.03), (0.7, -1.0, -0.03), (0.7, -0.85, -0.03),
+                (-0.7, -0.85, -0.03), (-0.7, -1.0, 0.03), (0.7, -1.0, 0.03),
+                (0.7, -0.85, 0.03), (-0.7, -0.85, 0.03)]
+        pole = [(x * 0.03 / 0.7, -0.85 if y < -0.9 else 1.0, z) for x, y, z in foot]
+        quads = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (3, 7, 6, 2), (0, 4, 7, 3),
+                 (1, 2, 6, 5)]
+        faces = []
+        for base in (0, 8):
+            for a, b, c, d in quads:
+                faces += [(base + a, base + b, base + c), (base + a, base + c, base + d)]
+        mesh = (foot + pole, faces, [0.7, 1.0, 0.03])
+        sparse = {"type": "convex", "center": [0.0, 0.0, 0.0],
+                  "hull": [c for p in (foot[:4] + pole[2:4] + pole[6:8]) for c in p]}
+        parts = build.def_parts(sparse, mesh)
+        # The cuts sit on a 1/16 grid, so the foot/pole joint costs a third box; what matters
+        # is that the split happened and the boxes hold far less than the 1.4 x 2 m slab.
+        self.assertGreaterEqual(len(parts), 2)
+        volume = sum(p["size"][0] * p["size"][1] * p["size"][2] for p in parts)
+        self.assertLess(volume / (1.4 * 2.0 * 0.06), 0.3)
+        dense = {"type": "box", "center": [0.0, 0.0, 0.0], "size": [1.4, 2.0, 0.06]}
+        self.assertIsNone(build.def_parts(dense, mesh))
+        self.assertIsNone(build.def_parts(sparse, None))
+
     def test_the_activity_polygon_is_the_collision_footprint_plus_margin(self):
         terrain = build.terrain_from_collision(collision_list())
         points, info = build.activity_polygon(terrain, [([-2.0, 0.0, -3.0], [2.0, 1.0, 3.0])],

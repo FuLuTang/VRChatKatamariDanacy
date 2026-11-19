@@ -290,6 +290,43 @@ class StructureTags(Base):
         broken["structures"]["solids"][0]["shape"] = "box"      # box + collider is a mistake
         self.assertIn("[structure_proxy]", self.tags(self.run_validator(broken)))
 
+    def test_proxy_parts_count_as_static_obbs_and_are_checked(self):
+        # A sparse proxy solid hands the static table its parts instead of one box: the
+        # expected OBB total counts the parts, and each part must stay inside the size box.
+        solid = {"id": "deck", "kind": "deck", "role": "box", "shape": "proxy",
+                 "center": [0.0, 1.0, 0.0], "size": [1.4, 2.0, 0.3],
+                 "rotationQuat": [0.0, 0.0, 0.0, 1.0], "collision": "box",
+                 "absorbable": False, "support": True,
+                 "collider": {"type": "box", "center": [0.0, 0.0, 0.0],
+                              "size": [1.4, 2.0, 0.3]},
+                 "proxySource": "def",
+                 "parts": [{"center": [0.0, -0.9, 0.0], "size": [1.4, 0.2, 0.1]},
+                           {"center": [0.0, 0.1, 0.0], "size": [0.1, 1.8, 0.1]}]}
+        self.doc["structures"]["solids"] = [solid]
+        self.doc["meta"]["expected"]["structureCount"] = 1
+        self.doc["meta"]["expected"]["staticObbs"] = 2
+        report = self.run_validator()
+        self.assertEqual(report.errors, [], "\n".join(report.errors))
+        self.assertEqual(placement_v2.static_obb_count(self.doc["structures"]["solids"]), 2)
+
+        broken = copy.deepcopy(self.doc)
+        broken["meta"]["expected"]["staticObbs"] = 1
+        self.assertIn("[expected_static_obbs]", self.tags(self.run_validator(broken)))
+        broken = copy.deepcopy(self.doc)
+        broken["structures"]["solids"][0]["parts"][0]["size"] = [3.0, 0.2, 0.1]
+        self.assertIn("[structure_proxy]", self.tags(self.run_validator(broken)))
+        broken = copy.deepcopy(self.doc)
+        broken["structures"]["solids"][0]["parts"] = broken["structures"]["solids"][0]["parts"][:1]
+        self.assertIn("[structure_proxy]", self.tags(self.run_validator(broken)))
+        broken = copy.deepcopy(self.doc)
+        broken["structures"]["solids"][0]["parts"][1]["rotation"] = [0, 0, 0, 1]
+        self.assertIn("[structure_proxy]", self.tags(self.run_validator(broken)))
+        broken = copy.deepcopy(self.doc)
+        solid_box = broken["structures"]["solids"][0]
+        solid_box["shape"] = "box"
+        del solid_box["collider"]
+        self.assertIn("[structure_proxy]", self.tags(self.run_validator(broken)))
+
     def test_capacity(self):
         solid = {"id": "s0", "role": "box", "shape": "box", "center": [0, 0, 0],
                  "size": [1, 1, 1], "rotationQuat": [0, 0, 0, 1], "collision": "box"}

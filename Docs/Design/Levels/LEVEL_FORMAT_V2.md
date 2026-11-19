@@ -302,6 +302,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `shape` | `box`／`proxy`（**2026-11-16 追加**：接触形状用 `collider` 代理，见下）／`plane`（平面只给 `boundary` 遗留用；v2 新文件不写 `plane`） |
 | `collider` | 仅 `shape:"proxy"`：**局部空间**的接触代理，编码与 `defs[].collider` 完全相同（`box`/`sphere`/`capsule`/`convex` 4–24 点），由 `collider_proxy.fit_proxy` 拟合 |
 | `proxySource` | 仅 `shape:"proxy"`：`def`（取自该 def 的拟合代理）／`aabb-fallback`（**没有代理时**退回 AABB 盒，必须写出来）／`manual` |
+| `parts` | 仅 `shape:"proxy"`，可选：2–4 个 `{"center":[x,y,z],"size":[x,y,z]}`，与 `collider` 同一**局部帧**（`center`+`rotationQuat`），米。写了就由这几个盒代替「代理的一个盒」进电机静态 OBB 表；不写 = 单盒（缺省）。每个盒不得越出 `size` 盒（容差 1 mm） |
 | `collision` | `box`／`none`；`none` 表示纯视觉标记 |
 | `support` | 是否可当支撑面（`collision:"none"` 必须 `support:false`）。**`shape:"proxy"` 时支撑面仍取 `size` 盒的顶面**，见下 |
 | `curve` | 仅 `curve_ramp`：`radius_m`/`arc_deg`/`segments`/`bend`/`width_m`/`thickness_m`（沿用今天） |
@@ -311,8 +312,10 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 - `collider` 是该 def 的拟合代理（`defs[].collider` 同一份），放在 `center` + `rotationQuat` 的局部帧里；盒/球/胶囊/凸包照原样用。
 - `size` 仍写 AABB：它只用于**支撑面**（顶面）与旧的盒逻辑回退，不再当接触形状。两件事分开的理由：代理是凹/圆/斜的形状，而「球能站在它上面」需要一个水平顶面；用拟合凸包的顶面取支撑会在树冠上给出一个球站不住的尖角面。
 - 只有 def 确实没有代理时才 `shape:"box"` + `proxySource:"aabb-fallback"`，并在 `notes` 标出来。
-- 校验器：`shape:"proxy"` 要求 `collider` 合法且 `proxySource` 在枚举里；`shape:"box"` 带 `collider` 是错误（`[structure_proxy]`）。
-- **C# 侧目前只认盒**：`PlacementV2Rules`/导入器要读 `collider` 并建对应的代理碰撞体（可先用盒包住代理做过渡），这一步由导入器负责人排期；在那之前 `shape:"proxy"` 的固体按 `size` 盒工作（旧行为，不会更差）。
+- 校验器：`shape:"proxy"` 要求 `collider` 合法且 `proxySource` 在枚举里；`shape:"box"` 带 `collider` 或 `parts` 是错误；`parts` 个数不在 2–4、`size` 非正、带未知键或越出 `size` 盒也是错误（`[structure_proxy]`）。
+- **电机静态表只认 OBB**：导入器（`PlacementV2Rules.TrySolidContactBox`）把盒/球/胶囊/凸包代理都装成它的局部 AABB 一个盒，再把盒顶抬到 `size` 顶（支撑面），逐件打 note。
+- **`parts`：稀疏件拆成几个盒（2026-11-19）。** 凸包占自身 AABB 不到 0.6 的件，单盒会在空处造墙（晒衣架凸包占 0.30，单盒是 1.43 m × 2 m 的实墙，原作关卡碰撞在盒内地面以上没有三角）。生成器（`ref_v2_from_extract.def_parts` → `collider_proxy.solid_parts`）对这类件从**模型三角网**（不是凸包：一根立杆加横跨全宽的底脚，其凸包本身就是整片楔形）自顶向下切分：每轮在所有盒 × 3 轴 × 15 个等分切位里选去掉空体积最多的一刀，穿过切面的三角精确裁成两段，所以相邻盒无缝；去掉的空体积 < 整体 AABB 的 2% 或已有 4 盒即停；盒每轴至少 1 cm，向外取整到 0.1 mm；按低角 (y, x, z) 排序。确定性：同一网格同一输出。导入器给这类固体挂 `parts.length` 个 `BoxCollider`（按文档顺序），全部进 `LevelArenaHost.staticBoxes`；只把**最高的那个盒**的顶抬到 `size` 顶，其余盒保留自身高度。`collider` 原样保留（`spawn_reach` 与编辑器仍用真凸包）。
+- `meta.expected.staticObbs` = 每个固体 1 个、带 `parts` 的固体记 `parts` 个数（`placement_v2.static_obb_count`）。蟹座参考关卡：35 个固体中 10 个带 `parts`（各 4 盒），静态 OBB 35 → 65，容量 256。
 
 **v1 的 `role=boundary` 不再进 `structures`**：它本质是活动范围，迁移到 `activityArea`（§5）。**`role=ground` 也不再进 `structures`**：平地由 `meta.groundY` 兜底，真地形由 `terrain` 表达。转换器遇到无法无损映射的边界（非矩形、非轴对齐）时保留为 `role:"boundary"` 并记 warning，不猜。
 
@@ -1049,7 +1052,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | `[terrain_visual_texture]` | error | PNG 路径越界/文件缺失、sha256 不符、不是 PNG、像素尺寸与声明不符 |
 | `[terrain_visual_winding]` | error | 少于一半的三角形与其顶点法线一致（整张网格绕序是反的：背面剔除后只剩「洞」） |
 | `[structure_role]` | error | v2 新文件写 `role:"boundary"`/`"ground"`（迁移产物允许并 warning） |
-| `[structure_proxy]` | error | `shape:"proxy"` 缺 `collider`/`collider` 不合法/`proxySource` 不在枚举；`shape:"box"` 却带 `collider` |
+| `[structure_proxy]` | error | `shape:"proxy"` 缺 `collider`/`collider` 不合法/`proxySource` 不在枚举/`parts` 不合法；`shape:"box"` 却带 `collider` 或 `parts` |
 | `[structure_capacity]` | error | 静态固体 > `caps.staticSolids`（256）或 v2 关闭时 `ramps` >4、`boxes` >8 |
 | `[activity_wall]` | error | 点数 <2、闭合多边形自交、`heightM ≤ 0`、`minBallDiameterM` 不是正数（若出现） |
 | `[activity_wall_gate]` | warning | 门的阈值 ≤ 起始球径（这扇门从第一帧就是开的，多半写错了；要永久墙请省略该键） |
@@ -1122,7 +1125,7 @@ GRID_KEYS      = ("cellM","origin","cellsX","cellsZ")
 SEGMENT_KEYS   = ("id","firstIndex","indexCount","material")
 STRUCTURE_KEYS_V2 = ("id","kind","role","shape","center","size","curve","rotationQuat",
                      "collision","absorbable","support","meets","material","notes",
-                     "collider","proxySource")
+                     "collider","proxySource","parts")
 SOLIDS_KEYS    = ("solids",)
 ACTIVITY_KEYS  = ("walls","killPlane","softMarginM","source")
 WALL_KEYS      = ("id","points","closed","heightM","thicknessM","minBallDiameterM",

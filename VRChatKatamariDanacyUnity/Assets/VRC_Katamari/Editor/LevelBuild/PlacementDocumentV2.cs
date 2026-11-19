@@ -261,6 +261,20 @@ namespace VRCKatamari.Editor.LevelBuild
         /// (§9 <c>[structure_proxy]</c>).
         /// </summary>
         public string ProxySource;
+        /// <summary>
+        /// Optional <c>parts</c> of a <c>shape:"proxy"</c> solid: 2..4 boxes, local to
+        /// <see cref="Center"/> + <see cref="RotationQuat"/>, that the static table receives
+        /// INSTEAD of one box around <see cref="Collider"/> (§4). Null when absent: the solid
+        /// is then its one contact box.
+        /// </summary>
+        public PlacementV2SolidPart[] Parts;
+    }
+
+    /// <summary>One <c>structures.solids[].parts[]</c> box (local centre + full extents).</summary>
+    public sealed class PlacementV2SolidPart
+    {
+        public float[] Center;
+        public float[] Size;
     }
 
     /// <summary>The <c>curve</c> block of a <c>role=curve_ramp</c> solid (same shape as v1).</summary>
@@ -545,7 +559,7 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             "id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
             "collision", "absorbable", "support", "meets", "material", "notes", "collider",
-            "proxySource"
+            "proxySource", "parts"
         };
 
         private static readonly string[] CurveKeys =
@@ -1039,10 +1053,45 @@ namespace VRCKatamari.Editor.LevelBuild
                 solid.ProxySource = item.GetString("proxySource");
                 solid.Collider = ReadCollider(item.Get("collider"), result, document,
                     "structures.solids[" + i + "].collider");
+                solid.Parts = ReadSolidParts(item.Get("parts"), result, document,
+                    "structures.solids[" + i + "].parts");
                 solids[i] = solid;
             }
 
             return solids;
+        }
+
+        private static readonly string[] SolidPartKeys = { "center", "size" };
+
+        private static PlacementV2SolidPart[] ReadSolidParts(LevelJsonNode node,
+            PlacementV2ReadResult result, PlacementV2Document document, string path)
+        {
+            if (node == null) return null;
+            if (node.Kind != LevelJsonKind.Array)
+            {
+                result.Errors.Add("[structure_proxy] " + path + " must be an array of {center, size}");
+                return null;
+            }
+
+            var parts = new PlacementV2SolidPart[node.Count];
+            for (int i = 0; i < node.Count; i++)
+            {
+                LevelJsonNode item = node.At(i);
+                if (item == null || item.Kind != LevelJsonKind.Object)
+                {
+                    result.Errors.Add("[structure_proxy] " + path + "[" + i + "] is not an object");
+                    continue;
+                }
+
+                ReportUnknown(item, path + "[" + i + "]", SolidPartKeys, result, document);
+                parts[i] = new PlacementV2SolidPart
+                {
+                    Center = ReadVector(item, "center", 3),
+                    Size = ReadVector(item, "size", 3)
+                };
+            }
+
+            return parts;
         }
 
         private static PlacementV2Curve ReadCurve(LevelJsonNode node, PlacementV2ReadResult result,

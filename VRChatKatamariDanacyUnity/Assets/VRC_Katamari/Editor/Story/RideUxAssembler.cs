@@ -653,7 +653,32 @@ namespace VRCKatamari.Editor.Story
             Scene scene = motor.gameObject.scene;
             string wire = AssembleWireframe(scene, motor, c);
             string diag = AssemblePerformanceHosts(scene, c);
-            c.Notes.Add("local views: " + wire + "; " + diag);
+            string comfort = AssembleMotorSettings(scene, motor, c);
+            c.Notes.Add("local views: " + wire + "; " + diag + "; " + comfort);
+        }
+
+        /// <summary>骑乘球 motor 读「减弱自动转向」的设置宿主字段名。</summary>
+        internal const string MotorSettingsField = "settings";
+
+        // 骑乘球 motor 的 settings 指向场景里唯一的 HubSettingsHost（「减弱自动转向」）。
+        private static string AssembleMotorSettings(Scene scene, KatamariBallMotor motor, Counters c)
+        {
+            List<HubSettingsHost> settings = InScene<HubSettingsHost>(scene);
+            if (settings.Count == 0) return "motor settings absent (no HubSettingsHost)";
+            if (settings.Count > 1)
+            {
+                c.Problems.Add("more than one HubSettingsHost in the scene; motor.settings left untouched");
+                return "motor settings not wired";
+            }
+            var so = new SerializedObject(motor);
+            if (so.FindProperty(MotorSettingsField) == null)
+            {
+                c.Problems.Add("KatamariBallMotor." + MotorSettingsField + " is not a serialized field (renamed?)");
+                return "motor settings not wired";
+            }
+            if (SetObject(so, MotorSettingsField, settings[0], c)) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(motor);
+            return "motor settings wired";
         }
 
         private static string AssembleWireframe(Scene scene, KatamariBallMotor motor, Counters c)
@@ -766,6 +791,7 @@ namespace VRCKatamari.Editor.Story
             public int CatchWired;
             public bool WireframeFound;
             public bool WireframeSettingsWired;
+            public bool MotorSettingsWired;
         }
 
         /// <summary>
@@ -800,6 +826,16 @@ namespace VRCKatamari.Editor.Story
             if (displays.Count != 1)
                 problems.Add("expected exactly one CatchNameDisplay, found " + displays.Count);
             CatchNameDisplay display = displays.Count == 1 ? displays[0] : null;
+
+            // 骑乘球 motor 的 settings（「减弱自动转向」）。
+            List<HubSettingsHost> hubSettings = InScene<HubSettingsHost>(scene);
+            List<KatamariBallMotor> rideMotors = InScene<KatamariBallMotor>(scene);
+            r.MotorSettingsWired = hubSettings.Count == 1 && rideMotors.Count == 1
+                && ReadProperty(new SerializedObject(rideMotors[0]), MotorSettingsField) == hubSettings[0]
+                && UdonReferenceIs(rideMotors[0], MotorSettingsField, hubSettings[0]);
+            if (!r.MotorSettingsWired)
+                problems.Add("KatamariBallMotor.settings is not the scene's HubSettingsHost (proxy and Udon"
+                    + " table); the \"less auto-turn\" setting would do nothing");
             foreach (VRCKatamari.Pickup.PickupFieldHost host in InScene<VRCKatamari.Pickup.PickupFieldHost>(scene))
             {
                 r.CatchHosts++;
@@ -852,6 +888,12 @@ namespace VRCKatamari.Editor.Story
             return "diagnostics wired " + diagnosticsWired + "/" + diagnosticsHosts + " hosts, catch-name wired "
                 + catchWired + "/" + catchHosts + ", wireframe settings "
                 + (!wireframeFound ? "MISSING (no CollisionWireframe)" : wireframeSettingsWired ? "wired" : "NOT wired");
+        }
+
+        /// <summary>骑乘球 motor 设置接线的汇总读数（「减弱自动转向」），接在上一行之后打印。</summary>
+        internal static string MotorSettingsSummary(bool motorSettingsWired)
+        {
+            return "motor settings (less auto-turn) " + (motorSettingsWired ? "wired" : "NOT wired");
         }
 
         private static UnityEngine.Object ReadProperty(SerializedObject so, string field)

@@ -444,7 +444,7 @@ namespace VRCKatamari.Editor.Story
             }
         }
 
-        // 碰撞线框、性能诊断、物品名 HUD 的接线：与 All-Maps 装配的读回是同一个实现
+        // 碰撞线框、性能诊断、物品名 HUD、骑乘球 motor 设置的接线：与 All-Maps 装配的读回是同一个实现
         // （RideUxAssembler.ReadLocalWiring），每处缺接线一条 problem，再打一行汇总。
         private static void CheckLocalViews(UnityEngine.SceneManagement.Scene scene, ref int problems)
         {
@@ -454,6 +454,7 @@ namespace VRCKatamari.Editor.Story
             Debug.Log("[hub-check] " + RideUxAssembler.LocalWiringSummary(wiring.DiagnosticsWired,
                 wiring.DiagnosticsHosts, wiring.CatchWired, wiring.CatchHosts, wiring.WireframeFound,
                 wiring.WireframeSettingsWired));
+            Debug.Log("[hub-check] " + RideUxAssembler.MotorSettingsSummary(wiring.MotorSettingsWired));
         }
 
         // 结算卡（Prefab 实例、可交互画布、两颗 uGUI 按钮的 onClick 与场景引用）：与骑乘装配的

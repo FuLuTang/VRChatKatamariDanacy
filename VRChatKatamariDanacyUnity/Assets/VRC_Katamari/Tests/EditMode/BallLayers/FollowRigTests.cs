@@ -433,10 +433,12 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(typeof(float), outputs[1].ParameterType.GetElementType());
             Assert.AreEqual(typeof(float), outputs[2].ParameterType.GetElementType());
 
-            // The filtered state lives in the caller, not in static fields.
+            // The filtered state lives in the caller, not in static fields. Compile-time
+            // constants (the comfort tuning) are not state.
             FieldInfo[] fields = typeof(FollowRigMath).GetFields(
                 BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.AreEqual(0, fields.Length);
+            for (int i = 0; i < fields.Length; i++)
+                Assert.IsTrue(fields[i].IsLiteral, fields[i].Name + " is static state");
         }
 
         [Test]
@@ -512,6 +514,60 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(rig.Update(new Vector3(501f, 20f, -300f), 0.5f, 270f, 1f / 60f));
             Assert.AreEqual(502.85f, rig.Position.x, Tolerance);
             Assert.AreEqual(270f, rig.Yaw, Tolerance);
+        }
+
+        // ---- 减弱自动转向（ComfortTargetYaw）----
+
+        [Test]
+        public void ComfortYawWithinOneStepReachesTheHeading()
+        {
+            // 45 度/秒 × 0.1 秒 = 4.5 度；差 3 度直接到位。
+            Assert.AreEqual(13f, FollowRigMath.ComfortTargetYaw(10f, 13f, 45f, 60f, 0.1f), Tolerance);
+        }
+
+        [Test]
+        public void ComfortYawIsRateLimitedTowardTheHeading()
+        {
+            // 差 20 度，本步只走 4.5 度。
+            Assert.AreEqual(14.5f, FollowRigMath.ComfortTargetYaw(10f, 30f, 45f, 60f, 0.1f), Tolerance);
+            Assert.AreEqual(5.5f, FollowRigMath.ComfortTargetYaw(10f, 350f, 45f, 60f, 0.1f), Tolerance);
+        }
+
+        [Test]
+        public void ComfortYawTakesTheShortArcAcrossZero()
+        {
+            // 350 -> 10 是 +20 度，不是 -340。
+            Assert.AreEqual(354.5f, FollowRigMath.ComfortTargetYaw(350f, 10f, 45f, 60f, 0.1f), Tolerance);
+        }
+
+        [Test]
+        public void ComfortYawNeverLagsMoreThanTheCap()
+        {
+            // 球一步转了 100 度：限速后还差 95.5 度，夹到 60 度落后。
+            Assert.AreEqual(50f, FollowRigMath.ComfortTargetYaw(10f, 110f, 45f, 60f, 0.1f), Tolerance);
+        }
+
+        [Test]
+        public void ComfortYawWithInvalidTuningFallsBackToTheHeading()
+        {
+            Assert.AreEqual(30f, FollowRigMath.ComfortTargetYaw(float.NaN, 30f, 45f, 60f, 0.1f), Tolerance);
+            Assert.AreEqual(30f, FollowRigMath.ComfortTargetYaw(10f, 30f, -1f, 60f, 0.1f), Tolerance);
+            Assert.AreEqual(30f, FollowRigMath.ComfortTargetYaw(10f, 390f, 45f, -1f, 0.1f), Tolerance);
+            Assert.AreEqual(0f, FollowRigMath.ComfortTargetYaw(10f, float.PositiveInfinity, 45f, 60f, 0.1f));
+        }
+
+        [Test]
+        public void ComfortYawAtZeroDtHoldsThePreviousTarget()
+        {
+            Assert.AreEqual(10f, FollowRigMath.ComfortTargetYaw(10f, 30f, 45f, 60f, 0f), Tolerance);
+        }
+
+        [Test]
+        public void ComfortTuningIsSlowerThanTheBallTurnRate()
+        {
+            // 马达默认转向 110 度/秒；舒适速率必须更慢，否则开关没有可见差别。
+            Assert.Less(FollowRigMath.ComfortYawRateDegreesPerSecond, 110f);
+            Assert.Greater(FollowRigMath.ComfortMaxLagDegrees, 0f);
         }
 
         // Same shortest-arc helper as the Python test module, used only to state

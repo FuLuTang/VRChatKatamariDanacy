@@ -191,6 +191,44 @@ namespace VRCKatamari.BallLayers
             return true;
         }
 
+        /// <summary>「减弱自动转向」开启时跟随架追球朝向的最大角速度（度/秒）。PROVISIONAL，待头显调。</summary>
+        public const float ComfortYawRateDegreesPerSecond = 45f;
+
+        /// <summary>「减弱自动转向」开启时跟随架最多落后球朝向的角度（度），超出后随球转动。PROVISIONAL。</summary>
+        public const float ComfortMaxLagDegrees = 60f;
+
+        /// <summary>
+        /// 「减弱自动转向」：把交给 <see cref="TryUpdate"/> 的目标 yaw 限速，使视野不随球的
+        /// 原地转向全速旋转。每秒最多追 <paramref name="maxRateDegreesPerSecond"/>，但落后不超过
+        /// <paramref name="maxLagDegrees"/>（超出时按球的转速拖着走，球不会离开视野）。
+        /// 只改表现层的目标朝向，不碰球的运动。返回 [0, 360)。
+        /// </summary>
+        /// <remarks>
+        /// 输入非有限、速率或滞后为负时直接返回球朝向（等于不减弱）；调用方在瞬移/重置时应
+        /// 传入 previousTarget = heading，使两者对齐。
+        /// </remarks>
+        public static float ComfortTargetYaw(float previousTargetDegrees, float headingDegrees,
+            float maxRateDegreesPerSecond, float maxLagDegrees, float dtSeconds)
+        {
+            if (!KatamariMath.IsFiniteFloat(headingDegrees)) return 0f;
+            float heading = Wrap360(headingDegrees);
+            if (!KatamariMath.IsFiniteFloat(previousTargetDegrees)
+                || !KatamariMath.IsFiniteFloat(maxRateDegreesPerSecond) || maxRateDegreesPerSecond < 0f
+                || !KatamariMath.IsFiniteFloat(maxLagDegrees) || maxLagDegrees < 0f
+                || !KatamariMath.IsFiniteFloat(dtSeconds) || dtSeconds < 0f) return heading;
+
+            float delta = ShortestDelta(heading, previousTargetDegrees);
+            float step = maxRateDegreesPerSecond * dtSeconds;
+            if (!KatamariMath.IsFiniteFloat(step)) return heading;
+            float magnitude = delta < 0f ? -delta : delta;
+            if (magnitude <= step) return heading;
+
+            float sign = delta < 0f ? -1f : 1f;
+            float remaining = magnitude - step;
+            if (remaining > maxLagDegrees) remaining = maxLagDegrees;
+            return Wrap360(heading - sign * remaining);
+        }
+
         private static bool TryFilterAlpha(float hertz, float dtSeconds, out float alpha)
         {
             alpha = 0f;

@@ -159,6 +159,23 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void LowEffectsStopsTheModelSpin()
+        {
+            Assert.AreEqual(0f, CatchNameMath.ShownSpinDegrees(1.5f, true));
+            Assert.AreEqual(CatchNameMath.SpinDegrees(1.5f), CatchNameMath.ShownSpinDegrees(1.5f, false));
+            Assert.AreEqual(270f, CatchNameMath.ShownSpinDegrees(1.5f, false), 1e-4f);
+        }
+
+        [Test]
+        public void LowEffectsAndReduceAutoRotateDefaultOffAndHaveConsumers()
+        {
+            Assert.AreEqual(0, HubSettingsMath.Default(HubSettingsMath.LowEffects));
+            Assert.AreEqual(0, HubSettingsMath.Default(HubSettingsMath.ReduceAutoRotate));
+            Assert.IsTrue(HubSettingsMath.HasConsumer(HubSettingsMath.LowEffects));
+            Assert.IsTrue(HubSettingsMath.HasConsumer(HubSettingsMath.ReduceAutoRotate));
+        }
+
+        [Test]
         public void CatchNameSettingDefaultsOnAndStepsBothWays()
         {
             int id = HubSettingsMath.CatchName;

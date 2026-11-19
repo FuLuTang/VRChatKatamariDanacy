@@ -95,7 +95,8 @@ namespace VRCKatamari.Tests
                     || id == HubSettingsMath.Deadzone || id == HubSettingsMath.TurnSensitivity
                     || id == HubSettingsMath.Language || id == HubSettingsMath.EffectsVolume
                     || id == HubSettingsMath.Haptics || id == HubSettingsMath.PushCue
-                    || id == HubSettingsMath.CatchName || id == HubSettingsMath.CollisionWireframe;
+                    || id == HubSettingsMath.CatchName || id == HubSettingsMath.CollisionWireframe
+                    || id == HubSettingsMath.LowEffects || id == HubSettingsMath.ReduceAutoRotate;
                 Assert.AreEqual(expected, HubSettingsMath.HasConsumer(id), "id " + id);
             }
         }

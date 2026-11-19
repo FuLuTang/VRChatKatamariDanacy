@@ -1110,6 +1110,7 @@ namespace VRCKatamari.Editor.Hub
             diag.Add(VRCKatamari.Editor.Story.RideUxAssembler.LocalWiringSummary(
                 wiring.DiagnosticsWired, wiring.DiagnosticsHosts, wiring.CatchWired, wiring.CatchHosts,
                 wiring.WireframeFound, wiring.WireframeSettingsWired));
+            diag.Add(VRCKatamari.Editor.Story.RideUxAssembler.MotorSettingsSummary(wiring.MotorSettingsWired));
         }
 
         private static void VerifyGlobalBallCap(KatamariBallMotor motor,

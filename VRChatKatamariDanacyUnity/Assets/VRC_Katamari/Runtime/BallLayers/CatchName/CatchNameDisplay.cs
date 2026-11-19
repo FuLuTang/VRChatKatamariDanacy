@@ -162,7 +162,7 @@ namespace VRCKatamari.BallLayers
             if (modelPivot != null)
             {
                 modelPivot.localRotation = Quaternion.Euler(-modelTiltDegrees, 0f, 0f)
-                    * Quaternion.Euler(0f, CatchNameMath.SpinDegrees(elapsed), 0f);
+                    * Quaternion.Euler(0f, CatchNameMath.ShownSpinDegrees(elapsed, lowEffects), 0f);
             }
             UpdateLine(elapsed, position);
         }

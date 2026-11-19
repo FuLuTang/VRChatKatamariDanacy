@@ -285,6 +285,14 @@ namespace VRCKatamari.BallMotor
         private float followRigHeightMeters;
         private bool hasFollowRigFrame;
 
+        // 「减弱自动转向」（HubSettingsMath.ReduceAutoRotate）：开启时跟随架追的是限速后的
+        // 朝向 comfortTargetYaw，不是 headingDegrees。只影响表现层；设置按修订号轮询。
+        [Tooltip("Hub settings store; ReduceAutoRotate slows how fast the rider's view turns with the ball. Null = off.")]
+        [SerializeField] private VRCKatamari.Hub.HubSettingsHost settings;
+        private int settingsRevision = -1;
+        private bool reduceAutoRotate;
+        private float comfortTargetYaw;
+
         // ---- Input stage state (the intent layer owns the debounce latches) ----
         private float inputForward;
         private float inputTurn;
@@ -3404,8 +3412,16 @@ namespace VRCKatamari.BallMotor
             Vector3 rigPosition;
             float rigYaw;
             float height;
+            RefreshComfortSettings();
+            float targetYaw = headingDegrees;
+            if (reduceAutoRotate && hasFollowRigFrame && !discontinuous)
+            {
+                targetYaw = FollowRigMath.ComfortTargetYaw(comfortTargetYaw, headingDegrees,
+                    FollowRigMath.ComfortYawRateDegreesPerSecond, FollowRigMath.ComfortMaxLagDegrees, dt);
+            }
+            comfortTargetYaw = targetYaw;
             if (!FollowRigMath.TryUpdate(heightFilterHz, yawFilterHz, center,
-                semanticDiameterWorldM * 0.5f, headingDegrees,
+                semanticDiameterWorldM * 0.5f, targetYaw,
                 dt, eyeBaseUpMeters, eyeUpPerRadius, eyeUpMinMeters, eyeUpMaxMeters,
                 eyeBaseBackMeters, eyeBackPerRadius, eyeMaxBackM, discontinuous,
                 hasFollowRigFrame, followRigYawDegrees,
@@ -3417,6 +3433,19 @@ namespace VRCKatamari.BallMotor
             followRigYawDegrees = rigYaw;
             followRigHeightMeters = height;
             hasFollowRigFrame = true;
+        }
+
+        private void RefreshComfortSettings()
+        {
+            if (settings == null)
+            {
+                reduceAutoRotate = false;
+                return;
+            }
+            int revision = settings.GetRevision();
+            if (revision == settingsRevision) return;
+            settingsRevision = revision;
+            reduceAutoRotate = settings.IsReduceAutoRotate();
         }
 
         private void ApplyPresentation()

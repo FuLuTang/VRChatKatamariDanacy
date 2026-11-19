@@ -96,6 +96,15 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
+        /// 实际画出的自转角：低特效设置开启时小模型不转（停在 0°，正面朝向原型 -Z），
+        /// 否则同 <see cref="SpinDegrees"/>。
+        /// </summary>
+        public static float ShownSpinDegrees(float elapsedSeconds, bool lowEffects)
+        {
+            return lowEffects ? 0f : SpinDegrees(elapsedSeconds);
+        }
+
+        /// <summary>
         /// 新吸到的一件是否顶掉当前显示。不同帧一律换成最新的；同一帧里按显示优先级
         /// （原作 u8WndDispPrio），优先级相同时取后到的。
         /// </summary>

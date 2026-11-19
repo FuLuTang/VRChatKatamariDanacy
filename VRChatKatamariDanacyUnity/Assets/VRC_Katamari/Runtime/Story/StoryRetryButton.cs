@@ -4,69 +4,40 @@ using UnityEngine;
 namespace VRCKatamari.Story
 {
     /// <summary>
-    /// The "再试一次" button on the story round's result card: one press asks the round
-    /// controller to reset and restart the level.
+    /// The "再来一次" button on the story round's result card: one press asks for the level
+    /// to be reset and restarted.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// It owns no state and no rule: the only thing it does is call
-    /// <see cref="StoryRoundController.RequestRetry"/>, and that method decides whether a
-    /// retry is allowed (only while the result card is showing), resets the ball, the
-    /// props and the clock, and leaves the card alone when it refuses. Keeping the rule
-    /// in one place means the world-space and the uGUI button cannot behave differently.
+    /// A uGUI Button on the result card prefab (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md,
+    /// "结算卡"): its persistent <c>onClick</c> calls <c>UdonBehaviour.SendCustomEvent("Press")</c>
+    /// on this object's backing UdonBehaviour, the same wiring as the hub wall panels.
+    /// String dispatch only reaches public methods, hence <see cref="Press"/> is public and
+    /// takes no argument. There is no collider and no <c>Interact</c>: the canvas's own
+    /// BoxCollider + VRCUiShape is the hit box for VRChat's laser pointer and the mouse.
     /// </para>
     /// <para>
-    /// Two ways to press it, both on this one behaviour:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>
-    /// World-space: its own GameObject with a collider and this behaviour, so the click
-    /// has a surface of its own. <c>Interact</c> is the VRChat event the collider's
-    /// object receives. One behaviour per object is the project convention (clear
-    /// ownership and a readable self-check), not an engine rule - sharing is legal
-    /// (Docs/Design/BallMotor/README.md, assembly constraints).
-    /// </description></item>
-    /// <item><description>
-    /// uGUI: a Canvas <c>Button</c> can call <see cref="OnRetryPressed"/> through
-    /// <c>UdonBehaviour.SendCustomEvent</c>. The official UI-event allowlist includes
-    /// UdonBehaviour's <c>SendCustomEvent</c> (and <c>Interact</c>), so this needs no
-    /// extra component: Button OnClick() -> drag the GameObject holding this behaviour
-    /// -> function <c>UdonBehaviour.SendCustomEvent</c> -> argument
-    /// <c>OnRetryPressed</c>. <c>SendCustomEvent</c> dispatches by string to this
-    /// behaviour's public method, which is why the entry point is a public no-argument
-    /// method and not a UnityEvent-visible property. That wiring pattern is externally
-    /// documented, but this repository has not built or pressed a uGUI button yet.
-    /// </description></item>
-    /// </list>
-    /// <para>
-    /// A missing controller link is logged once per press instead of throwing: a
-    /// mistyped scene wire shows up as a button that does nothing, which is visible in
-    /// the console, not as a broken world.
+    /// It owns no state and no rule. With a hub launcher wired it calls
+    /// <c>HubLevelLauncher.PressRetryCurrentLevel</c> (which cancels a pending automatic
+    /// return first); in a lab without a hub it calls
+    /// <see cref="StoryRoundController.RequestRetry"/> directly. Both refuse outside
+    /// <c>StateResult</c>, and the button is only visible in Result, while the round gate is
+    /// closed - so no dash can be charging when it is pressed (the bell's freeze closes the
+    /// gate and cancels the dash), and the dash/trigger guard of the ride panels is not
+    /// needed here.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class StoryRetryButton : UdonSharpBehaviour
     {
+        /// <summary>The button's word on the card (in Tools/hubart/hub_panel_charset.txt).</summary>
+        public const string Label = "再来一次";
+
         [SerializeField] private StoryRoundController controller;
         [SerializeField] private VRCKatamari.Hub.HubLevelLauncher launcher;
 
-        /// <summary>World-space press: the retry button's collider was interacted with.</summary>
-        public override void Interact()
-        {
-            Press();
-        }
-
-        /// <summary>
-        /// uGUI entry point: a Canvas Button calls this through
-        /// <c>UdonBehaviour.SendCustomEvent("OnRetryPressed")</c>. Public on purpose -
-        /// string dispatch can only reach public names.
-        /// </summary>
-        public void OnRetryPressed()
-        {
-            Press();
-        }
-
-        private void Press()
+        /// <summary>Button.onClick target: <c>SendCustomEvent("Press")</c>.</summary>
+        public void Press()
         {
             if (controller == null)
             {
@@ -74,9 +45,6 @@ namespace VRCKatamari.Story
                     + " nothing.");
                 return;
             }
-            // The dash's trigger also raises Interact; while it charges/bursts the same press
-            // must not retry (owner 2026-11-18, RideDashInteractMath).
-            if (controller.ShouldIgnoreDashInteract()) return;
             if (launcher != null) launcher.PressRetryCurrentLevel();
             else controller.RequestRetry();
         }

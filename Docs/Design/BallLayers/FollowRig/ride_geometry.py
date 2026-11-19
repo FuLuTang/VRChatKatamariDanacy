@@ -58,7 +58,7 @@ PANEL_REFERENCE_EYE_M = 1.64
 # centre pivot, distance 1.6 m at the reference eye (RideUxAssembler carries the same numbers). The
 # HUD sits low on the left, beside the ball, so a rider looking down at the hands sees it too.
 PANELS = (("StoryHud", -38.0, -12.0, 1000.0, 260.0, 0.0014),
-          ("RideResultCard", 0.0, 6.0, 720.0, 360.0, 0.0016),
+          ("RideResultCard", 0.0, 6.0, 1152.0, 576.0, 0.001),
           ("RideExitPanel", 24.0, -8.0, 360.0, 150.0, 0.0014))
 PANEL_DISTANCE_M = 1.6
 

@@ -1,6 +1,6 @@
 using UdonSharp;
 using UnityEngine;
-using UnityEngine.UI;
+using TMPro;
 
 namespace VRCKatamari.Story
 {
@@ -65,10 +65,10 @@ namespace VRCKatamari.Story
         // button inside it in every state except Result and knows nothing of the panel.
         [SerializeField] private GameObject resultCardRoot;
 
-        // The card's Text: the presenter line during Presenting, the full outcome in
-        // Result. Kept apart from the HUD's own lines (target/current/remaining), which
-        // stay on the round.
-        [SerializeField] private Text resultText;
+        // The card's text (TextMeshPro, the result card prefab's ResultText): the presenter
+        // line during Presenting, the full outcome in Result. Kept apart from the HUD's own
+        // lines (target/current/remaining), which stay on the round.
+        [SerializeField] private TextMeshProUGUI resultText;
 
         // ---- Star table (level data; tier 1 is the round's goal) ----
         // stars[1].requires.target_diameter_m / stars[2].requires.target_diameter_m.

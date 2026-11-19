@@ -1,6 +1,6 @@
 # 大厅墙面板 Prefab 施工图
 
-现行决定：大厅三块墙面板（选关、怎么玩、设置）各是一个 Prefab，按 VRChat 官方的「可交互世界空间 Canvas」做法搭（owner 2026-11-18：「用『面板』啊」）。Prefab 由 Unity 操作员按本页用 MCP 搭建并保存；装配器只实例化、接场景引用、回读，不生成面板结构。行为与设置项见 [HUB_ROOM](<HUB_ROOM.md>)。
+现行决定：大厅三块墙面板（选关、怎么玩、设置）和骑手面前的回合结算卡各是一个 Prefab，按 VRChat 官方的「可交互世界空间 Canvas」做法搭（owner 2026-11-18：「用『面板』啊」）。Prefab 由 Unity 操作员按本页用 MCP 搭建并保存；装配器只实例化、接场景引用、回读，不生成面板结构。行为与设置项见 [HUB_ROOM](<HUB_ROOM.md>)。
 
 ## 依据
 
@@ -178,6 +178,46 @@ HubBoard_Settings
 
 `HubSettingButton.settings` 留空（场景引用，装配器写）。
 
+## 结算卡 RideResultCard
+
+骑手正前方的结算卡，用法与墙面板相同：Canvas 根 + uGUI Button，按钮 onClick → 本物体 backing UdonBehaviour 的 `SendCustomEvent("Press")`，没有自己的 Collider、不走 Interact。根组件、层、文字、按钮规则全部照「总约定」与「根物体」。
+
+| 项 | 值 |
+|---|---|
+| Prefab 路径 | `Assets/VRC_Katamari/Prefabs/Story/RideResultCard.prefab`（新建 `Prefabs/Story/` 目录） |
+| 根物体名 | `RideResultCard` |
+| 尺寸 | 1152 × 576（画布单位 = 毫米，实例缩放 0.001 → 1.152 × 0.576 m，与旧卡物理大小相同） |
+| 板面 Image | 圆角块，Cream，圆角 60 → multiplier 0.1667，Raycast Target 关 |
+| BoxCollider | Is Trigger 开，Center (0,0,0)，Size (1152, 576, 20) |
+| VRC Ui Shape | Allow Focus View 开 |
+| 层 | 根和全部子物体 Default（0） |
+| 根激活 | Prefab 里激活；装配器放实例时设为不激活（由 `StoryResultPresenter` 在 Presenting/Result 打开） |
+
+```
+RideResultCard              (根：RectTransform、Canvas、CanvasScaler、GraphicRaycaster、VRCUiShape、BoxCollider、Image)
+├─ ResultText               TMP
+└─ Buttons                  空 RectTransform（回合控制器只在 Result 打开它）
+   ├─ RetryButton           Image + Button + StoryRetryButton（+ UdonBehaviour）
+   │  └─ Label              TMP「再来一次」
+   └─ ReturnButton          Image + Button + HubReturnButton（+ UdonBehaviour）
+      └─ Label              TMP「回大厅」
+```
+
+| 物体 | 类型 | pos | size | 内容 |
+|---|---|---|---|---|
+| ResultText | TMP | (0, 70) | 1080 × 380 | 字号 56，居中（水平、垂直），Navy，Wrapping 开；文字留空（运行时由 presenter 写） |
+| Buttons | 空 RectTransform | (0, −200) | 1080 × 140 | — |
+| Buttons/RetryButton | Image + Button | (−260, 0) | 440 × 130 | Orange，圆角 65 → 0.1538，Raycast Target **开**；onClick 一条 `SendCustomEvent("Press")` 指向本物体的 UdonBehaviour |
+| RetryButton/Label | TMP | (0, 0) | 440 × 130 | 「再来一次」，字号 64，居中，白 |
+| Buttons/ReturnButton | Image + Button | (260, 0) | 440 × 130 | Sky，其余同 RetryButton |
+| ReturnButton/Label | TMP | (0, 0) | 440 × 130 | 「回大厅」，字号 64，居中，白 |
+
+两颗按钮的字段在 Prefab 里留空：`StoryRetryButton.controller`/`launcher`、`HubReturnButton.launcher` 是场景引用，装配器写。按钮字就是 `StoryRetryButton.Label`、`HubReturnButton.Label` 两个常量，字都在 `hub_panel_charset.txt` 里（`HubPanelCharsetTests` 覆盖）。`ResultText` 的正文（呈给国王、星、评语、回大厅提示）有不少字不在该字体资产里，由 VRChat 内置后备字体显示，Editor 里可能显示方块（与物品名 HUD 同一做法；是否要把正文字加入字符集见 HUB_ROOM「未决与验证边界」）。
+
+装配（`VRC Katamari/Ride/Assemble Ride UX`，All-Maps 装配会自动跑）：在 `FollowRigRoot/RidePanels` 下放一个实例（名 `RideResultCard`，正前方、上 6°、距眼 1.6 m，缩放 0.001），同名但不是该 Prefab 实例的旧卡删掉换掉；删掉场景里的旧 `HubResultBoard`、`HubReturnCardButton` 和卡外的 `StoryRetryButton` 物体；写 `StoryResultPresenter.resultCardRoot`（卡根）与 `resultText`（`ResultText`）、`StoryRoundController.retryButtonRoot`（`Buttons`）、`RetryButton` 的 `controller`/`launcher`、`ReturnButton` 的 `launcher`；场景里没有 `HubLevelLauncher`（无大厅的 lab）时把 `ReturnButton` 设为不激活、`RetryButton` 直调回合重试。卡和子物体不参与 `RidePanels` 的层 8 统一（它们按本页在 Default）。这些都是实例覆盖，不要 Apply 回 Prefab。
+
+回读：骑乘装配的 note 行与 `Check Room Wiring` 都调用同一个 `RideUxAssembler.ReadResultCard`，汇总行 `result card ok: retry wired, return wired`；检查项为：卡是该 Prefab 的实例且在 `RidePanels` 下、画布规则同墙面板（`BoardCanvasProblem`）、层 0、presenter/round 的三条引用在 proxy 与 Udon 表里一致、两颗按钮符合 `PanelButtonProblem`（onClick 恰好一条 `SendCustomEvent("Press")` 到自己的 UdonBehaviour、无 Collider、Navigation None、射线 Image）、按钮字等于常量、按钮的场景引用正确、全场景只有一个 `StoryRetryButton`、没有旧 `HubResultBoard`/`HubReturnCardButton`。
+
 ## 字体
 
 只用一个 TMP 字体资产，三块板全部文字共用：
@@ -196,7 +236,7 @@ HubBoard_Settings
 
 ## 搭建步骤（Unity 操作员，MCP）
 
-1. 同步源码后让 Unity 导入 `HubPanelSans-Bold.otf`、重编译 C#/UdonSharp（HubStartButton、HubSettingButton 的 program asset 已存在，不需要新建）。
+1. 同步源码后让 Unity 导入 `HubPanelSans-Bold.otf`、重编译 C#/UdonSharp（HubStartButton、HubSettingButton、StoryRetryButton、HubReturnButton 的 program asset 已存在，不需要新建）。
 2. 按「字体」生成 `HubPanelSans SDF.asset`，记下 missing 数（应为 0）。
 3. 建 `Assets/VRC_Katamari/Prefabs/Hub/`。在一个空场景或当前场景的空处按上面三棵树搭三块板：U# 组件用 UdonSharp 的方式加（`gameObject.AddUdonSharpComponent<T>()` 或 Inspector Add Component 后由 UdonSharp 自动配 backing UdonBehaviour）；按钮 onClick 目标选 **UdonBehaviour** 组件（不是 HubStartButton 代理组件）的 `SendCustomEvent(string)`，参数 `Press`。存为 Prefab 后删掉场景里的临时物体。
 4. 每个 Prefab 打开后回读：根组件 7 个（RectTransform、Canvas、CanvasScaler、GraphicRaycaster、VRCUiShape、BoxCollider、Image）；Levels 4 个按钮、Settings 24 个按钮，每个按钮 onClick 一条、参数 `Press`；全部 TMP 的 Font Asset = HubPanelSans SDF。

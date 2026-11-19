@@ -5,7 +5,7 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// The dash/Interact conflict rule (owner 2026-11-18): while the rider sits on the ball, a
-    /// panel or result-card Interact press is dropped while the dash charges or bursts, because
+    /// boarding or exit-panel Interact press is dropped while the dash charges or bursts, because
     /// VR's trigger raises both events from one press. Outside a dash nothing changes.
     /// </summary>
     public class RideDashInteractTests
@@ -37,17 +37,6 @@ namespace VRCKatamari.Tests
             // press must not be swallowed.
             Assert.IsFalse(RideDashInteractMath.ShouldIgnoreInteract(false, true, false));
             Assert.IsFalse(RideDashInteractMath.ShouldIgnoreInteract(false, false, true));
-        }
-
-        [Test]
-        public void TheActiveCheckIsTheUnionOfChargeAndBurst()
-        {
-            // The result card has no ride link: it uses this half and relies on "a dash can
-            // only start while seated" (the ride gate is open only for a seated rider).
-            Assert.IsFalse(RideDashInteractMath.IsDashInputActive(false, false));
-            Assert.IsTrue(RideDashInteractMath.IsDashInputActive(true, false));
-            Assert.IsTrue(RideDashInteractMath.IsDashInputActive(false, true));
-            Assert.IsTrue(RideDashInteractMath.IsDashInputActive(true, true));
         }
     }
 }

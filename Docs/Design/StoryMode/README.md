@@ -86,11 +86,11 @@
 5. **VRCStation 保持 Disable Station Exit 开**：移动轴驱球，跳跃是物品/退出输入，若允许移动或一次跳跃就离座，一次误触就结束骑乘（T04 实测：关掉退出后 Jump 不退座，且 `InputJump` 仍送达）。下车改为有意识的两条路：按住跳跃键 1.5 s，或面板上的按钮点两次。场景里 Player Mobility 是 `1`（Immobilize）；实验场景是 `0`，**Immobilize 下 `InputJump` 是否仍送达没有实测**，是真实客户端验收项。
 6. **点击目标在球上**：`BallPhysicsRoot/BallSeatTrigger`（单位球 `SphereCollider`、trigger、`BallSeatInteract`），半径 = `1.25 ×` 碰撞半径、下限 0.25 m，由 `BallSeatInteract.Update` 写 scale，所以随球径变；交互提示「骑上去」，距离 4 m。
 7. **`DesktopInput` 物体**：独占 `DesktopMoveInput`，把 `BallRideStation.input` 指过去。项目惯例是分开挂：motor、Station、输入各占一个对象，职责和自检都清楚（同物体本身合法，见 [BallMotor README](../BallMotor/README.md) 的「装配约束」）。
-8. **骑乘者面板**（`FollowRigRoot/RidePanels` 下的世界空间 Canvas，`RidePanels` 随骑手眼高按 E/1.64 缩放；不用屏幕叠加：头显里不画 Screen Space Overlay）：`StoryHud`（左下，球的左边）、`RideResultCard`（正前，含「再试一次」，`StoryRetryButton` 的触发盒在按钮上）、`RideExitPanel`（右下，含 `BallRideExitButton` 与按住跳跃提示，仅入座时显示）。位置规则见 RIDE_GEOMETRY §6；骑乘中鼠标左键仍可交互。下车时 `RideExitMath` 现算落点（球旁 0.9 m 的可站立地面）。
+8. **骑乘者面板**（`FollowRigRoot/RidePanels` 下的世界空间 Canvas，`RidePanels` 随骑手眼高按 E/1.64 缩放；不用屏幕叠加：头显里不画 Screen Space Overlay）：`StoryHud`（左下，球的左边）、`RideResultCard`（正前，结算卡 Prefab 实例，结构见 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「结算卡」：结果文字是 TMP，两颗 uGUI Button「再来一次」「回大厅」）、`RideExitPanel`（右下，含 `BallRideExitButton` 与按住跳跃提示，仅入座时显示）。位置规则见 RIDE_GEOMETRY §6；骑乘中鼠标左键仍可交互。下车时 `RideExitMath` 现算落点（球旁 0.9 m 的可站立地面）。
 
 ### 骑乘 UX 装配（可重复执行）
 
-菜单 `VRC Katamari/Ride/Assemble Ride UX`（`Editor/Story/RideUxAssembler.cs`）对打开的场景做：写 motor 的四个眼点系数与两个上限；建 `PlayerBall/BallPhysicsRoot/BallSeatTrigger`；删座位上的点击 Collider；把 VRCStation 设为站立式；建 `FollowRigRoot/RidePanels`，把 `StoryHud` 改成世界空间并挂到它下面；建 `RidePanels/RideResultCard`（结果文字、卡面、`RetryButton` 进来，`StoryRetryButton` 移到按钮下并加触发盒、`StoryResultPresenter.resultCardRoot` 指向它，初始隐藏）与 `RidePanels/RideExitPanel`（`BallRideExitButton` 移进来）；写 `BallRideStation` 的 `motor`/`exitPoint`/`ballInteract`/`exitPanelRoot`/`exitHintText`/`panelRoot`/`vrInput` 与骑手缩放参数。`Assemble All-Maps Hub` 在大厅装配之后自动跑这一步。结果行以 `[ride-ux] done: +N ~M problems=K` 开头；第二次运行应为 `+0 ~0`。
+菜单 `VRC Katamari/Ride/Assemble Ride UX`（`Editor/Story/RideUxAssembler.cs`）对打开的场景做：写 motor 的四个眼点系数与两个上限；建 `PlayerBall/BallPhysicsRoot/BallSeatTrigger`；删座位上的点击 Collider；把 VRCStation 设为站立式；建 `FollowRigRoot/RidePanels`，把 `StoryHud` 改成世界空间并挂到它下面；在 `RidePanels` 下放一个结算卡 Prefab 实例 `RideResultCard.prefab`（正前、上 6°、缩放 0.001，初始隐藏），写 `StoryResultPresenter.resultCardRoot`/`resultText`、`StoryRoundController.retryButtonRoot`（卡的 `Buttons` 行）与两颗按钮的场景引用，并删掉旧的 `HubResultBoard`、`HubReturnCardButton` 和卡外的 `StoryRetryButton` 物体；建 `RidePanels/RideExitPanel`（`BallRideExitButton` 移进来）；写 `BallRideStation` 的 `motor`/`exitPoint`/`ballInteract`/`exitPanelRoot`/`exitHintText`/`panelRoot`/`vrInput` 与骑手缩放参数。`Assemble All-Maps Hub` 在大厅装配之后自动跑这一步。结果行以 `[ride-ux] done: +N ~M problems=K` 开头；第二次运行应为 `+0 ~0`。
 
 前置与已知坑：`BallSeatInteract` 是新行为，先让 Unity 为它生成 U# program asset（选中 `BallSeatInteract.cs`，Inspector 的 Create 按钮，或先用 `Assets/Create/U# Script` 同名流程；资产连 `.meta` 一起提交）；给**已存在**的行为（`BallRideStation`、`BallRideExitButton`）新增了字段，旧实例的变量表里没有，装配器读回会报「Udon variable table lacks …」，按 `Labs/README.md`：编译 → 存盘 → 重开场景 → 再跑一次装配。
 
@@ -206,7 +206,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 | 文件 | 职责 | 明确不做 |
 |---|---|---|
-| `Runtime/Story/StoryRoundController.cs` | 一局剧情的状态机与 HUD：`Idle → Running → Presenting → Result`；到点冻结输入/收集/候选，按结算瞬间的碰撞直径或确认件数查星，显示星数与一句评语 | 不交分、不写账本（`bank` / `score_channel` / `ledger_write` 都不碰）、不改球径、不评过程、不重试（重试走 `RequestRetry()`，见「再试一次」） |
+| `Runtime/Story/StoryRoundController.cs` | 一局剧情的状态机与 HUD：`Idle → Running → Presenting → Result`；到点冻结输入/收集/候选，并冻结结算瞬间的碰撞直径或确认件数（星与评语由 `StoryResultPresenter` 写进结算卡） | 不交分、不写账本（`bank` / `score_channel` / `ledger_write` 都不碰）、不改球径、不评过程、不重试（重试走 `RequestRetry()`，见「再试一次」） |
 
 同一目录的 `StoryRoundMath.cs` 是纯规则（星级查表、倒计时、partial band 判据与 `StoryGoalType`），不读时钟/场景/motor，便于 EditMode 测试。
 
@@ -235,7 +235,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 |---|---|---|
 | `Runtime/Story/StoryRoundController.cs`（改） | `RequestRetry()`：状态闸门 → motor 复位 → 道具复位 → `BeginRound()`；重试次数写进 HUD 目标行 | 不交分/不奖励（不调 `TryBank`/`TryAwardScore`）、不写账本规则、不改球径与位姿（全交给 motor 的接缝）、不自己搬道具（交给宿主） |
 | `Runtime/Pickup/PickupFieldHost.cs`（改） | `Start` 记录每件道具的父物体/局部位姿/激活态；`ResetField()` 把它们放回去、重新可收集 | 不重置 motor、不碰回合闸门、不回退事件游标、不恢复道具 `localScale` |
-| `Runtime/Story/StoryRetryButton.cs`（新） | 世界内按钮的 `Interact()` 与 uGUI 入口 `OnRetryPressed()`，两者都只调 `controller.RequestRetry()` | 不持有回合状态、不判断能不能重试、不隐藏/显示自己 |
+| `Runtime/Story/StoryRetryButton.cs` | 结算卡「再来一次」的 uGUI 入口 `Press()`（`Button.onClick` → `SendCustomEvent("Press")`）：有 `HubLevelLauncher` 时调 `launcher.PressRetryCurrentLevel()`，单关场景直接调 `controller.RequestRetry()` | 不持有回合状态、不判断能不能重试、不隐藏/显示自己 |
 
 三个都是 `UdonSharpBehaviour`，同步模式 `BehaviourSyncMode.None`，没有 static 字段、属性、struct、泛型、List/LINQ、try/catch、`??`、字符串插值或方法重载。
 
@@ -243,7 +243,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 `RequestRetry()` 只在 `StateResult` 接受，其他状态一律拒绝并打一行 warning（`retry ignored: no result card is showing (state=...)`），结果卡与回合都不动。
 
-- `Presenting` **刻意拒绝**：那时结果卡还不存在，按钮也无从谈起；若允许，重置会静默跳过“呈给国王”的停留，玩家看到的还是呈递文本。
+- `Presenting` **刻意拒绝**：那时结算卡只显示「呈给国王」，按钮行还没打开；若允许，重置会静默跳过这段停留，玩家看到的还是呈递文本。
 - `Idle` / `Running` 拒绝：没有结果可重试。
 - 拒绝不改状态、不写 HUD：`state` 保持 `StateResult`，`resultText` 保持原样，所以“按钮没反应”只会出现在控制台日志里，不会出现半张卡。
 
@@ -290,24 +290,19 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 - 不记录、不恢复 `localScale`：attach 从不写 scale，`SetParent` 以“保持世界缩放”方式改 `localScale`，回到原父物体即恢复原外观。
 - 不碰 `SetCollecting` 闸门：`BeginRound()` 负责重新打开。
 
-### StoryRetryButton：两种按法，一个入口
+### StoryRetryButton：一个入口，卡上的 uGUI Button
 
-**世界内按钮**：独立 GameObject + 一个 Collider + 本行为，`controller` 指向场景里的 `StoryRoundController`。准星对着它按鼠标左键（桌面交互是左键），`Interact()` → `RequestRetry()`。
+结算卡 Prefab 的 `Buttons/RetryButton` 是 uGUI `Button` + `StoryRetryButton`。`Button` 的 `On Click ()` 只有一条：Runtime Only，目标 = 本物体的 backing `UdonBehaviour` 组件，函数 `UdonBehaviour.SendCustomEvent (string)`，参数 `Press`；按钮没有自己的 Collider，不走 `Interact`。官方 UI 事件白名单把 `UdonBehaviour` 的 `SendCustomEvent` 列为可调用目标（<https://creators.vrchat.com/worlds/udon/ui-events/>，2026-11-14 抓取，页面最后更新 2026-10-07）。
 
-**uGUI 按钮**：同一个行为也能从 Canvas `Button` 触发。官方 UI 事件白名单把 `UdonBehaviour` 的 `SendCustomEvent` 与 `Interact` 都列为可调用目标（<https://creators.vrchat.com/worlds/udon/ui-events/>，2026-11-14 抓取，页面最后更新 2026-10-07），所以接线不需要额外组件：
+`Press()` 是 `public void`（`SendCustomEvent` 按字符串分发，不能是属性或带参方法）。它不判断状态：有 `HubLevelLauncher` 时走 `launcher.PressRetryCurrentLevel()`（与自动返回、退座抢座共用同一条链），没有大厅的 lab 才直调 `controller.RequestRetry()`；能不能重开仍由 `RequestRetry()` 的状态闸门决定（下一节）。
 
-1. `Button` 的 `OnClick()` 加一项。
-2. 对象槽拖入挂 `StoryRetryButton` 的那个 GameObject（Inspector 里选 `UdonBehaviour` 组件）。
-3. 函数选 `UdonBehaviour.SendCustomEvent`。
-4. 参数字符串填 `OnRetryPressed`（大小写一致，没有别的参数）。
-
-`SendCustomEvent` 是按字符串分发到这个行为上的公开方法，所以入口是 `public void OnRetryPressed()` 而不是属性或带参方法。**在本仓未验证**：`Docs/` 里没有 UI 事件白名单的本地副本，本节只引官方文档；这个仓库也还没在 Unity 里连过 Canvas 按钮、没按过。世界内 `Interact` 的路径与 `BallRideExitButton` 同形（结果卡上的按钮现在就是这条路径，不是 uGUI `Button`）。
+接线由装配器回读：`RideUxAssembler.ReadResultCard` 检查两颗卡按钮的 onClick 恰好一条 `SendCustomEvent("Press")` 指向自己的 `UdonBehaviour`、没有 Collider、Navigation 为 None、Image 是射线目标、按钮字等于 `StoryRetryButton.Label`。**本仓未在 Unity/真机里按过这张卡**，依据是官方白名单与装配器回读。
 
 ### 场景怎么接（Unity 操作者）
 
-1. 结果卡是 rig 根下的世界空间 Canvas（`RideUxAssembler` 建）；`StoryRetryButton` 挂在 `RetryButton` 下，带一个 trigger `BoxCollider`，点它即 `Interact`。uGUI `Button` 的路径保留但不用。
-2. `controller` 拖场景里的 `StoryRoundController`。
-3. uGUI 按上一节的四步接 `SendCustomEvent("OnRetryPressed")`；世界内按钮不用再接线。
+1. 结算卡由 `RideUxAssembler` 在 `FollowRigRoot/RidePanels` 下实例化 `RideResultCard.prefab`；结构、尺寸与按钮 onClick 都属于 Prefab，场景里不再手工建 Canvas 或触发盒。
+2. 装配器写 `StoryRetryButton.controller`（场景唯一的 `StoryRoundController`）与 `launcher`（场景有 `HubLevelLauncher` 时）；没有大厅的场景 `launcher` 留空，按钮直调 `RequestRetry()`。
+3. `Buttons` 行是回合控制器的 `retryButtonRoot`，只在 Result 打开；装配器按名字 `Buttons` 找到它。
 4. 不需要改 `StoryRoundController` 的既有字段：`motor`、`input`、`pickupHost`、四个 Text、关卡数据与评语全部保持原名（只有私有字段与方法，没有序列化字段）。
 5. 道具行照旧：`propTransforms` 等并行数组就是复位用的原始来源，宿主自己抓，不需要额外数组。
 
@@ -324,16 +319,16 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 3. `OnStationEntered`（本地球员）→ 先开骑乘闸门，再调 `roundController.NotifyRiderSeated()`（站上 `roundController` 字段有接线才调）。
 4. `NotifyRiderSeated()` 只在 `Idle` 接受：`BeginRound()` 开回合闸门与收集、记 `Time.time` 起点 → **Running**，这时两把闸门都开，WASD 才驱球。
 5. 到点 `SettleRound()`：先关回合闸门、再关收集、再清候选，读冻结值 → **Presenting**（“呈给国王”）→ **Result**（星/测量值/评语）。
-6. 结果卡上“再试一次”走 `RequestRetry()`（见上一节；重试后仍在座位上，球回起点）。下车是 `BallRideStation.RequestExit()`（按住跳跃键，或面板按钮点两次）→ 离座 → 骑乘闸门关。
+6. 结果卡上「再来一次」走 `StoryRetryButton.Press`：有大厅时经 `launcher.PressRetryCurrentLevel()`，单关直调 `RequestRetry()`（见上一节；重试后仍在座位上，球回起点）。下车是 `BallRideStation.RequestExit()`（按住跳跃键，或面板按钮点两次）→ 离座 → 骑乘闸门关。
 
 ### 每状态的闸门（生效输入 = 两把都开）
 
-| 回合状态 | 回合闸门 `SetRoundGate` | 骑乘闸门 `SetRideGate` | 收集 `SetCollecting` | 剩余行 / 提示行 / 结果行 |
+| 回合状态 | 回合闸门 `SetRoundGate` | 骑乘闸门 `SetRideGate` | 收集 `SetCollecting` | 剩余行 / 提示行 / 结算卡 |
 |---|---|---|---|---|
-| Idle | 关（`Start()`，`startOnLoad=false`） | 关（Station 的 `Start()`；本地球员入座时开） | 关（`Start()`） | 剩余行清空；提示行（`startPromptText`）显示 `startPrompt`（默认「点击球坐上去开始」）；结果行空 |
-| Running | 开（`BeginRound()`） | 入座开、离座关 | 开（`BeginRound()`） | 「剩余 N s」；提示行关；结果行空 |
-| Presenting | 关（`SettleRound()`） | 同上 | 关（`SettleRound()`） | 「剩余 0 s」；提示行关；结果行 `presenterLine` |
-| Result | 关 | 同上 | 关 | 提示行关；结果卡（星/测量值/评语） |
+| Idle | 关（`Start()`，`startOnLoad=false`） | 关（Station 的 `Start()`；本地球员入座时开） | 关（`Start()`） | 剩余行清空；提示行（`startPromptText`）显示 `startPrompt`（默认「点击球坐上去开始」）；结算卡隐藏 |
+| Running | 开（`BeginRound()`） | 入座开、离座关 | 开（`BeginRound()`） | 「剩余 N s」；提示行关；结算卡隐藏 |
+| Presenting | 关（`SettleRound()`） | 同上 | 关（`SettleRound()`） | 「剩余 0 s」；提示行关；结算卡显示「呈给国王」 |
+| Result | 关 | 同上 | 关 | 提示行关；结算卡显示星/测量值/评语 |
 
 所以：Idle 里谁都开不动球（回合闸门关，而且站着时骑乘闸门也关）；Running 里站着的人开不动球（只剩骑乘闸门把关）；到点后无论坐着还是站着都不会再吸收。
 
@@ -345,55 +340,59 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 - **`NotifyRiderSeated()` 在 Result：什么也不做。** 重试只能按结果卡上的按钮：`BeginRound()` 单独跑不会复位球、账本行、回合 id 和道具，坐下就重开等于“新回合配旧球”；`RequestRetry()` 才是先 motor 复位、再道具复位、最后 `BeginRound()` 的那条路。Running/Presenting 同样忽略，否则坐下会静默重开计时。
 - **`startOnLoad = true`** 保留旧行为，给没有 Station、没有人可坐的无头/键盘实验；有 Station 的场景必须保持 `false`。
 - **站不接 `roundController` 时**照样能坐、能开关骑乘闸门、能显示提示（StationPlatform 实验就是这样）；但场景里有 `StoryRoundController` 就必须把站上的 `roundController` 指过去，否则控制器永远停在 Idle、回合闸门一直关，表现为“坐上去也开不动”。
-- 提示行有**自己的一条 Text**（`startPromptText`），只在 Idle 显示；没接这条提示行时退回**剩余行**，并把剩余行清空以免显示一条没开始的倒计时。结果行（`resultText`）不再承载提示，只放「呈给国王」与结算内容——它随结果卡一起在 Idle 隐藏。
+- 提示行有**自己的一条 Text**（`startPromptText`），只在 Idle 显示；没接这条提示行时退回**剩余行**，并把剩余行清空以免显示一条没开始的倒计时。结果文字（`StoryResultPresenter.resultText`，卡上的 TMP）不再承载提示，只放「呈给国王」与结算内容——它随结果卡一起在 Idle 隐藏。
 
 ### 场景怎么接（Unity 操作者）
 
 1. `BallRideStation.roundController` 指向场景里的 `StoryRoundController`；不接 = 见上一条。
 2. 有 Station 的可玩场景：`StoryRoundController.startOnLoad` 保持默认 `false`。无头实验勾上。
 3. HUD 四行（目标/当前/剩余/结果）之外多一条**提示行** `startPromptText`，只在 Idle 显示（见下节「结果卡显隐」）；`startPrompt` 想换文案就在场景实例上改这个字符串，不用改代码。
-4. 相关序列化字段与默认值：`StoryRoundController.startOnLoad`（默认 `false`）、`startPrompt`（默认文案）、`BallRideStation.roundController`，以及「结果卡显隐」一节的 `retryButtonRoot` / `resultCardRoot` / `startPromptText`（默认 `null`，`null` 一律跳过）。
+4. 相关序列化字段与默认值：`StoryRoundController.startOnLoad`（默认 `false`）、`startPrompt`（默认文案）、`BallRideStation.roundController`，以及「结果卡显隐」一节的 `StoryRoundController.retryButtonRoot` / `startPromptText` 与 `StoryResultPresenter.resultCardRoot` / `resultText`（默认 `null`，`null` 一律跳过）。
 
 ## 结果卡显隐：按钮只在 Result，卡片从 Presenting 开始
 
-> 本节说明结果卡与按钮的显隐规则：Idle 不显示“再试一次”，Presenting 起显示卡面，Result 起显示按钮。
+> 本节说明结算卡与按钮的显隐规则：Idle 不显示按钮，Presenting 起显示卡面，Result 起显示按钮。卡根与结果文字归 `StoryResultPresenter`，`Buttons` 行与提示行归 `StoryRoundController`；两个行为各写各的对象。
 
-### 三个新链接（卡面两个 + 提示行一个）
+### 四条场景引用（卡三条 + 提示行一条）
 
-| 字段 | 拖什么 | 显示于 | 隐藏于 |
+| 字段（所在行为） | 指向什么 | 打开 / 写入于 | 关闭 / 清空于 |
 |---|---|---|---|
-| `retryButtonRoot` | “再试一次”按钮所在对象：uGUI 是挂 `Button` 的那个 GameObject（不是 Canvas，也不是 Text 子物体）；世界内按钮是挂 `StoryRetryButton` + Collider 的那个 GameObject | Result | Idle / Running / Presenting |
-| `resultCardRoot` | 结果卡的底板/面板对象（卡面背景） | Presenting / Result | Idle / Running |
-| `startPromptText` | 提示行的 `Text` 本身：一个只有这个 `Text` 的独立对象，**不要**放进 `resultCardRoot` 子树（Idle 会把提示和卡面一起关掉） | Idle | Running / Presenting / Result |
+| `StoryRoundController.retryButtonRoot` | 结算卡的 `Buttons` 空行（`RideResultCard/Buttons`，两颗按钮的父物体；不是按钮本身，也不是卡根） | Result | Idle / Running / Presenting |
+| `StoryResultPresenter.resultCardRoot` | 结算卡根物体（`RidePanels/RideResultCard` 的 Prefab 实例） | Presenting / Result | Idle / Running；Respawn 放弃时也不显示 |
+| `StoryResultPresenter.resultText` | 卡上的 `RideResultCard/ResultText`（TMP） | Presenting 写「呈给国王」，Result 写完整结果 | 离开 Presenting/Result 时清空 |
+| `StoryRoundController.startPromptText` | 提示行的 `Text` 本身：一个只有这个 `Text` 的独立对象，**不要**放进 `resultCardRoot` 子树（Idle 会把提示和卡面一起关掉） | Idle | Running / Presenting / Result |
 
-前两个是 `[SerializeField] private GameObject`，第三个是 `[SerializeField] private Text`；默认都是 null，空链接一律跳过，所以没接的场景（含无头实验）行为与改动前完全一样——没有提示行时，Idle 的提示退回剩余行。
+这些字段默认都是 null，空链接一律跳过，所以没接的场景（含无头实验）行为与改动前完全一样——没有提示行时，Idle 的提示退回剩余行。
 
-### 一个方法写 active 状态
+### 两个写者，各写各的对象
 
-`ApplyStateVisibility()`（`StoryRoundController.cs:763`）是唯一写这三个对象 active 状态的地方（卡面、按钮，以及提示行的 `startPromptText.gameObject`），调用点覆盖全部状态变化：
+`StoryResultPresenter.Update()` 是卡根 active 状态的唯一写者：Idle / Running 隐藏卡根并清空 `resultText`；Presenting 写「呈给国王」并打开卡根；Result 写星/测量值/评语并保持打开；自由练习关（`FreeRoam`）与 `AbortRound()` 放弃的局不显示卡。
 
-| 调用点 | 进入的状态 | 提示行 | 卡面 | 按钮 |
-|---|---|---|---|---|
-| `EnterIdle()`（`:322`） | Idle | 开 | 关 | 关 |
-| `BeginRound()`（`:405`，含重试成功后的重开） | Running | 关 | 关 | 关 |
-| `SettleRound()`（`:658`） | Presenting | 关 | 开 | 关 |
-| `Update()` 的 Presenting→Result 转移（`:426`） | Result | 关 | 开 | 开 |
-| `RequestRetry()` 开头（`:509`） | 仍为当前状态 | 按当前状态重写 | 按当前状态重写 | 按当前状态重写 |
+`StoryRoundController.ApplyStateVisibility()`（`StoryRoundController.cs:1010`）只写 `retryButtonRoot`（`Buttons` 行，两颗按钮一起）与 `startPromptText`：
 
-`Start()` 的两个分支分别走 `EnterIdle()` 或 `BeginRound()`，所以加载后的第一次 Start 就会把按钮关掉（按 Unity 生命周期，Start 在第一帧渲染前跑完），正常不会先闪一帧；Idle 分支同时把提示行打开。场景里把按钮对象在 authoring 时就设成 inactive 是双保险。`RequestRetry()` 开头那一次是“重写”：按错状态进来的调用会把按钮重新藏掉，而不是让按钮与状态各说各话。
+| 调用点 | 进入的状态 | 提示行 | `Buttons` 行 |
+|---|---|---|---|
+| `EnterIdle()` | Idle | 开 | 关 |
+| `BeginRound()`（含重试成功后的重开） | Running | 关 | 关 |
+| `SettleRound()` | Presenting | 关 | 关 |
+| `Update()` 的 Presenting→Result 转移 | Result | 关 | 开 |
+| `AbortRound()` | 放弃后的 Result | 关 | 开（卡根由 presenter 关着，看不到） |
+| `RequestRetry()` 开头 | 仍为当前状态 | 按当前状态重写 | 按当前状态重写 |
+
+`Start()` 的两个分支分别走 `EnterIdle()` 或 `BeginRound()`，所以加载后的第一次 Start 就会把 `Buttons` 行关掉（按 Unity 生命周期，Start 在第一帧渲染前跑完），正常不会先闪一帧；Idle 分支同时把提示行打开。场景里把 `Buttons` 行在 authoring 时就设成 inactive 是双保险。`RequestRetry()` 开头那一次是“重写”：按错状态进来的调用会把 `Buttons` 行重新藏掉，而不是让按钮与状态各说各话。
 
 ### 按钮显隐不是规则，`RequestRetry()` 的状态闸门才是
 
-显隐只决定“看得见/按得到”，不决定“能不能重开”。`RequestRetry()` 仍然只在 `StateResult` 接受（其余状态一行 warning 后返回 false，卡面与回合都不动），所以就算某个场景把按钮拖错、或者在 Result 之前用别的方式把它显示出来，也开不了新回合，更不会出现“新回合配旧球”。这也是本节的显隐逻辑可以放心做的原因：它只改表现，规则仍在一处。
+显隐只决定“看得见/按得到”，不决定“能不能重开”。`RequestRetry()` 仍然只在 `StateResult` 接受（其余状态一行 warning 后返回 false，卡面与回合都不动），所以就算某个场景把 `Buttons` 行拖错、或者在 Result 之前用别的方式把它显示出来，也开不了新回合，更不会出现“新回合配旧球”。这也是本节的显隐逻辑可以放心做的原因：它只改表现，规则仍在一处。
 
 ### 场景怎么接（Unity 操作者）
 
-1. `retryButtonRoot` 拖 uGUI `Button` 所在的那个 GameObject（`OnClick` 仍按上一节四步接 `UdonBehaviour.SendCustomEvent("OnRetryPressed")`）；世界内按钮则拖挂 `StoryRetryButton` + Collider 的对象。
-2. `resultCardRoot` 拖结果卡底板。它从 Presenting 起就显示，所以“呈给国王”那一拍背后有牌面，Result 沿用同一块底板；控制器在这两个状态里只改 `resultText` 的文字，牌面本身由场景决定。
-3. **结果行 `resultText` 就放在 `resultCardRoot` 的子树里**：它从 Presenting 起才有内容，卡面也正好在这两个状态开着，两者同显同隐最省事。开始提示不占结果行：它有自己的一条 Text（`startPromptText`），由控制器在 Idle 打开、其余状态关掉。所以 **`startPromptText` 必须放在卡片外面**：放进 `resultCardRoot` 的提示会在 Idle 跟着卡面一起消失。
-4. **不要把这三个对象拖成本控制器自己的 GameObject**：卡面与按钮在 Idle 会被 `SetActive(false)`，提示行在非 Idle 被关；只要控制器自己的对象被关掉，它随后就不再运行，回合永远停在 Idle。三者都必须是独立对象（通常和卡面一起放在同一个 Canvas 下）；提示行还要是只有这一个 `Text` 的专属对象，别拖一个共用的父物体，否则关它会连带关掉别的 HUD 行。
-5. `RequestRetry()` 是 `public bool`；上面三个显隐字段默认 null，不接时行为与无显隐逻辑相同。
-6. U# 语言约束照旧：没有属性、重载、泛型、`??`、字符串插值、static 字段；`ApplyStateVisibility()` 是无参私有方法，三个 `SetActive` 里前两个是 `GameObject.SetActive(bool)`，第三个是 `Text.gameObject.SetActive(bool)`（`PickupFieldHost.cs` 有 `prop.gameObject.SetActive(...)` 先例）。
+1. `retryButtonRoot` 指向结算卡的 `Buttons` 空行（两颗按钮的父物体；不是按钮本身，也不是卡根），装配器写这个字段，手工接线的场景照此指向。两颗按钮的 `Button.onClick` 一条 `SendCustomEvent("Press")` 属于 Prefab，装配器与 `ReadResultCard` 回读。
+2. `resultCardRoot` 与 `resultText` 在 `StoryResultPresenter` 上（装配器写）：卡根从 Presenting 起显示，Result 沿用；presenter 在 Presenting 写「呈给国王」、Result 写星/测量值/评语，牌面本身由 Prefab 决定。
+3. **结果文字 `resultText` 就在卡根子树里**（`RideResultCard/ResultText`，TMP）：它从 Presenting 起才有内容，卡面也正好在这两个状态开着，两者同显同隐最省事。开始提示不占结果文字：它有自己的一条 Text（`startPromptText`），由回合控制器在 Idle 打开、其余状态关掉。所以 **`startPromptText` 必须放在卡片外面**：放进 `resultCardRoot` 的提示会在 Idle 跟着卡面一起消失。
+4. **不要把这些对象拖成对应行为自己的 GameObject**：卡根与 `Buttons` 行在 Idle 会被 `SetActive(false)`，提示行在非 Idle 被关；只要行为自己的对象被关掉，它随后就不再运行，回合永远停在 Idle。卡根、`Buttons` 行与提示行都必须是独立对象（通常和卡面一起放在同一个 Canvas 下）；提示行还要是只有这一个 `Text` 的专属对象，别拖一个共用的父物体，否则关它会连带关掉别的 HUD 行。
+5. `RequestRetry()` 是 `public bool`；上面的显隐字段默认 null，不接时行为与无显隐逻辑相同。
+6. U# 语言约束照旧：没有属性、重载、泛型、`??`、字符串插值、static 字段；`ApplyStateVisibility()` 是无参私有方法，写 `GameObject.SetActive(bool)` 与 `startPromptText.gameObject.SetActive(bool)`（`PickupFieldHost.cs` 有 `prop.gameObject.SetActive(...)` 先例）。
 
 ## 道具字段的编辑器同步（PickupFieldSync）
 
@@ -542,7 +541,7 @@ prop_bench_01@size=1.25
 5. **已经坐在站里进世界**（例如复活回座位）时没有“加载时已在座”的路径：站只在 `OnStationEntered` 通知，会停在 Idle 且骑乘闸门关着，要离座再坐一次。
 6. **`Update` 顺序**：宿主与 motor、控制器之间没有顺序保证，事件可能晚一帧被消费；附着写的是局部位姿，晚一帧不会漂移，快滚时的视觉差没有观察。
 7. **后备路径**：事件环溢出只打日志，附着失败只隐藏；正常一局只走“附着成功”，这两条没有被执行过。
-8. **uGUI `Button` → `SendCustomEvent` 接线**：依据官方白名单，本仓没有实机按过；结果卡现用的是世界内 `Interact` 路径。
+8. **uGUI `Button` → `SendCustomEvent` 接线**：墙面板卡片与结算卡两颗按钮都走这条；代码与装配器回读已写，本仓未在 Unity/真机按过。
 9. **单人**：全部行为 `BehaviourSyncMode.None`，`DisableInteractive` 是本地状态；多人不在范围内。
 10. **每帧成本**：宿主每 0.05 s 一次全道具平方距离扫描（切片约 100 件、灰盒 448 件），真实 Udon 开销没有量过。
 
@@ -550,8 +549,8 @@ prop_bench_01@size=1.25
 
 > 现行决定：owner 2026-11-18 要求墙面选关与游戏结束回大厅。代码与装配器已更新；这轮 Unity/Udon/VR 尚待验收。完整操作步骤、截图与预期读数见 [HUB_ROOM](<HUB_ROOM.md>)，合集规则见 [ALL_MAPS_HUB](<ALL_MAPS_HUB.md>)。
 
-- **选关数据驱动**：[hub_levels.json](<hub_levels.json>) 定义关卡与索引。Assemble All-Maps Hub 通过 [HubAssembler](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.cs>) 重建北墙2×2实体按钮面板，host.levelButtons与入口数组同序；不依赖手摆。
-- **开始**：只有Collider + Interact按钮启动。桌面准星鼠标左键，VR指向扳机；走动/停留不选关。传送到关卡入口，入口离球座>12m才回退座位，量到到达后开回合并请求自动入座。
+- **选关数据驱动**：[hub_levels.json](<hub_levels.json>) 定义关卡与索引。Assemble All-Maps Hub 通过 [HubAssembler](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.cs>) 重建北墙 2×2 关卡卡片面板（uGUI Button），host.levelButtons与入口数组同序；不依赖手摆。
+- **开始**：只有明确点击才开始（墙面卡片是 uGUI Button，onClick → `SendCustomEvent("Press")`）。桌面准星鼠标左键，VR指向扳机；走动/停留不选关。传送到关卡入口，入口离球座>12m才回退座位，量到到达后开回合并请求自动入座。
 - **结算**：完整Result卡默认显示8秒后自动回大厅，也可点「回大厅」提前回或「再来一次」取消自动返回。重试经同一个launcher处理传送/唤醒岛，不绕过导航。退座慢时卡上提示「请先下车」，每秒复查，Riding负责退出重发。
 - **Respawn**：本地菜单重生先AbortRound，取消旧开始与入座，再确认退座、返回HubSpawn、停用关卡岛；不出放弃结果卡，也不会被Running纠偏送回球上。回大厅首个明确点击即可再选关。
 - **单场景、多关**：共享一个球、一个回合控制器；按关登记物理与道具。空闲岛SetActive停用，基础设施不在岛内。规则测试包括 [HubResultFlowTests](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/Hub/HubResultFlowTests.cs>)、HubLoopMathTests、HubRoomMathTests；场景行为仍须Unity与owner头显复测。

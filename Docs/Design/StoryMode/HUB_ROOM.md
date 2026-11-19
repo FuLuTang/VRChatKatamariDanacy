@@ -15,11 +15,11 @@
 
 [HubRoomHost](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/Hub/HubRoomHost.cs>) 仅显示房间导航相位和提示，绝不调开局入口。面板按钮列表字段为 `levelButtons`，装配器显式重写并回读新Udon变量；不依赖旧字段迁移。旧站区/停留/武装算法与测试已移除。
 
-[HubStartButton](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubStartButton.cs>) 的 `Press`（卡片 Button.onClick → `UdonBehaviour.SendCustomEvent("Press")`）→ launcher.PressStart(index) 是选关入口。[HubLevelLauncher](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubLevelLauncher.cs>) 拥有开始、返回、取消与计时；[StoryRetryButton](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/StoryRetryButton.cs>) 在有 launcher 时调 PressRetryCurrentLevel，无大厅的 lab 才直调控制器重试。
+[HubStartButton](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubStartButton.cs>) 的 `Press`（卡片 Button.onClick → `UdonBehaviour.SendCustomEvent("Press")`）→ launcher.PressStart(index) 是选关入口。[HubLevelLauncher](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubLevelLauncher.cs>) 拥有开始、返回、取消与计时；结算卡（骑手面前的 `RideResultCard`，Prefab 见 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「结算卡」）上的两颗按钮与墙面板一样是 uGUI Button → `SendCustomEvent("Press")`：[StoryRetryButton](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/StoryRetryButton.cs>)「再来一次」在有 launcher 时调 PressRetryCurrentLevel，无大厅的 lab 才直调控制器重试；[HubReturnButton](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubReturnButton.cs>)「回大厅」调 PressReturnToRoom。按钮只在 Result 显示，此时回合门已关、冲刺已被取消，所以不需要「冲刺扳机同时触发 Interact」的忽略规则（该规则只留给仍走 Interact 的上球触发器与下车面板）。每关的返回方块 `HubReturnButton_<id>` 仍是 Collider + Interact，与卡上按钮共用 `Press`。
 
 [HubSettingsHost](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubSettingsHost.cs>) 存玩家设置（每项一个整数档位，存 VRChat PlayerData，`OnPlayerRestored` 之后才读写），[HubSettingsMath](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubSettingsMath.cs>) 定范围、默认、步进、存储键与档位→数值换算；[HubSettingButton](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubSettingButton.cs>) 是一行设置的一个箭头（同样由 Button.onClick → `SendCustomEvent("Press")` 调用）。[HubRecordBook](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubRecordBook.cs>) 只读观察回合，每次未放弃的计时关进入 Result 时记一次「最好/上次球径与件数、已玩次数」，存 PlayerData；比较规则在 [HubRecordMath](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Hub/HubRecordMath.cs>)。[HubPanelDisplay](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/Hub/HubPanelDisplay.cs>) 写三块板上的全部文字（TextMeshProUGUI）；所有字词（简中/英/日）在 [HubPanelTextMath](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/Hub/HubPanelTextMath.cs>)。HubRoomHost 的提示行也跟随语言设置。
 
-[HubAssembler](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.cs>) 负责启动/返回接线与两个结果按钮；房间外观与三块面板 Prefab 的放置/接线由 [HubAssembler.Room](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.Room.cs>) 负责，房间布局数据由 [HubRoomLayout](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubRoomLayout.cs>) 读取。[ALL_MAPS_HUB](<ALL_MAPS_HUB.md>) 仍定义合集、各岛、数据来源与生成场景约束。
+[HubAssembler](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.cs>) 负责启动/返回接线；结算卡实例的放置与接线由 [RideUxAssembler](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Story/RideUxAssembler.cs>) 负责；房间外观与三块面板 Prefab 的放置/接线由 [HubAssembler.Room](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.Room.cs>) 负责，房间布局数据由 [HubRoomLayout](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubRoomLayout.cs>) 读取。[ALL_MAPS_HUB](<ALL_MAPS_HUB.md>) 仍定义合集、各岛、数据来源与生成场景约束。
 
 ## 面板内容
 
@@ -85,14 +85,14 @@ Unity 侧（HubAssembler.Room）：
 
 1. 同步源码（含 `Art/Hub/HubRoomArt.fbx`、`Art/Hub/Fonts/HubPanelSans-Bold.otf` 与 `OFL.txt`、`Runtime/VRCKatamari.Runtime.asmdef` 新增的 `Unity.TextMeshPro` 引用）；退出 Play，确认没有未保存的源场景修改。不要重启 Editor，不碰 ProjectSettings.asset。让 Unity 导入、编译 C# 与 UdonSharp，检查 Console。.meta 由 Unity 生成。编译后 Linux 侧的 `csharp_check` 需要 `--refresh` 取新 csproj。
 2. FBX 导入设置：Scale Factor 1、Convert Units 开、Bake Axis Conversion 关（默认值）。
-3. 按 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「字体」生成 `HubPanelSans SDF.asset`（记 Characters missing，应为 0），再按「搭建步骤」建三个 Prefab，并按其第 4 步回读。
+3. 按 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「字体」生成 `HubPanelSans SDF.asset`（记 Characters missing，应为 0），再按「搭建步骤」建三个 Prefab，并按其第 4 步回读；按「结算卡」建 `Prefabs/Story/RideResultCard.prefab`。
 4. 打开 AllMapsHub 场景，执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（大厅装配后自动跑骑乘装配）。预期 `problems=0`；报告里应有 `hub art anchors: 3 of 3 within 2 cm`；缺 Udon variables 时按已有流程：编译 → 保存 → 重开 → 重建。装配会给缺 U# 程序资产的行为脚本补建 `<Name>.asset` 并编译（报告行 `created U# program assets: …`，什么都不缺时没有这行；也可单独跑 `VRC Katamari/Udon/Create Missing Program Assets`）。碰撞线框、性能诊断、物品名 HUD 的接线由装配完成，不再手工补；报告应有 `[allmaps] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`（宿主数随关卡变化：motor 1 + 每个 PickupFieldHost + 每个 MotionHost）；任何一处没接上都是 `PROBLEM`，场景不保存。连跑两次，第二次 `result: +27 ~135`（与第一次相同：输出每次从基础场景重建），汇总行不变。
-5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期一行 `[hub-check] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired` 和 `0 problem(s), 4 level card(s), 4 level entry/entries, 28 setting arrow(s)`。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`。
+5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期一行 `[hub-check] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`、一行 `[hub-check] result card ok: retry wired, return wired` 和 `0 problem(s), 4 level card(s), 4 level entry/entries, 28 setting arrow(s)`。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`/`HubResultBoard`；`FollowRigRoot/RidePanels/RideResultCard` 是蓝色 Prefab 实例。
 6. Inspector 回读：`LevelCard_0..3` 的 HubStartButton.levelIndex = 0/1/2/3（蟹座、野餐、地图0、地形实验室），Button On Click 一条：目标 = 同物体 UdonBehaviour、函数 SendCustomEvent、参数 `Press`；`SettingRow_NN/Less` delta=-1、`/More` delta=+1、settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput，VrStickMoveInput.settings = HubSettings；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings。
 7. EditMode：HubSettingsMathTests、HubRecordMathTests、HubPanelTextMathTests、HubPanelCharsetTests、HubRoomMathTests 及现有 Hub/Story 测试；报告发现/通过/失败数。
 8. Play（ClientSim）：桌面视角对准面板应出现 UI 指针；鼠标左键点各按钮，日志：点蟹座卡片 `[hub-panel] level card 0 pressed`，随后是 launcher 的开始日志；点设置板语言行 ▶ 两次，三块板与提示行依次变英文、日文，日志 `[hub-settings] vrck.set.language=1/2`；点 VR 操作方式 ▶，日志 `[input] stick mode=simple`，操作表 VR 栏的移动行变成简单模式文案。音乐/提示音等待接项值能改、能保存（行上不显示待接标记）。面板上中日文无方块字。
 9. 跑一局蟹座到 Result：日志 `[hub-record] level=_ref_cancer d=… n=… best=True plays=1`，回大厅后蟹座卡片显示「最好 / 上次 / 已玩 1」；在 Running 中 Respawn 放弃的一局不记录。重进世界（Build & Test 或上传后）记录与设置仍在。
-10. 原有返回/重试/Respawn 验收（下文与 HUB_LOOP_PLAN）照旧；结果卡按钮不在本次改动范围内。
+10. 原有返回/重试/Respawn 验收（下文与 HUB_LOOP_PLAN）照旧，结果卡两颗按钮用鼠标左键点（不再是 Interact 提示）：「再来一次」日志 `[hub]` 重试链、「回大厅」日志 return 链。
 
 ### 截图与读数
 
@@ -100,7 +100,7 @@ Unity 侧（HubAssembler.Room）：
 - 出生点玩家视角（HubSpawn，眼高约 1.6 m）看选关板：四张卡片完整、不镜像、不截字；另在离选关板 2 m、3 m 各一张；怎么玩板与设置板正面各在 2 m、3 m 各一张。附字体资产名、几个 TMP 的 Font Size（关名 150、设置行 66）、面板根缩放 0.001。
 - ClientSim 里鼠标悬停卡片（高亮）与点击后的 Console 日志截图。
 - 切换语言后三块板各一张（英、日）。
-- 结果卡与回大厅后视角同前；回大厅后蟹座卡片的记录行。
+- 结果卡：Scene 视图俯视结算卡（从卡上方往下看，能看到卡根 BoxCollider 线框与两颗按钮的相对位置，确认按钮上没有单独的碰撞体），另一张骑手视角正面（Result 状态，两颗按钮与文字完整）；回大厅后视角同前；回大厅后蟹座卡片的记录行。
 
 Blender 预览（本机渲染，面板位置用奶油色平板代替，不代表 Unity 实际效果）：`/tmp/hub_art_overview.png`、`/tmp/hub_art_spawn_view.png`、`/tmp/hub_art_levels_{2,3}m.png`、`/tmp/hub_art_help_{2,3}m.png`、`/tmp/hub_art_settings_{2,3}m.png`。
 
@@ -110,7 +110,7 @@ Blender 预览（本机渲染，面板位置用奶油色平板代替，不代表
 
 ## 未决与验证边界
 
-当前改动未在 Unity/Udon/Play/Build & Test/VR 中验证。退座/返回未到时每1秒复查/恢复，不会逐帧狂发传送；无本地玩家/无大厅落点则报错，不假装成功。多人本地岛开关不互通，仍不在本轮范围。面板已改为 VRChat 世界空间 UI Prefab（VRC_UiShape + uGUI Button + TMP），Prefab 尚未搭建，VRChat 客户端里的激光指针与点击未验证；FBX 轴向只在本机按导出设置推算，导入后的锚点比对是验证点。PlayerData 读写、客户端语言码、OnPlayerRestored 时序都未在真实客户端验证。没有新增 Riding 接口要求，调用现有 RequestExit/IsLocalPlayerSeated/TrySeatLocalPlayer。
+当前改动未在 Unity/Udon/Play/Build & Test/VR 中验证。退座/返回未到时每1秒复查/恢复，不会逐帧狂发传送；无本地玩家/无大厅落点则报错，不假装成功。多人本地岛开关不互通，仍不在本轮范围。面板与结算卡已改为 VRChat 世界空间 UI Prefab（VRC_UiShape + uGUI Button + TMP），Prefab 尚未搭建；结算卡正文的很多字不在面板字体资产里，靠 VRChat 内置后备字体，是否要把正文字并入字符集待 owner 看过 VR 效果再定，VRChat 客户端里的激光指针与点击未验证；FBX 轴向只在本机按导出设置推算，导入后的锚点比对是验证点。PlayerData 读写、客户端语言码、OnPlayerRestored 时序都未在真实客户端验证。没有新增 Riding 接口要求，调用现有 RequestExit/IsLocalPlayerSeated/TrySeatLocalPlayer。
 
 ## Respawn：放弃并回大厅
 

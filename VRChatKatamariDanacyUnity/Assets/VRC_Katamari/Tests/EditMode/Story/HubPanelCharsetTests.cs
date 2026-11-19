@@ -49,6 +49,9 @@ namespace VRCKatamari.Tests
                 missing += Missing(charset, HubPanelTextMath.GoalLine(0, 0.8f, 0, 420f, lang), missing);
             }
             missing += Missing(charset, "◀▶", missing);
+            // The result card's two buttons use the same font asset (HUB_PANEL_PREFAB.md, 结算卡).
+            missing += Missing(charset, StoryRetryButton.Label, missing);
+            missing += Missing(charset, HubReturnButton.Label, missing);
             Assert.AreEqual("", missing, "characters missing from " + CharsetPath
                 + "; run python3 Tools/hubart/build_hub_font.py and regenerate the font asset");
         }

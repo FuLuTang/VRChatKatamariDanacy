@@ -9,32 +9,39 @@ namespace VRCKatamari.Hub
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Where it belongs is the level, next to the ball: the finished round already sends
-    /// the player back on its own, so this button exists for the case that automatic
-    /// move did not work (the plan's section 5 fallback list) and for a plain "go to the
-    /// room" press while nothing is running. It is refused while a round is Running -
-    /// the round controller exposes no public "end the round now", so abandoning the
-    /// round from here is not possible without breaking the "Running means the player is
-    /// in the level" rule; the clock ends the round and the button works again in
-    /// Presenting/Result.
+    /// Two places use it, with one entry point, <see cref="Press"/>:
     /// </para>
+    /// <list type="bullet">
+    /// <item><description>The result card's "回大厅" (the result card prefab,
+    /// Docs/Design/StoryMode/HUB_PANEL_PREFAB.md): a uGUI Button whose persistent onClick is
+    /// <c>UdonBehaviour.SendCustomEvent("Press")</c>; that object has no collider, so
+    /// <see cref="Interact"/> is never raised there.</description></item>
+    /// <item><description>Each level's <c>HubReturnButton_&lt;id&gt;</c>, a cube standing next
+    /// to the level's entry (HubAssembler.AssembleReturnButtons): the way out of a free roam
+    /// level, which has no result card. It is a world object, not a panel, so it keeps the
+    /// collider and <see cref="Interact"/>.</description></item>
+    /// </list>
     /// <para>
-    /// Same split as <see cref="HubStartButton"/>: no state, no rule, one call into the
-    /// launcher, which owns the decision and the log line.
+    /// It is refused while a round is Running unless the level allows giving up; the
+    /// launcher owns that decision and the log line. Same split as
+    /// <see cref="HubStartButton"/>: no state, no rule, one call into the launcher.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class HubReturnButton : UdonSharpBehaviour
     {
+        /// <summary>The button's word (card label and cube prompt; in Tools/hubart/hub_panel_charset.txt).</summary>
+        public const string Label = "回大厅";
+
         [SerializeField] private HubLevelLauncher launcher;
 
-        /// <summary>World-space press: this button's collider was interacted with.</summary>
+        /// <summary>The level's return cube: its collider was interacted with.</summary>
         public override void Interact()
         {
             Press();
         }
 
-        /// <summary>uGUI seam: <c>SendCustomEvent("Press")</c> reaches this name.</summary>
+        /// <summary>Button.onClick target: <c>SendCustomEvent("Press")</c>.</summary>
         public void Press()
         {
             if (launcher == null)

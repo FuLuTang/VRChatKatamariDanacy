@@ -43,12 +43,11 @@ namespace VRCKatamari.Editor.Story
     /// panel, scaled by <see cref="BallRideStation"/> with the rider's eye height. The HUD canvas
     /// (<c>StoryHud</c>) is turned into a world-space panel under it: a screen-space overlay
     /// canvas is drawn for screen users only, so a VR player never sees it.</description></item>
-    /// <item><description><c>RideResultCard</c>: a world-space card under <c>RidePanels</c>
-    /// that takes the result text, the card panel and the retry button; the existing
-    /// <see cref="StoryRetryButton"/> gets a collider inside the retry button so a click can
-    /// reach it. Skipped (and reported) when those objects already live on another
-    /// world-space canvas. The hub's "back to the hub" button is a child of the retry button
-    /// (HubAssembler), so it moves with it.</description></item>
+    /// <item><description><c>RideResultCard</c>: one instance of the result card prefab
+    /// (<see cref="ResultCardPrefabPath"/>, a VRChat interactable canvas built by the Unity
+    /// operator from HUB_PANEL_PREFAB.md) under <c>RidePanels</c>; the presenter's card root and
+    /// text, the round's button row and the two uGUI buttons' round/launcher are wired here.
+    /// The old <c>HubResultBoard</c> and collider buttons are removed.</description></item>
     /// <item><description>The rider's size: <c>BallRideStation.scaleRiderWithBall</c> is
     /// switched on and its filter and rate-limit fields are written from
     /// <see cref="RideScaleMath"/> (the push stance at every ball size),
@@ -118,8 +117,9 @@ namespace VRCKatamari.Editor.Story
 
         private const float CardAzimuth = 0f;
         private const float CardElevation = 6f;
-        private const float CardScale = 0.0016f;
-        private static readonly Vector2 CardSize = new Vector2(720f, 360f);
+        // Canvas units are millimetres, as on the hub boards (HUB_PANEL_PREFAB.md): the prefab's
+        // 1152 x 576 card is the same 1.152 x 0.576 m the earlier 720 x 360 x 0.0016 card was.
+        private const float CardScale = 0.001f;
 
         private const float ExitAzimuth = 24f;
         private const float ExitElevation = -8f;
@@ -185,7 +185,6 @@ namespace VRCKatamari.Editor.Story
                     + " and one round controller");
             }
             StoryResultPresenter presenter = FindOptional<StoryResultPresenter>();
-            StoryRetryButton retry = FindOptional<StoryRetryButton>();
             BallRideExitButton exit = FindOptional<BallRideExitButton>();
 
             // 新同步来的 U# 行为可能还没有程序资产（AddComponent 会抛）；缺则建并编译。
@@ -221,8 +220,7 @@ namespace VRCKatamari.Editor.Story
             {
                 Transform panels = AssemblePanelRoot(rigRoot, c);
                 AssembleHud(targetText, panels, c);
-                GameObject card = AssembleResultCard(round, presenter, retry, font, rigRoot,
-                    panels, c);
+                AssembleResultCard(round, presenter, rigRoot, panels, c);
                 GameObject panel = AssembleExitPanel(station, exit, font, rigRoot, panels, c,
                     out Text hint);
                 AssembleExitLocation(station, ballRoot, motor, c);
@@ -394,12 +392,16 @@ namespace VRCKatamari.Editor.Story
         // VRChat's UI (5) and UiMenu (12) layers gate UI pointers on the menu; layer 8 is
         // unused by the client and also keeps stickers off our Interact colliders. Repair the
         // whole subtree, including migrated text and inactive result/exit panels.
+        // The result card is a VRChat interactable canvas and sits on Default (0) like the hub
+        // boards (HUB_PANEL_PREFAB.md); the prefab owns that layer, so its subtree is skipped.
         private static void NormalizePanelLayers(Transform panels, Counters c)
         {
             Transform[] children = panels.GetComponentsInChildren<Transform>(true);
+            Transform card = panels.Find(ResultCardName);
             for (int i = 0; i < children.Length; i++)
             {
                 GameObject go = children[i].gameObject;
+                if (card != null && children[i].IsChildOf(card)) continue;
                 if (go.layer == 8) continue;
                 Undo.RecordObject(go, "Set ride panel layer");
                 go.layer = 8;
@@ -868,6 +870,14 @@ namespace VRCKatamari.Editor.Story
                 && (value as UdonBehaviour) == backing;
         }
 
+        // owner 的 Udon 表里 field = target（GameObject 或普通组件，不是 U# 行为）。
+        private static bool UdonReferenceIsObject(UdonSharpBehaviour owner, string field, UnityEngine.Object target)
+        {
+            object value;
+            return target != null && VRCKatamari.Editor.Hub.UdonVariableAccess.TryRead(owner, field, out value)
+                && (value as UnityEngine.Object) == target;
+        }
+
         private static List<T> InScene<T>(Scene scene) where T : Component
         {
             var found = new List<T>();
@@ -986,155 +996,164 @@ namespace VRCKatamari.Editor.Story
 
         // --------------------------------------------------------------- result card ---
 
-        private static GameObject AssembleResultCard(StoryRoundController round,
-            StoryResultPresenter presenter, StoryRetryButton retry, Font font,
-            Transform rigRoot, Transform panels, Counters c)
-        {
-            Text resultText = presenter != null ? ReadObject<Text>(presenter, "resultText") : null;
-            GameObject oldCard = presenter != null
-                ? ReadObject<GameObject>(presenter, "resultCardRoot") : null;
-            GameObject retryRoot = ReadObject<GameObject>(round, "retryButtonRoot");
+        /// <summary>The result card prefab (HUB_PANEL_PREFAB.md, "结算卡"), built by the Unity operator.</summary>
+        public const string ResultCardPrefabPath = "Assets/VRC_Katamari/Prefabs/Story/RideResultCard.prefab";
 
-            Transform existing = FindPanel(rigRoot, panels, ResultCardName, c);
-            GameObject card;
-            if (existing != null)
+        // The prefab's naming contract; paths are under the card root.
+        internal const string CardTextPath = "ResultText";
+        internal const string CardButtonsPath = "Buttons";
+        internal const string CardRetryPath = "Buttons/RetryButton";
+        internal const string CardReturnPath = "Buttons/ReturnButton";
+
+        // Roots that earlier builds of the card left in a scene: the base scene's hub board
+        // (legacy Text + Interact colliders) and the hub's collider return button. Removed on
+        // sight; the prefab instance replaces them.
+        internal const string LegacyResultBoardName = "HubResultBoard";
+        internal const string LegacyCardReturnName = "HubReturnCardButton";
+
+        // One instance of the result card prefab under RidePanels, in front of the rider. The
+        // card's structure, words and Button bindings are the prefab's; this places it and
+        // writes the scene references a prefab cannot hold: the presenter's card root and text,
+        // the round's button row, the retry button's round and launcher, the return button's
+        // launcher. A scene without a hub launcher hides the return button.
+        private static GameObject AssembleResultCard(StoryRoundController round,
+            StoryResultPresenter presenter, Transform rigRoot, Transform panels, Counters c)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ResultCardPrefabPath);
+            if (prefab == null)
             {
-                card = existing.gameObject;
+                c.Problems.Add("no result card prefab at " + ResultCardPrefabPath + "; build it from"
+                    + " Docs/Design/StoryMode/HUB_PANEL_PREFAB.md (结算卡), then assemble again");
+                return null;
+            }
+
+            RemoveLegacyCard(c);
+            Transform existing = FindPanel(rigRoot, panels, ResultCardName, c);
+            if (existing != null
+                && PrefabUtility.GetCorrespondingObjectFromSource(existing.gameObject) != prefab)
+            {
+                Undo.DestroyObjectImmediate(existing.gameObject);
+                existing = null;
+                c.Changed++;
+                c.Notes.Add("replaced the assembled '" + ResultCardName + "' with an instance of "
+                    + ResultCardPrefabPath);
+            }
+            GameObject card;
+            if (existing == null)
+            {
+                card = (GameObject)PrefabUtility.InstantiatePrefab(prefab, panels.gameObject.scene);
+                Undo.RegisterCreatedObjectUndo(card, "Place " + ResultCardName);
+                card.name = ResultCardName;
+                card.transform.SetParent(panels, false);
+                card.SetActive(false);
+                c.Created++;
+                c.Notes.Add("result card instance placed under " + PanelRootName
+                    + " and starts hidden (the presenter shows it)");
             }
             else
             {
-                if (WorldCanvasOwnsCard(resultText, retryRoot))
-                {
-                    c.Notes.Add("result card and retry button already live on a world-space"
-                        + " canvas elsewhere; left in place (the retry collider is still added)");
-                    AssembleRetryCollider(retry, retryRoot, round, c);
-                    return null;
-                }
-                card = CreateCanvas(ResultCardName, panels, CardSize, new Vector2(0.5f, 0.5f),
-                    CardScale, CardAzimuth, CardElevation, c);
-                Reparent(oldCard, card.transform, c, true);
-                Reparent(resultText != null ? resultText.gameObject : null, card.transform, c,
-                    false);
-                Reparent(retryRoot, card.transform, c, false);
-                LayoutCard(oldCard, resultText, retryRoot, card);
-                card.SetActive(false);
-                c.Notes.Add("result card canvas created and starts hidden (the presenter shows it)");
+                card = existing.gameObject;
             }
+            var rect = (RectTransform)card.transform;
+            if (rect.localPosition != RideViewMath.HudLocalPosition(PanelDistance, CardAzimuth, CardElevation)
+                || rect.localRotation != RideViewMath.HudLocalRotation(CardAzimuth, CardElevation)
+                || rect.localScale != Vector3.one * CardScale)
+            {
+                Undo.RecordObject(rect, "Place " + ResultCardName);
+                PlacePanel(rect, rect.sizeDelta, rect.pivot, CardScale, CardAzimuth, CardElevation);
+                c.Changed++;
+            }
+
+            Transform textT = card.transform.Find(CardTextPath);
+            TMPro.TextMeshProUGUI text = textT != null ? textT.GetComponent<TMPro.TextMeshProUGUI>() : null;
+            Transform buttons = card.transform.Find(CardButtonsPath);
+            Transform retryT = card.transform.Find(CardRetryPath);
+            Transform returnT = card.transform.Find(CardReturnPath);
+            StoryRetryButton retry = retryT != null ? retryT.GetComponent<StoryRetryButton>() : null;
+            HubReturnButton back = returnT != null ? returnT.GetComponent<HubReturnButton>() : null;
+            if (text == null) c.Problems.Add(ResultCardName + "/" + CardTextPath + " is not a TextMeshProUGUI (HUB_PANEL_PREFAB.md)");
+            if (buttons == null) c.Problems.Add(ResultCardName + " has no '" + CardButtonsPath + "' row (HUB_PANEL_PREFAB.md)");
+            if (retry == null) c.Problems.Add(ResultCardName + "/" + CardRetryPath + " has no StoryRetryButton (HUB_PANEL_PREFAB.md)");
+            if (back == null) c.Problems.Add(ResultCardName + "/" + CardReturnPath + " has no HubReturnButton (HUB_PANEL_PREFAB.md)");
 
             if (presenter != null)
             {
                 var so = new SerializedObject(presenter);
-                if (SetObject(so, "resultCardRoot", card, c))
+                bool changed = SetObject(so, "resultCardRoot", card, c);
+                if (text != null) changed |= SetObject(so, "resultText", text, c);
+                if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(presenter);
+            }
+            if (buttons != null)
+            {
+                var so = new SerializedObject(round);
+                if (SetObject(so, "retryButtonRoot", buttons.gameObject, c))
                 {
                     so.ApplyModifiedPropertiesWithoutUndo();
-                    c.Proxies.Add(presenter);
+                    c.Proxies.Add(round);
                 }
             }
-            AssembleRetryCollider(retry, retryRoot, round, c);
+
+            HubLevelLauncher launcher = FindOptional<HubLevelLauncher>();
+            if (retry != null)
+            {
+                var so = new SerializedObject(retry);
+                bool changed = SetObject(so, "controller", round, c);
+                changed |= SetObject(so, "launcher", launcher, c);
+                if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(retry);
+            }
+            if (back != null)
+            {
+                var so = new SerializedObject(back);
+                if (SetObject(so, "launcher", launcher, c)) so.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(back);
+                bool wanted = launcher != null;
+                if (back.gameObject.activeSelf != wanted)
+                {
+                    Undo.RecordObject(back.gameObject, "Show the return button");
+                    back.gameObject.SetActive(wanted);
+                    c.Changed++;
+                }
+                if (!wanted)
+                    c.Notes.Add("no HubLevelLauncher in the scene: the card's return button is hidden");
+            }
             return card;
         }
 
-        private static bool WorldCanvasOwnsCard(Text resultText, GameObject retryRoot)
+        // The earlier card: the base scene's HubResultBoard (and anything under it), any
+        // collider return button an older hub run put elsewhere, and any StoryRetryButton
+        // left outside a card (the base scene's root StoryRetryButton object).
+        private static void RemoveLegacyCard(Counters c)
         {
-            Canvas canvas = null;
-            if (resultText != null) canvas = resultText.GetComponentInParent<Canvas>();
-            if (canvas == null && retryRoot != null) canvas = retryRoot.GetComponentInParent<Canvas>();
-            return canvas != null && canvas.renderMode == RenderMode.WorldSpace;
-        }
-
-        private static void LayoutCard(GameObject oldCard, Text resultText, GameObject retryRoot,
-            GameObject card)
-        {
-            if (oldCard != null)
+            Scene scene = SceneManager.GetActiveScene();
+            foreach (GameObject root in scene.GetRootGameObjects())
             {
-                var r = oldCard.GetComponent<RectTransform>();
-                if (r != null)
-                {
-                    r.anchorMin = Vector2.zero;
-                    r.anchorMax = Vector2.one;
-                    r.offsetMin = Vector2.zero;
-                    r.offsetMax = Vector2.zero;
-                    r.SetAsFirstSibling();
-                }
+                if (root.name != LegacyResultBoardName) continue;
+                Undo.DestroyObjectImmediate(root);
+                c.Changed++;
+                c.Notes.Add("removed the old '" + LegacyResultBoardName + "' (the result card prefab replaces it)");
             }
-            else
+            foreach (HubReturnButton b in InScene<HubReturnButton>(scene))
             {
-                Image back = card.GetComponent<Image>();
-                if (back == null) back = card.AddComponent<Image>();
-                back.color = new Color(0f, 0f, 0f, 0.6f);
-                back.raycastTarget = false;
-            }
-            if (resultText != null)
-            {
-                var r = resultText.rectTransform;
-                r.anchorMin = new Vector2(0f, 1f);
-                r.anchorMax = new Vector2(1f, 1f);
-                r.pivot = new Vector2(0.5f, 1f);
-                r.anchoredPosition = new Vector2(0f, -16f);
-                r.sizeDelta = new Vector2(-48f, 230f);
-            }
-            if (retryRoot != null)
-            {
-                var r = retryRoot.GetComponent<RectTransform>();
-                if (r != null)
-                {
-                    // Retry sits left of centre with the hub's "back to the hub" button on its
-                    // right; the layout is one function shared with the hub assembly, so the
-                    // card looks the same whichever assembler ran first. Centre pivot, so the
-                    // collider added below sits on the button's face with a zero centre.
-                    VRCKatamari.Editor.Hub.HubAssembler.LayoutRetryForReturn(r);
-                }
-            }
-        }
-
-        // The press target: the existing retry behaviour moves inside the retry button (so
-        // the controller's SetActive on the button also switches the collider) and gets a
-        // trigger box the size of the button's face.
-        private static void AssembleRetryCollider(StoryRetryButton retry, GameObject retryRoot,
-            StoryRoundController round, Counters c)
-        {
-            if (retry == null)
-            {
-                c.Problems.Add("no StoryRetryButton in the scene: the result card cannot be pressed");
-                return;
-            }
-            Transform target = retryRoot != null ? retryRoot.transform : null;
-            if (target != null && retry.transform.parent != target)
-            {
-                Undo.SetTransformParent(retry.transform, target, "Move the retry behaviour onto the button");
-                retry.transform.localPosition = Vector3.zero;
-                retry.transform.localRotation = Quaternion.identity;
-                retry.transform.localScale = Vector3.one;
+                if (b.name != LegacyCardReturnName) continue;
+                Undo.DestroyObjectImmediate(b.gameObject);
                 c.Changed++;
             }
-            BoxCollider box = retry.GetComponent<BoxCollider>();
-            if (box == null)
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ResultCardPrefabPath);
+            foreach (StoryRetryButton r in InScene<StoryRetryButton>(scene))
             {
-                box = retry.gameObject.AddComponent<BoxCollider>();
-                c.Created++;
-            }
-            Vector2 size = VRCKatamari.Editor.Hub.HubAssembler.CardButtonSize;
-            if (retryRoot != null)
-            {
-                var r = retryRoot.GetComponent<RectTransform>();
-                if (r != null && r.rect.width > 1f) size = r.rect.size;
-            }
-            Vector3 wanted = new Vector3(size.x, size.y, 40f);
-            if (!box.isTrigger || box.size != wanted || box.center != Vector3.zero)
-            {
-                box.isTrigger = true;
-                box.size = wanted;
-                box.center = Vector3.zero;
+                GameObject owner = PrefabUtility.GetOutermostPrefabInstanceRoot(r.gameObject);
+                if (owner != null && PrefabUtility.GetCorrespondingObjectFromSource(owner) == prefab) continue;
+                if (r.transform.childCount > 0)
+                {
+                    c.Problems.Add("a StoryRetryButton outside the result card ('" + r.name + "') has"
+                        + " children; remove it by hand");
+                    continue;
+                }
+                Undo.DestroyObjectImmediate(r.gameObject);
                 c.Changed++;
-            }
-            var so = new SerializedObject(retry);
-            if (SetObject(so, "controller", round, c)) so.ApplyModifiedPropertiesWithoutUndo();
-            c.Proxies.Add(retry);
-            // In a hub scene the hub assembly owns the button's words ("再来一次", next to its
-            // "回大厅"), whichever assembly runs last; the launcher link says the hub is there.
-            if (ReadObject<UnityEngine.Object>(retry, "launcher") == null)
-            {
-                SetInteractText(retry, "再试一次", InteractProximity, c);
+                c.Notes.Add("removed the old StoryRetryButton object (the card's RetryButton replaces it)");
             }
         }
 
@@ -1547,6 +1566,124 @@ namespace VRCKatamari.Editor.Story
             }
             BallRideExitButton exit = FindOptional<BallRideExitButton>();
             if (exit != null) VerifyTable(exit, new[] { "ride", "label", "confirmSeconds" }, c);
+            c.Notes.Add(ReadResultCard(SceneManager.GetActiveScene(), c.Problems));
+        }
+
+        /// <summary>
+        /// Reads the result card back (HUB_PANEL_PREFAB.md, 结算卡): one instance of
+        /// <see cref="ResultCardPrefabPath"/> under the follow frame's panel root, a VRChat
+        /// interactable canvas (<c>HubAssembler.BoardCanvasProblem</c>), the presenter and the round
+        /// pointing at it, and its two buttons wired as panel buttons
+        /// (<c>HubAssembler.PanelButtonProblem</c>: onClick = SendCustomEvent("Press") on the
+        /// button's own UdonBehaviour, no collider of their own) with their scene references in
+        /// the proxy and the Udon table. No leftover HubResultBoard, collider return button or
+        /// second StoryRetryButton. Every finding is one problem; the return value is the summary
+        /// line. Shared by this assembly and Check Room Wiring.
+        /// </summary>
+        internal static string ReadResultCard(Scene scene, List<string> problems)
+        {
+            int before = problems.Count;
+            List<StoryResultPresenter> presenters = InScene<StoryResultPresenter>(scene);
+            List<StoryRoundController> rounds = InScene<StoryRoundController>(scene);
+            List<HubLevelLauncher> launchers = InScene<HubLevelLauncher>(scene);
+            if (presenters.Count != 1 || rounds.Count != 1)
+            {
+                problems.Add("result card: expected one StoryResultPresenter and one StoryRoundController,"
+                    + " found " + presenters.Count + "/" + rounds.Count);
+                return "result card NOT checked";
+            }
+            StoryResultPresenter presenter = presenters[0];
+            StoryRoundController round = rounds[0];
+            HubLevelLauncher launcher = launchers.Count == 1 ? launchers[0] : null;
+
+            var card = ReadProperty(new SerializedObject(presenter), "resultCardRoot") as GameObject;
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ResultCardPrefabPath);
+            if (card == null)
+            {
+                problems.Add("result card: StoryResultPresenter.resultCardRoot is not wired");
+                return "result card MISSING";
+            }
+            if (prefab == null || PrefabUtility.GetCorrespondingObjectFromSource(card) != prefab)
+                problems.Add("result card: '" + card.name + "' is not an instance of " + ResultCardPrefabPath);
+            if (card.transform.parent == null || card.transform.parent.name != PanelRootName)
+                problems.Add("result card: '" + card.name + "' is not under " + PanelRootName);
+            if (!UdonReferenceIsObject(presenter, "resultCardRoot", card))
+                problems.Add("result card: StoryResultPresenter.resultCardRoot differs in the Udon table");
+            string canvasProblem = VRCKatamari.Editor.Hub.HubAssembler.BoardCanvasProblem(card);
+            if (canvasProblem != null) problems.Add("result card: " + canvasProblem);
+            if (card.layer != 0) problems.Add("result card: layer " + card.layer + ", wants Default (0) like the hub boards");
+
+            Transform textT = card.transform.Find(CardTextPath);
+            var text = textT != null ? textT.GetComponent<TMPro.TextMeshProUGUI>() : null;
+            if (text == null || ReadProperty(new SerializedObject(presenter), "resultText") != text
+                || !UdonReferenceIsObject(presenter, "resultText", text))
+                problems.Add("result card: StoryResultPresenter.resultText is not the card's " + CardTextPath
+                    + " (proxy and Udon table)");
+            Transform buttons = card.transform.Find(CardButtonsPath);
+            if (buttons == null || ReadProperty(new SerializedObject(round), "retryButtonRoot") != buttons.gameObject
+                || !UdonReferenceIsObject(round, "retryButtonRoot", buttons.gameObject))
+                problems.Add("result card: StoryRoundController.retryButtonRoot is not the card's "
+                    + CardButtonsPath + " (proxy and Udon table)");
+
+            Transform retryT = card.transform.Find(CardRetryPath);
+            StoryRetryButton retry = retryT != null ? retryT.GetComponent<StoryRetryButton>() : null;
+            if (retry == null)
+            {
+                problems.Add("result card: " + CardRetryPath + " has no StoryRetryButton");
+            }
+            else
+            {
+                CardButtonProblems(retry, StoryRetryButton.Label, problems);
+                var so = new SerializedObject(retry);
+                if (ReadProperty(so, "controller") != round || !UdonReferenceIs(retry, "controller", round))
+                    problems.Add("result card: RetryButton.controller is not the scene's round (proxy and Udon table)");
+                if (ReadProperty(so, "launcher") != launcher
+                    || (launcher != null && !UdonReferenceIs(retry, "launcher", launcher)))
+                    problems.Add("result card: RetryButton.launcher is not the scene's HubLevelLauncher");
+            }
+
+            Transform returnT = card.transform.Find(CardReturnPath);
+            HubReturnButton back = returnT != null ? returnT.GetComponent<HubReturnButton>() : null;
+            if (back == null)
+            {
+                problems.Add("result card: " + CardReturnPath + " has no HubReturnButton");
+            }
+            else
+            {
+                CardButtonProblems(back, HubReturnButton.Label, problems);
+                if (launcher != null && (ReadProperty(new SerializedObject(back), "launcher") != launcher
+                    || !UdonReferenceIs(back, "launcher", launcher)))
+                    problems.Add("result card: ReturnButton.launcher is not the scene's HubLevelLauncher (proxy and Udon table)");
+                if (back.gameObject.activeSelf != (launcher != null))
+                    problems.Add("result card: ReturnButton is " + (back.gameObject.activeSelf ? "shown" : "hidden")
+                        + " but the scene " + (launcher != null ? "has" : "has no") + " hub launcher");
+            }
+
+            int retries = InScene<StoryRetryButton>(scene).Count;
+            if (retries != 1) problems.Add("result card: expected one StoryRetryButton (the card's), found " + retries);
+            foreach (GameObject root in scene.GetRootGameObjects())
+                if (root.name == LegacyResultBoardName)
+                    problems.Add("result card: the old '" + LegacyResultBoardName + "' is still in the scene");
+            foreach (HubReturnButton b in InScene<HubReturnButton>(scene))
+                if (b.name == LegacyCardReturnName)
+                    problems.Add("result card: the old collider button '" + LegacyCardReturnName + "' is still in the scene");
+
+            int found = problems.Count - before;
+            return "result card " + (found == 0 ? "ok" : found + " problem(s)") + ": retry "
+                + (retry != null ? "wired" : "MISSING") + ", return "
+                + (back == null ? "MISSING" : back.gameObject.activeSelf ? "wired" : "hidden (no hub)");
+        }
+
+        // A card button is a panel button (one onClick -> SendCustomEvent("Press"), no collider)
+        // whose TextMeshPro label shows the behaviour's own word.
+        private static void CardButtonProblems(UdonSharpBehaviour button, string label, List<string> problems)
+        {
+            string problem = VRCKatamari.Editor.Hub.HubAssembler.PanelButtonProblem(button);
+            if (problem != null) problems.Add("result card: " + button.name + ": " + problem);
+            var text = button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+            if (text == null || text.text != label)
+                problems.Add("result card: " + button.name + "'s label is '" + (text == null ? "(none)" : text.text)
+                    + "', wants '" + label + "'");
         }
 
         // Reads the instance variable table back through the one shared reader

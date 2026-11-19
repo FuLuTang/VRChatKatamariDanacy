@@ -140,14 +140,14 @@ motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是
 
 ## 6. 面板
 
-所有骑乘期可见的 UI 都是 `FollowRigRoot/RidePanels` 下的**世界空间** Canvas（`RideUxAssembler` 装配，层 8）。`RidePanels` 位于眼点、无偏移，
+所有骑乘期可见的 UI 都是 `FollowRigRoot/RidePanels` 下的**世界空间** Canvas（`RideUxAssembler` 装配）：HUD 与下车面板在层 8；结算卡是 `RideResultCard.prefab` 实例，根和子物体都在 Default 层 0（VRChat 可交互画布的做法，见 [HUB_PANEL_PREFAB](../../StoryMode/HUB_PANEL_PREFAB.md)「结算卡」）。`RidePanels` 位于眼点、无偏移，
 `BallRideStation` 每次发送眼高时把它缩放成 `E / 1.64`（`RideViewMath.PanelScaleForEyeHeight`），下车回 1。下表为 1.64 m 眼高时的布局，
 距眼 1.6 m，乘缩放后距离 = 1.6 × E/1.64（§1.2 表最后一列），角度不变：
 
 | 面板 | 方位 / 仰角 | 尺寸 × 每单位米数 | 离球轮廓最近 | 内容 |
 |---|---|---|---:|---|
 | `StoryHud` | 左 38° / 下 12°（中心锚点） | 1000 × 260 × 0.0014 | 9.6° | 目标、当前、剩余、起始提示 |
-| `RideResultCard` | 正前 / 上 6° | 720 × 360 × 0.0016 | 20.9° | 结果文字 + 卡面 + 「再试一次」 |
+| `RideResultCard` | 正前 / 上 6° | 1152 × 576 × 0.001 | 20.9° | 结果文字（TMP）+ 卡面 + uGUI Button「再来一次」「回大厅」（`Prefabs/Story/RideResultCard.prefab` 实例） |
 | `RideExitPanel` | 右 24° / 下 8° | 360 × 150 × 0.0014 | 15.0° | 「下车（点两次）」+「按住跳跃键下车」；仅入座时显示 |
 
 "离球轮廓最近"是面板上任一点到球的角半径边界的最小夹角（pitch 0，`panel_clearance_deg`；面板随 E 缩放、站姿正比于 E，所以与球径无关）。
@@ -171,7 +171,7 @@ HUD 放在球的左边、视轴下 12°：直视前方和低头看手（接触�
    **如果所有者是在 AllMapsHub 里测的，他测到的是默认机位 + 不缩放的骑手，不是任何一版骑乘几何**（1.6 m 眼高的人骑 0.3 m 的球，球确实在脚下）。
 3. 修复：`AllMapsHubAssembler` 在 `HubAssembler.Run` 之后调用 `RideUxAssembler.AssembleOpenScene(problems)`，报告里逐行带 `ride:` 前缀，骑乘装配的 PROBLEM 计入总问题数（有问题不存盘）。
    放在大厅装配**之后**：大厅装配创建 `VrStickMoveInput`，骑乘装配要把它写进 `BallRideStation.vrInput`；骑乘装配不重建、不重挂 `BallRideStation`/VRCStation（大厅的 launcher 按组件引用它们），只把 Station 与它的 enter 位姿归一到 rig（装配后的场景里这已是零位移，重复运行 `~0`），
-   把 `RetryButton` 连同大厅加的「回大厅」子物体整体移进结果卡（两者共用 `HubAssembler.LayoutRetryForReturn`），重试按钮有 launcher 时不改大厅写的「再来一次」文字。
+   结算卡由骑乘装配实例化 `RideResultCard.prefab` 并接线（`StoryResultPresenter.resultCardRoot`/`resultText`、`StoryRoundController.retryButtonRoot`（卡的 `Buttons` 行）、`StoryRetryButton` 的 `controller`/`launcher`、`HubReturnButton` 的 `launcher`）；大厅装配不再生成卡或卡按钮。
    之后 `CheckRideVrInput` 确认 `BallRideStation.vrInput` 就是场景里唯一的 `VrStickMoveInput`，否则报 PROBLEM。
 
 ## 7. Unity 验证
@@ -191,7 +191,7 @@ HUD 放在球的左边、视轴下 12°：直视前方和低头看手（接触�
    - `SeatEyeCompensation.motor` 已连、`verticalLimitMeters = 2.1`、`followRigRoot = FollowRigRoot`、`seatAnchor = RideSeat`（VRCStation 本体，不是子物体 `StandPoint`）；VRCStation 的 `stationEnterPlayerLocation = RideSeat/StandPoint`，`stationExitPlayerLocation = RideSeat/RideExitPoint`；
    - 场景位姿：`RideSeat`、`StandPoint` 与 `FollowRigRoot` 世界位置/朝向相同（`RideSeat` 经 `RideRoot` 两级 local 均为零；`StandPoint.localPosition = (0, 0, 0)`、`localRotation = identity`、`localScale = 1`）。若仍是 (0.45, −0.15, 0)，说明骑乘装配没跑或失败，按报告 PROBLEM 处理，不能当通过；
    - `StoryHud`：Canvas Render Mode = World Space，父物体 `RidePanels`，层 8，pivot (0.5, 0.5)，sizeDelta (1000, 260)，localScale 0.0014，
-     localPosition ≈ (−0.964, −0.333, 1.233)（`HudLocalPosition(1.6, −38, −12)`）；`RideResultCard`、`RideExitPanel` 也在 `RidePanels` 下；场景里不再有 Render Mode = Screen Space Overlay 的 `StoryHud`。
+     localPosition ≈ (−0.964, −0.333, 1.233)（`HudLocalPosition(1.6, −38, −12)`）；`RideResultCard`（`RideResultCard.prefab` 实例，localScale 0.001）与 `RideExitPanel` 也在 `RidePanels` 下；场景里不再有 Render Mode = Screen Space Overlay 的 `StoryHud`，也没有旧的 `HubResultBoard`。
    - AllMapsHub 文件只读复核（Linux 侧可用 `ssh pc114514` + `Select-String`）：`StoryHud` 的 `m_RenderMode: 2`，`eyeUpPerRadius: 1.654625`、`eyeBackPerRadius: 1.176792`，
      `seated: 0`、`PlayerMobility: 2`，`scaleRiderWithBall: 1`，`StandPoint` 的 `m_LocalPosition: {x: 0, y: 0, z: 0}`，`m_Name: RidePanels` 存在，`vrInput:` 不是 `{fileID: 0}`，`SeatEyeCompensation` 的 `seatAnchor` 指向 `RideSeat`。
 3. `run_tests`：`VRCKatamari.Tests.EditMode` 中 `Riding` 全过（RideView / RideScale / RideStance / SeatEye）；U# 全量编译无新错误。其中 `RideAssemblerAlignsTheStationAndEntryToTheRideFrame` 需要真编辑器（预览场景 + UdonSharpUndo），本地 Roslyn 运行器会报"不可执行"，以 Unity 里跑的结果为准；它断言装配后 `StandPoint`/`RideSeat` 都在 rig 位姿、`seatAnchor = RideSeat`、VRCStation 为站立移动站（`seated=false`、`PlayerMobility=2`）。

@@ -608,23 +608,6 @@ namespace VRCKatamari.Story
         /// does not call <c>TryBank</c> or <c>TryAwardScore</c>.
         /// </para>
         /// </remarks>
-        /// <summary>
-        /// Whether an Interact press on the result card should be DROPPED because the local
-        /// ball's dash charge or burst is running (owner 2026-11-18).
-        /// </summary>
-        /// <remarks>
-        /// The result card is only shown for a ride round, and a dash can only start while the
-        /// ride gate is open (the local player is seated), so the dash state alone settles it;
-        /// see <see cref="VRCKatamari.Riding.RideDashInteractMath"/>. An unwired motor leaves
-        /// the retry button behaving as before.
-        /// </remarks>
-        public bool ShouldIgnoreDashInteract()
-        {
-            if (motor == null) return false;
-            return VRCKatamari.Riding.RideDashInteractMath.IsDashInputActive(
-                motor.IsDashCharging(), motor.IsDashing());
-        }
-
         public bool RequestRetry()
         {
             // Re-assert the HUD objects for the state this call arrives in, so a press

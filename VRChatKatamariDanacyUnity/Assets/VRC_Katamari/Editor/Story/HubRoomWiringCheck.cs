@@ -198,14 +198,7 @@ namespace VRCKatamari.Editor.Story
             int arrows = CheckPanels(host, entries, ref problems);
             CheckAbsorbFeedback(OptionalReference<HubSettingsHost>(host, "settings"), ref problems);
             CheckLocalViews(host.gameObject.scene, ref problems);
-
-            int presenters = Object.FindObjectsOfType<StoryResultPresenter>().Length;
-            if (presenters == 0)
-            {
-                Warn("no StoryResultPresenter in the scene: the room has no result board. The"
-                    + " board is the presenter's card (it owns the stars and the measurement);"
-                    + " the room does not duplicate them");
-            }
+            CheckResultCard(host.gameObject.scene, ref problems);
 
             Debug.Log("[hub-check] done: " + problems + " problem(s), " + buttons + " level card(s), "
                 + entries + " level entry/entries, " + arrows + " setting arrow(s), room radius "
@@ -461,6 +454,16 @@ namespace VRCKatamari.Editor.Story
             Debug.Log("[hub-check] " + RideUxAssembler.LocalWiringSummary(wiring.DiagnosticsWired,
                 wiring.DiagnosticsHosts, wiring.CatchWired, wiring.CatchHosts, wiring.WireframeFound,
                 wiring.WireframeSettingsWired));
+        }
+
+        // 结算卡（Prefab 实例、可交互画布、两颗 uGUI 按钮的 onClick 与场景引用）：与骑乘装配的
+        // 读回是同一个实现（RideUxAssembler.ReadResultCard），每处一条 problem，再打一行汇总。
+        private static void CheckResultCard(UnityEngine.SceneManagement.Scene scene, ref int problems)
+        {
+            var found = new System.Collections.Generic.List<string>();
+            string summary = RideUxAssembler.ReadResultCard(scene, found);
+            for (int i = 0; i < found.Count; i++) Report(found[i], ref problems);
+            Debug.Log("[hub-check] " + summary);
         }
 
         // The Udon table of owner holds field = target's backing UdonBehaviour.

@@ -28,7 +28,7 @@ python3 Tools/mcp/mcp_cli.py call execute_code '{"action":"execute","code":"var 
    HUD 剩余读 0、结果卡出现、`[StoryResultPresenter] result level=… stars=…`，此时 `[story] axes=` 回到 0,0
    （回合门已关）。收工写 `debugAxisZ=0` 或 `debugDriveEnabled=false`（`[input] debug drive off`；到期则
    `[input] debug drive expired after=30s`）。
-4. 返回：按住跳跃键 1.5 s，或点骑乘者面板上的 `BallRideExitButton` 两次（桌面 = 左键）→ `[ride] exit requested`；重试：点结果卡上的「再试一次」（`StoryRetryButton` 的触发盒），或对它 `SendCustomEvent("OnRetryPressed")` → `[StoryRoundController] retry started round=…`。
+4. 返回：按住跳跃键 1.5 s，或点骑乘者面板上的 `BallRideExitButton` 两次（桌面 = 左键）→ `[ride] exit requested`；重试：结果卡出现后点卡上的「再来一次」（桌面 = 鼠标左键，VR = 激光指向后扳机；uGUI Button → `StoryRetryButton.Press`）→ `[StoryRoundController] retry started round=…`。卡上的两颗按钮没有 Interact 碰撞体，不要再用准星指触发盒。
 
 ## 出厂安全
 默认关闭 + 场景从不写这四个变量 = 发布行为不变。**不能**用 `#if UNITY_EDITOR`：UdonSharp 的条件编译只对

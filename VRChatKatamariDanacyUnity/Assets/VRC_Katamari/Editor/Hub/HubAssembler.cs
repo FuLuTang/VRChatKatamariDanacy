@@ -53,9 +53,8 @@ namespace VRCKatamari.Editor.Hub
     /// <item><description><c>HubRoom</c> (<see cref="HubRoomHost"/>) with a world-space
     /// prompt line, and <c>HubLevel</c> (<see cref="HubLevelLauncher"/>) with the compact
     /// entry/name lists; a return button next to the first level's entry.</description></item>
-    /// <item><description>A "back to the hub" button on the result card, next to "try
-    /// again". The card itself is the rider's (RideUxAssembler); this assembler does not move
-    /// it.</description></item>
+    /// <item><description>Not the result card: its "再来一次" / "回大厅" buttons are part of the
+    /// result card prefab, placed and wired by RideUxAssembler (HUB_PANEL_PREFAB.md, 结算卡).</description></item>
     /// <item><description>The round controller: <c>startOnLoad</c> off (the hub opens the
     /// round), and for a level whose list entry says so, the level id, clock, target and
     /// kill plane from that level's placement document.</description></item>
@@ -84,18 +83,11 @@ namespace VRCKatamari.Editor.Hub
         public const string HubLevelName = "HubLevel";
         private const string LegacyPadsRootName = "HubPads";
         internal const string PromptBoardName = "HubPrompt";
-        public const string CardReturnName = "HubReturnCardButton";
         public const string ReturnButtonName = "HubReturnButton";
 
         // The room is built around this point (the hub document's coordinates).
         internal static readonly Vector3 HubCenterPosition = new Vector3(1200f, 0f, 0f);
         internal static readonly Vector3 HubSpawnPosition = new Vector3(1200f, 0.1f, 0.8f);
-
-        // The result card's two buttons (canvas units): retry on the left, return on the right.
-        public static readonly Vector2 CardButtonSize = new Vector2(300f, 80f);
-        public const float CardRetryX = -170f;
-        public const float CardReturnOffsetX = 340f;
-        public const float CardButtonY = 60f;
 
         private const float InteractProximity = 5f;
 
@@ -241,11 +233,6 @@ namespace VRCKatamari.Editor.Hub
                 c.Problems.Add("the UdonSharp compile step threw: " + exception.Message);
             }
 
-            Font font = null;
-            Text targetText = ReadObject<Text>(round, "targetText");
-            if (targetText != null) font = targetText.font;
-            if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
             if (!hub || !options.SkipRoomGeometry) AssembleRoomGeometry(c);
             Transform center = EnsureAnchor(HubCenterName, HubCenterPosition, Quaternion.identity, c);
             Transform spawn = EnsureAnchor(HubSpawnName, HubSpawnPosition, Quaternion.identity, c);
@@ -266,7 +253,6 @@ namespace VRCKatamari.Editor.Hub
             {
                 AssembleReturnButton(launcher, offered[0].EntryTransform, c);
             }
-            AssembleCardReturnButton(round, launcher, font, c);
             if (hub)
             {
                 AssembleRoundTable(round, offered, options.Plans, c);
@@ -587,7 +573,7 @@ namespace VRCKatamari.Editor.Hub
                 c.Created++;
                 button = AddUdon<HubReturnButton>(cube, c);
                 if (button == null) return;
-                SetInteractText(button, "回大厅", c);
+                SetInteractText(button, HubReturnButton.Label, c);
             }
 
             var so = new SerializedObject(button);
@@ -660,7 +646,7 @@ namespace VRCKatamari.Editor.Hub
                     c.Created++;
                     button = AddUdon<HubReturnButton>(cube, c);
                     if (button == null) continue;
-                    SetInteractText(button, "回大厅", c);
+                    SetInteractText(button, HubReturnButton.Label, c);
                 }
                 else
                 {
@@ -686,171 +672,6 @@ namespace VRCKatamari.Editor.Hub
                     c.Proxies.Add(button);
                 }
             }
-        }
-
-        // ------------------------------------------------------------ result card ---
-
-        // The result card is the rider's (RideUxAssembler puts it in front of the seat) and
-        // this assembler does not move it, resize it or touch its retry button. It adds one
-        // thing: a "back to the hub" button next to "try again", as a child of the retry
-        // button so the round's own SetActive shows both together. The button runs the same
-        // launcher call as the level's return button, so there is one way home.
-        //
-        // The two buttons share one layout (LayoutRetryForReturn, which RideUxAssembler
-        // also calls when it lays the card out), so the result is the same whichever
-        // assembler ran first and a second run changes nothing.
-        internal static void AssembleCardReturnButton(StoryRoundController round,
-            HubLevelLauncher launcher, Font font, Counters c)
-        {
-            GameObject retryRoot = ReadObject<GameObject>(round, "retryButtonRoot");
-            if (retryRoot == null)
-            {
-                c.Notes.Add("the round has no retry button root: the result card gets no"
-                    + " 'back to the hub' button (the level's own return button still works)");
-                return;
-            }
-
-            var retryRect = retryRoot.GetComponent<RectTransform>();
-            if (retryRect != null && LayoutRetryForReturn(retryRect))
-            {
-                c.Changed++;
-                MarkDirty();
-            }
-            SyncRetryCollider(retryRoot, c);
-            // The retry behaviour may still sit outside the button: the ride assembly, which runs
-            // after this one, is what moves it under the retry root. Fall back to the scene's
-            // single StoryRetryButton so its launcher link is written on the first run too.
-            StoryRetryButton retry = retryRoot.GetComponentInChildren<StoryRetryButton>(true);
-            if (retry == null)
-            {
-                StoryRetryButton[] all = UnityEngine.Object.FindObjectsOfType<StoryRetryButton>(true);
-                if (all.Length == 1) retry = all[0];
-                else if (all.Length > 1)
-                    c.Problems.Add(all.Length + " StoryRetryButtons and none under the result card's"
-                        + " retry root; which one is the card's is ambiguous");
-            }
-            if (retry != null)
-            {
-                var retrySo = new SerializedObject(retry);
-                if (SetObject(retrySo, "launcher", launcher, c))
-                    retrySo.ApplyModifiedPropertiesWithoutUndo();
-                c.Proxies.Add(retry);
-                SetInteractText(retry, "再来一次", c);
-                Text retryLabel = retryRoot.GetComponentInChildren<Text>(true);
-                if (retryLabel != null) retryLabel.text = "再来一次";
-            }
-            else c.Problems.Add("the scene has no StoryRetryButton for the result card");
-
-            Transform existing = retryRoot.transform.Find(CardReturnName);
-            HubReturnButton button;
-            if (existing == null)
-            {
-                var go = new GameObject(CardReturnName, typeof(RectTransform), typeof(Image),
-                    typeof(BoxCollider));
-                Undo.RegisterCreatedObjectUndo(go, "Create " + CardReturnName);
-                Undo.SetTransformParent(go.transform, retryRoot.transform,
-                    "Create " + CardReturnName);
-                var image = go.GetComponent<Image>();
-                image.color = new Color(0f, 0f, 0f, 0.6f);
-                image.raycastTarget = false;
-                Text label = CreateText("Label", go.transform, font, 36, TextAnchor.MiddleCenter);
-                label.text = "回大厅";
-                Stretch((RectTransform)label.transform);
-                c.Created++;
-
-                button = AddUdon<HubReturnButton>(go, c);
-                if (button == null) return;
-                SetInteractText(button, "回大厅", c);
-                existing = go.transform;
-            }
-            else
-            {
-                button = existing.GetComponent<HubReturnButton>();
-                if (button == null)
-                {
-                    c.Problems.Add("'" + CardReturnName + "' exists without a HubReturnButton");
-                    return;
-                }
-            }
-
-            var rect = (RectTransform)existing;
-            if (LayoutReturnButton(rect))
-            {
-                c.Changed++;
-                MarkDirty();
-            }
-            var box = existing.GetComponent<BoxCollider>();
-            Vector3 wanted = new Vector3(CardButtonSize.x, CardButtonSize.y, 40f);
-            if (box != null && (!box.isTrigger || box.size != wanted || box.center != Vector3.zero))
-            {
-                Undo.RecordObject(box, "Size the return hit box");
-                box.isTrigger = true;
-                box.size = wanted;
-                box.center = Vector3.zero;
-                c.Changed++;
-            }
-
-            var so = new SerializedObject(button);
-            if (SetObject(so, "launcher", launcher, c))
-            {
-                so.ApplyModifiedPropertiesWithoutUndo();
-                c.Proxies.Add(button);
-            }
-        }
-
-        /// <summary>
-        /// The retry button's place on the card when the "back to the hub" button sits to
-        /// its right: bottom-centre anchor, 170 units left of centre, 300 x 80. Returns
-        /// whether anything changed. Shared with the ride assembly so both lay the card out
-        /// the same way.
-        /// </summary>
-        public static bool LayoutRetryForReturn(RectTransform retry)
-        {
-            bool changed = false;
-            Vector2 anchor = new Vector2(0.5f, 0f);
-            Vector2 pivot = new Vector2(0.5f, 0.5f);
-            Vector2 position = new Vector2(CardRetryX, CardButtonY);
-            if (retry.anchorMin != anchor) { retry.anchorMin = anchor; changed = true; }
-            if (retry.anchorMax != anchor) { retry.anchorMax = anchor; changed = true; }
-            if (retry.pivot != pivot) { retry.pivot = pivot; changed = true; }
-            if (retry.sizeDelta != CardButtonSize) { retry.sizeDelta = CardButtonSize; changed = true; }
-            if (retry.anchoredPosition != position)
-            {
-                retry.anchoredPosition = position;
-                changed = true;
-            }
-            return changed;
-        }
-
-        // The return button is a child of the retry button, centred 340 units to its right.
-        internal static bool LayoutReturnButton(RectTransform rect)
-        {
-            bool changed = false;
-            Vector2 anchor = new Vector2(0.5f, 0.5f);
-            Vector2 position = new Vector2(CardReturnOffsetX, 0f);
-            if (rect.anchorMin != anchor) { rect.anchorMin = anchor; changed = true; }
-            if (rect.anchorMax != anchor) { rect.anchorMax = anchor; changed = true; }
-            if (rect.pivot != anchor) { rect.pivot = anchor; changed = true; }
-            if (rect.sizeDelta != CardButtonSize) { rect.sizeDelta = CardButtonSize; changed = true; }
-            if (rect.anchoredPosition != position) { rect.anchoredPosition = position; changed = true; }
-            if (rect.localRotation != Quaternion.identity) { rect.localRotation = Quaternion.identity; changed = true; }
-            if (rect.localScale != Vector3.one) { rect.localScale = Vector3.one; changed = true; }
-            return changed;
-        }
-
-        // The retry button's press box follows its (possibly just changed) face, the same
-        // rule the ride assembly uses, so neither run leaves it stale.
-        internal static void SyncRetryCollider(GameObject retryRoot, Counters c)
-        {
-            StoryRetryButton direct = retryRoot.GetComponentInChildren<StoryRetryButton>(true);
-            if (direct == null) return;
-            var box = direct.GetComponent<BoxCollider>();
-            if (box == null) return;
-            Vector3 wanted = new Vector3(CardButtonSize.x, CardButtonSize.y, 40f);
-            if (box.size == wanted) return;
-            Undo.RecordObject(box, "Size the retry hit box");
-            box.size = wanted;
-            c.Changed++;
         }
 
         // ------------------------------------------------------------ round ---
@@ -1335,31 +1156,6 @@ namespace VRCKatamari.Editor.Hub
                     + " variables: " + string.Join(", ", missing.ToArray())
                     + ". Save the scene, reopen it and run the assembly again");
             }
-        }
-
-        // ------------------------------------------------------------ ui plumbing ---
-
-        internal static Text CreateText(string name, Transform parent, Font font, int size,
-            TextAnchor alignment)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            Text text = go.AddComponent<Text>();
-            if (font != null) text.font = font;
-            text.fontSize = size;
-            text.alignment = alignment;
-            text.color = Color.white;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.raycastTarget = false;
-            return text;
-        }
-
-        internal static void Stretch(RectTransform rect)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
         }
 
         // ------------------------------------------------------------ scene plumbing ---

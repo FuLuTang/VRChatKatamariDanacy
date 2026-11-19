@@ -8,7 +8,7 @@
 2. **因含原作素材（蟹座），合集场景放 `_RefUnlicensed/`，不进 git、不上传**（AGENTS：参考素材永不入库、不上传）。装配器规定：任一关的源场景在 `_RefUnlicensed/` 下，输出场景也必须在 `_RefUnlicensed/` 下。
 3. 四关：蟹座小院（计时、无星）、野餐第一关（计时）、地图 0 沙盒（自由练习）、地形实验室（自由练习，现有 C23）。**所有关允许中途回大厅**；计时关中途回大厅 = 放弃本局。
 4. 加一张图 = 按 §1 做好源场景 + 在 [hub_levels.json](<hub_levels.json>) 加一条 + 重跑装配菜单；不改 C# 代码（除非新增了 §4 的世界坐标型字段）。
-5. 大厅房间宽16 m，北墙面板生成四个实体 Interact 按钮（2×2）；走动不选关。完整结果卡默认显示8秒后自动回大厅，卡上可提前回或再来一次。布局、取消语义与操作员步骤见 [HUB_ROOM](<HUB_ROOM.md>)。
+5. 大厅房间宽16 m，北墙面板是四张关卡卡片（2×2，uGUI Button）；走动不选关。完整结果卡默认显示8秒后自动回大厅，卡上可提前回或再来一次。布局、取消语义与操作员步骤见 [HUB_ROOM](<HUB_ROOM.md>)。
 
 ## 1. 一张新地图要怎样写
 
@@ -66,7 +66,7 @@
 
 ## 3. 切关接口（运行时，批 A–C）
 
-墙面按钮 Interact 经 `HubStartButton` 调 `HubLevelLauncher.TryStartLevel(i)` 时先**切关**再进既有流程：清电机障碍表**和地形网格**、清道具代理 → 设该关地面高度 → 逐宿主登记（外框先清表，其余追加并加 id 偏移）→ 注册该关地形 → 设白名单并集 → 设起始球径、`TryResetForNewRound`、放球到 `start` → 回合控制器 `SelectLevel(i)`。球径上限**不再逐关写**：所有地图共用全局 400 m（`KatamariBallMotor.GlobalMaxBallDiameterM`），装配器把它写进共享电机并回读校验（owner 2026-11-18，`OPEN_DECISIONS` (n)）；切关只改起始球径。回大厅：计时关先 `AbortRound()`；自由练习没有结果卡，`HubReturnButton` 是唯一出口。结果卡对 `stars:false` 的关不画星，只显示球径与吸收件数。
+墙面卡片是 uGUI Button（`onClick` → `SendCustomEvent("Press")` → `HubStartButton.Press`），经 `HubLevelLauncher.PressStart(i)` 调 `TryStartLevel(i)` 时先**切关**再进既有流程：清电机障碍表**和地形网格**、清道具代理 → 设该关地面高度 → 逐宿主登记（外框先清表，其余追加并加 id 偏移）→ 注册该关地形 → 设白名单并集 → 设起始球径、`TryResetForNewRound`、放球到 `start` → 回合控制器 `SelectLevel(i)`。球径上限**不再逐关写**：所有地图共用全局 400 m（`KatamariBallMotor.GlobalMaxBallDiameterM`），装配器把它写进共享电机并回读校验（owner 2026-11-18，`OPEN_DECISIONS` (n)）；切关只改起始球径。回大厅：计时关先 `AbortRound()`；自由练习没有结果卡，`HubReturnButton` 是唯一出口。结果卡对 `stars:false` 的关不画星，只显示球径与吸收件数。
 
 ### 3.1 岛的开关（`LevelSwitchHost.islandRoots`）
 
@@ -74,7 +74,7 @@
 - `islandRoots[i]` 与 `levelIds[i]` 一一对应，由组装菜单写入 `Island_<id>`；为空 = 该关不参与开关（旧行为）。自检要求：根数 = 关数、不重复、保存时处于激活状态、岛内不含球/座位/回合/启动器/返回按钮/切关宿主。
 - 初始化：Udon 行为在所在物体首次激活之前没有跑过 `Start`，对它调方法不安全。所以 `LevelSwitchHost.Start` 先把所有岛打开，两帧之后（`ParkIdleIslands`）再按规则关掉，这样每个宿主都跑过一次 `Start`，之后的 `TryActivate` 是同步的。两帧内的 `TryActivate` 返回 `FailIslandsNotReady`。`TerrainFieldHost` 的 `deferRegistration` 路径在 `Start` 里不登记，所以首次激活不会覆盖当前关；`Start` 只跑一次，开关岛不会重复登记。
 - `TryActivate(i)` 顺序：先唤醒（若停放）并打开目标岛 → 离开关的 `ResetField`（吸附道具回到岛内原位）→ 关掉离开的岛 → 清表/登记/球就位。回大厅到达后 `ParkActiveIsland`；同一关再次开始时 `WakeActiveIsland`，随后走回合自己的重置。
-- 球、座位、`HubResultBoard`、`HubReturnButton_<id>`、`HubRoom` 都是场景根物体，不在岛内；岛关闭不影响它们。关闭期间球身上吸附的道具挂在球下，随球可见。
+- 球、座位、`HubReturnButton_<id>`、`HubRoom` 都是场景根物体，不在岛内；结算卡是 `FollowRigRoot/RidePanels` 下的 `RideResultCard` Prefab 实例，随骑手，也不在岛内。岛关闭不影响它们。关闭期间球身上吸附的道具挂在球下，随球可见。
 - 关闭期间 `MotionHost`/`PropFallHost` 暂停：`MotionHost` 的运动状态是逐步积分的（`Time.time` 只决定步进何时到期），重新打开时从冻结的姿态继续、不跳相位（Update 间隔 > 0.5 s 时把时刻表重新锚到当前时刻，见 [MOTION_HOST](../PickupAbsorb/MOTION_HOST.md) §4）；`PropFallHost` 用 `deltaTime` 累加，无影响。重新打开后运动道具位置是上次关闭时的姿态，回合重置（`ResetField`）只还原被吸附的道具。
 - 多人：`SetActive` 只对本地客户端生效，各客户端各自开关自己的岛，别的玩家所在关的岛在本机是关着的，看不到对方的球和场景；本轮按单人测试，不解决。
 
@@ -129,7 +129,7 @@
    - 执行：建 `Island_<id>`（先在原点）；离开的子树先摘下；每个 takeRoot 在外壳下重建祖先占位对象，`MoveGameObjectToScene`（源≠输出时）+ `SetParent(worldPositionStays:true)`；`leaveBehind` 子树留在原处（底板情形下放回重建的 `LevelContent` 占位根下）；外壳移到偏移；**引用按源层级路径重映射到输出场景同路径同类型对象**（同类型多个按序号），找不到 → PROBLEM（属性路径 + 目标路径），不做“按类型猜”；补世界坐标数据（`TerrainFieldHost.vertices` 每个顶点、`MotionHost.pathPoints` 每 3 个数加偏移，偏移全 0 则跳过）；所有 `TerrainFieldHost.deferRegistration = true`；被改的代理 `CopyProxyToUdon`；复查没有引用仍指向源场景；关闭源场景（不保存）。
 7. 每关数据：竞技场顺序 = `arenaFirst`（缺省取驱动的 `sandboxFrame`）→ 驱动 `cells` 的竞技场顺序 → 其余按层级顺序；地面高度 = 第一个竞技场的 `groundOffset`（无竞技场取源电机的 `groundPlaneOffset`）；白名单 = 驱动的 `kindWhitelist`；地形宿主一关至多一个；道具宿主 = 源回合控制器的 `pickupHost`（否则岛下第一个）；起点 = `start.center`（缺省：驱动出生点，再缺省：源电机 `startCenterWorld`）+ 偏移；朝向 `start.headingDeg`；**起始体积 = `SizeModelMath.TrySphereVolumeMm3(diameterM, 底板电机的 semanticDiameterPerCoreDiameter)`**，`diameterM` 缺省取源电机的 `startDiameterWorldM`，仍无则用底板电机自己的起始体积；从不读源电机的 `startVolumeMm3`（有 `startDiameterWorldM` 时它在运行时被覆盖，存的值不是起点）。
 8. 回合计划：自由练习关 `goal=FreeRoam`；计时关先取源回合控制器的值，`roundFromPlacement` 再用 placement 文档覆盖，最后是清单 `round` 块覆盖。`allowAbort` 取清单；`stars` 取清单（自由练习关恒无星）；星级阈值数组全部填成结果卡自己的单关值。
-9. 写 `LevelSwitch`（`LevelSwitchHost`，根物体）的并行数组；跑 `HubAssembler.Run`（多关模式）：N 个墙面按钮（顺序 = `hubs[].levels`）、启动器（含 `levelSwitch`）、房间宿主、**每关一颗返回按钮 `HubReturnButton_<id>`**（站在入口标记旁，没有入口则站在该关起点旁；底板里原来的根 `HubReturnButton` 改名成第一关的）、结果卡返回按钮、控制器按关数组与结果卡按关数组。
+9. 写 `LevelSwitch`（`LevelSwitchHost`，根物体）的并行数组；跑 `HubAssembler.Run`（多关模式）：N 张墙面关卡卡片（顺序 = `hubs[].levels`）、启动器（含 `levelSwitch`）、房间宿主、**每关一颗返回按钮 `HubReturnButton_<id>`**（站在入口标记旁，没有入口则站在该关起点旁；底板里原来的根 `HubReturnButton` 改名成第一关的）、控制器按关数组与结果卡按关数组。结算卡不在 `HubAssembler.Run` 里：随后的骑乘装配（`RideUxAssembler`）在 `FollowRigRoot/RidePanels` 下实例化 `RideResultCard.prefab`，写两颗卡按钮与 presenter/回合控制器的引用，并删掉旧的 `HubResultBoard`、`HubReturnCardButton` 与卡外 `StoryRetryButton`。
 10. **GPU instancing**（`Editor/LevelBuild/MaterialInstancing.cs`，装配器自动做）：遍历场景里启用中的 `MeshRenderer`，给每个「不透明（renderQueue < 2450、shader 名不含 `Transparent`/`Cutout`）+ shader 有 instancing 变体（`Standard`、`Standard (Specular setup)`）」的材质打开 `enableInstancing`。同一材质 + 同一网格的 n 个渲染器从 n 次 draw 变 1 次；摸底里非骨骼道具的 mesh+material 分组是 372 次 draw → 130 组。参考岛的**道具材质是 FBX 的只读内嵌材质**（Unity「Use Embedded Materials」下不能改），所以先把每份去重材质复制成 `Assets/_RefUnlicensed/Materials/Instanced/<模型名>_<材质名>.mat`（等同 Unity 的 Extract Materials，保留 shader/keywords/属性/renderQueue），再把渲染器的材质槽换成副本；`Assets/VRC_Katamari/` 下已入 git 的材质不在装配里改（由创建它的代码负责，见 6.1.2）。`Legacy Shaders/*`（地形 visual）没有 instancing 变体，跳过。报告行：`[allmaps] instancing: enabled=N duplicated=M already=K renderers=R skipped committed=… unsupported=… non-opaque=…`（都是**去重后的材质数**，不是槽位/渲染器次数）；命名不出来的内嵌材质是 `warn:` 行，不阻止保存。同一输入重跑不新建资产、不重写渲染器。
 11. **静态遮挡标记**（`Editor/Hub/OccluderRule.cs`，装配器自动做，不手摆）：按「是什么」判定场景里的固定结构几何，只写 `StaticEditorFlags`，**不烘焙**（烘焙是操作员的下一步，见 6.1.1）：
     - `OccludeeStatic`：关卡文档的结构（`Structures` 根下的网格，含 `Visual` 子物体）、参考岛的 `TerrainVisual` 地形、地形实验室的岛根 `Ground`、大厅的返回按钮 `HubReturnButton_<id>`。吸收道具（`Props`）、球、基础设施、背景壳不标。

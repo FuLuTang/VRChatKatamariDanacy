@@ -6,10 +6,13 @@ using UdonSharpEditor;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
+using VRCKatamari.BallContact;
 using VRCKatamari.BallLayers;
+using VRCKatamari.Diagnostics;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Hub;
 using VRCKatamari.Input;
@@ -63,6 +66,11 @@ namespace VRCKatamari.Editor.Story
     /// every exit.</description></item>
     /// <item><description><c>RideExitPanel</c> (under <c>RidePanels</c>): the exit button (press twice) and the hold-jump
     /// hint, active only while seated, wired to the station.</description></item>
+    /// <item><description>本地视图接线（<see cref="AssembleLocalViews"/>）：场景里唯一的
+    /// <c>CollisionWireframe</c> 接到设置、motor 和 Static/Terrain/Prop 三个子物体；唯一的
+    /// <c>BallPerformanceDiagnostics</c> 被场景里每个带 <c>performanceDiagnostics</c> 字段的
+    /// U# 行为引用（motor、各 PickupFieldHost、各 MotionHost）。宿主对象本身在基础场景里手工
+    /// 搭好，这里只接线；All-Maps 每次从基础场景重建输出，所以接线必须由装配完成。</description></item>
     /// </list>
     /// <para>
     /// Panels hang on the follow frame (through <c>RidePanels</c>), not on the seat or the ball: the frame is the eye
@@ -180,6 +188,11 @@ namespace VRCKatamari.Editor.Story
             StoryRetryButton retry = FindOptional<StoryRetryButton>();
             BallRideExitButton exit = FindOptional<BallRideExitButton>();
 
+            // 新同步来的 U# 行为可能还没有程序资产（AddComponent 会抛）；缺则建并编译。
+            var createdPrograms = new List<string>();
+            VRCKatamari.Editor.Hub.UdonProgramAssets.EnsureAll(createdPrograms, c.Problems);
+            if (createdPrograms.Count > 0)
+                c.Notes.Add("created U# program assets: " + string.Join(", ", createdPrograms.ToArray()));
             try
             {
                 UdonSharpProgramAsset.CompileAllCsPrograms(false, false);
@@ -218,6 +231,7 @@ namespace VRCKatamari.Editor.Story
                 AssemblePushCue(rigRoot, station, round, c);
                 AssembleCatchName(station, round, c);
             }
+            AssembleLocalViews(motor, c);
 
             CopyAllToUdon(c);
             VerifyUdonTables(station, c);
@@ -604,7 +618,7 @@ namespace VRCKatamari.Editor.Story
                 SerializedProperty field = hostSo.FindProperty("catchNameDisplay");
                 if (field == null)
                 {
-                    c.Notes.Add("PickupFieldHost has no catchNameDisplay field yet; catch-name HUD gets no events");
+                    c.Problems.Add("PickupFieldHost.catchNameDisplay is not a serialized field (renamed?)");
                     return 0;
                 }
                 if (field.objectReferenceValue != display)
@@ -612,11 +626,255 @@ namespace VRCKatamari.Editor.Story
                     field.objectReferenceValue = display;
                     hostSo.ApplyModifiedPropertiesWithoutUndo();
                     c.Changed++;
-                    c.Proxies.Add(host);
                 }
+                // 代理一致而 Udon 表落后时（场景存盘前的旧表）也要补拷，拷贝本身不算改动。
+                c.Proxies.Add(host);
                 wired++;
             }
             return wired;
+        }
+
+        // ------------------------------------------------------------ local views ---
+
+        /// <summary>引用性能诊断的宿主字段名（motor、PickupFieldHost、MotionHost 共用）。</summary>
+        internal const string PerformanceDiagnosticsField = "performanceDiagnostics";
+        internal const string CatchNameDisplayField = "catchNameDisplay";
+        internal static readonly string[] WireframeChildren = { "Static", "Terrain", "Prop" };
+        private static readonly string[] WireframeLineFields = { "staticLines", "terrainLines", "propLines" };
+        private static readonly string[] WireframeFilterFields = { "staticFilter", "terrainFilter", "propFilter" };
+        private const string WireframeArtFolder = "Assets/VRC_Katamari/Art/Debug/";
+
+        // 碰撞线框与性能诊断都是基础场景里手工搭好的根对象；这里只接线（缺线框子物体时按
+        // Art/Debug 的材质与空网格补建）。场景里没有对象时记一条说明，有两个以上时记 problem。
+        private static void AssembleLocalViews(KatamariBallMotor motor, Counters c)
+        {
+            Scene scene = motor.gameObject.scene;
+            string wire = AssembleWireframe(scene, motor, c);
+            string diag = AssemblePerformanceHosts(scene, c);
+            c.Notes.Add("local views: " + wire + "; " + diag);
+        }
+
+        private static string AssembleWireframe(Scene scene, KatamariBallMotor motor, Counters c)
+        {
+            List<CollisionWireframe> all = InScene<CollisionWireframe>(scene);
+            if (all.Count == 0) return "no authored CollisionWireframe";
+            if (all.Count > 1)
+            {
+                c.Problems.Add("more than one CollisionWireframe in the scene (" + all.Count + "); none wired");
+                return "wireframe not wired";
+            }
+            CollisionWireframe wire = all[0];
+            List<HubSettingsHost> settings = InScene<HubSettingsHost>(scene);
+            if (settings.Count > 1)
+            {
+                c.Problems.Add("more than one HubSettingsHost in the scene; CollisionWireframe.settings left untouched");
+                return "wireframe not wired";
+            }
+
+            var so = new SerializedObject(wire);
+            bool changed = SetObject(so, "motor", motor, c);
+            if (settings.Count == 1) changed |= SetObject(so, "settings", settings[0], c);
+            for (int i = 0; i < WireframeChildren.Length; i++)
+            {
+                Transform child = EnsureWireframeChild(wire.transform, WireframeChildren[i], c);
+                if (child == null) continue;
+                changed |= SetObject(so, WireframeLineFields[i], child.GetComponent<MeshRenderer>(), c);
+                changed |= SetObject(so, WireframeFilterFields[i], child.GetComponent<MeshFilter>(), c);
+            }
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(wire);
+            return "wireframe settings " + (settings.Count == 1 ? "wired" : "absent (no HubSettingsHost)");
+        }
+
+        // 一个线条子物体：MeshFilter（空网格资产）+ MeshRenderer（Unlit 颜色材质，初始关）。
+        // 已有的子物体只补缺的组件和空引用，不改手工设置的材质/网格。
+        private static Transform EnsureWireframeChild(Transform root, string name, Counters c)
+        {
+            Transform child = root.Find(name);
+            if (child == null)
+            {
+                var go = new GameObject(name);
+                Undo.RegisterCreatedObjectUndo(go, "Create wireframe " + name);
+                go.transform.SetParent(root, false);
+                child = go.transform;
+                c.Created++;
+            }
+            var filter = child.GetComponent<MeshFilter>();
+            if (filter == null) { filter = Undo.AddComponent<MeshFilter>(child.gameObject); c.Created++; }
+            var renderer = child.GetComponent<MeshRenderer>();
+            if (renderer == null)
+            {
+                renderer = Undo.AddComponent<MeshRenderer>(child.gameObject);
+                renderer.enabled = false;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                c.Created++;
+            }
+            if (filter.sharedMesh == null)
+            {
+                Mesh mesh = AssetDatabase.LoadAssetAtPath<Mesh>(WireframeArtFolder + "Mesh_CollisionWire_" + name + ".asset");
+                if (mesh == null) c.Problems.Add("missing " + WireframeArtFolder + "Mesh_CollisionWire_" + name + ".asset");
+                else { Undo.RecordObject(filter, "Wireframe mesh"); filter.sharedMesh = mesh; c.Changed++; }
+            }
+            if (renderer.sharedMaterial == null)
+            {
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(WireframeArtFolder + "Mat_CollisionWire_" + name + ".mat");
+                if (material == null) c.Problems.Add("missing " + WireframeArtFolder + "Mat_CollisionWire_" + name + ".mat");
+                else { Undo.RecordObject(renderer, "Wireframe material"); renderer.sharedMaterial = material; c.Changed++; }
+            }
+            return child;
+        }
+
+        // 场景里每个带 performanceDiagnostics 字段的 U# 行为都指向唯一的诊断器。
+        private static string AssemblePerformanceHosts(Scene scene, Counters c)
+        {
+            List<BallPerformanceDiagnostics> all = InScene<BallPerformanceDiagnostics>(scene);
+            if (all.Count == 0) return "no authored BallPerformanceDiagnostics";
+            if (all.Count > 1)
+            {
+                c.Problems.Add("more than one BallPerformanceDiagnostics in the scene (" + all.Count + "); no host wired");
+                return "performance diagnostics not wired";
+            }
+            BallPerformanceDiagnostics diag = all[0];
+            c.Proxies.Add(diag);
+            int hosts = 0;
+            foreach (UdonSharpBehaviour host in InScene<UdonSharpBehaviour>(scene))
+            {
+                var so = new SerializedObject(host);
+                SerializedProperty field = so.FindProperty(PerformanceDiagnosticsField);
+                if (field == null || field.propertyType != SerializedPropertyType.ObjectReference) continue;
+                hosts++;
+                if (field.objectReferenceValue != diag)
+                {
+                    field.objectReferenceValue = diag;
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    c.Changed++;
+                }
+                c.Proxies.Add(host);
+            }
+            return "performance diagnostics wired " + hosts + " host(s)";
+        }
+
+        /// <summary>装配后读回的本地视图接线（代理字段与 Udon 表都对上才算 wired）。</summary>
+        internal sealed class LocalWiring
+        {
+            public int DiagnosticsHosts;
+            public int DiagnosticsWired;
+            public int CatchHosts;
+            public int CatchWired;
+            public bool WireframeFound;
+            public bool WireframeSettingsWired;
+        }
+
+        /// <summary>
+        /// 读回 <paramref name="scene"/> 的三组接线：性能诊断的宿主、物品名 HUD 的道具宿主、
+        /// 碰撞线框的设置/motor/六个子引用。每处缺接线或 Udon 表不一致都加一条 problem。
+        /// All-Maps 装配和 Check Room Wiring 共用这一个实现。
+        /// </summary>
+        internal static LocalWiring ReadLocalWiring(Scene scene, List<string> problems)
+        {
+            var r = new LocalWiring();
+
+            List<BallPerformanceDiagnostics> diags = InScene<BallPerformanceDiagnostics>(scene);
+            if (diags.Count != 1)
+                problems.Add("expected exactly one BallPerformanceDiagnostics, found " + diags.Count);
+            BallPerformanceDiagnostics diag = diags.Count == 1 ? diags[0] : null;
+            foreach (UdonSharpBehaviour host in InScene<UdonSharpBehaviour>(scene))
+            {
+                SerializedProperty field = new SerializedObject(host).FindProperty(PerformanceDiagnosticsField);
+                if (field == null || field.propertyType != SerializedPropertyType.ObjectReference) continue;
+                r.DiagnosticsHosts++;
+                if (diag == null) continue;
+                if (field.objectReferenceValue == diag && UdonReferenceIs(host, PerformanceDiagnosticsField, diag))
+                    r.DiagnosticsWired++;
+                else
+                    problems.Add(host.GetType().Name + " on '" + host.name + "' does not point "
+                        + PerformanceDiagnosticsField + " at the scene's BallPerformanceDiagnostics (proxy and Udon table)");
+            }
+            if (diag != null && r.DiagnosticsHosts == 0)
+                problems.Add("no behaviour in the scene has a " + PerformanceDiagnosticsField + " field (renamed?)");
+
+            List<CatchNameDisplay> displays = InScene<CatchNameDisplay>(scene);
+            if (displays.Count != 1)
+                problems.Add("expected exactly one CatchNameDisplay, found " + displays.Count);
+            CatchNameDisplay display = displays.Count == 1 ? displays[0] : null;
+            foreach (VRCKatamari.Pickup.PickupFieldHost host in InScene<VRCKatamari.Pickup.PickupFieldHost>(scene))
+            {
+                r.CatchHosts++;
+                if (display == null) continue;
+                SerializedProperty field = new SerializedObject(host).FindProperty(CatchNameDisplayField);
+                if (field != null && field.objectReferenceValue == display
+                    && UdonReferenceIs(host, CatchNameDisplayField, display))
+                    r.CatchWired++;
+                else
+                    problems.Add("PickupFieldHost on '" + host.name + "' does not point " + CatchNameDisplayField
+                        + " at the scene's CatchNameDisplay (proxy and Udon table)");
+            }
+
+            List<CollisionWireframe> wires = InScene<CollisionWireframe>(scene);
+            if (wires.Count != 1)
+            {
+                problems.Add("expected exactly one CollisionWireframe, found " + wires.Count);
+                return r;
+            }
+            r.WireframeFound = true;
+            CollisionWireframe wire = wires[0];
+            List<HubSettingsHost> settings = InScene<HubSettingsHost>(scene);
+            List<KatamariBallMotor> motors = InScene<KatamariBallMotor>(scene);
+            var wireSo = new SerializedObject(wire);
+            UnityEngine.Object wiredSettings = ReadProperty(wireSo, "settings");
+            r.WireframeSettingsWired = settings.Count == 1 && wiredSettings == settings[0]
+                && UdonReferenceIs(wire, "settings", settings[0]);
+            if (!r.WireframeSettingsWired)
+                problems.Add("CollisionWireframe.settings is not the scene's HubSettingsHost (proxy and Udon"
+                    + " table); the \"show physics\" setting would never draw");
+            if (motors.Count != 1 || ReadProperty(wireSo, "motor") != motors[0]
+                || !UdonReferenceIs(wire, "motor", motors[0]))
+                problems.Add("CollisionWireframe.motor is not the scene's KatamariBallMotor (proxy and Udon table)");
+            for (int i = 0; i < WireframeChildren.Length; i++)
+            {
+                var lines = ReadProperty(wireSo, WireframeLineFields[i]) as Renderer;
+                var filter = ReadProperty(wireSo, WireframeFilterFields[i]) as MeshFilter;
+                if (lines == null || filter == null || lines.transform.parent != wire.transform
+                    || filter.gameObject != lines.gameObject || filter.sharedMesh == null || lines.sharedMaterial == null)
+                    problems.Add("CollisionWireframe " + WireframeChildren[i] + " lines are not a wired child"
+                        + " with mesh and material (" + WireframeLineFields[i] + "/" + WireframeFilterFields[i] + ")");
+            }
+            return r;
+        }
+
+        /// <summary>All-Maps 汇总行（不含前缀）。</summary>
+        internal static string LocalWiringSummary(int diagnosticsWired, int diagnosticsHosts,
+            int catchWired, int catchHosts, bool wireframeFound, bool wireframeSettingsWired)
+        {
+            return "diagnostics wired " + diagnosticsWired + "/" + diagnosticsHosts + " hosts, catch-name wired "
+                + catchWired + "/" + catchHosts + ", wireframe settings "
+                + (!wireframeFound ? "MISSING (no CollisionWireframe)" : wireframeSettingsWired ? "wired" : "NOT wired");
+        }
+
+        private static UnityEngine.Object ReadProperty(SerializedObject so, string field)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            return property == null ? null : property.objectReferenceValue;
+        }
+
+        // owner 的 Udon 表里 field = target 的 backing UdonBehaviour。
+        private static bool UdonReferenceIs(UdonSharpBehaviour owner, string field, UdonSharpBehaviour target)
+        {
+            if (target == null) return false;
+            UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(target);
+            object value;
+            return backing != null && VRCKatamari.Editor.Hub.UdonVariableAccess.TryRead(owner, field, out value)
+                && (value as UdonBehaviour) == backing;
+        }
+
+        private static List<T> InScene<T>(Scene scene) where T : Component
+        {
+            var found = new List<T>();
+            if (!scene.IsValid() || !scene.isLoaded) return found;
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++) found.AddRange(roots[i].GetComponentsInChildren<T>(true));
+            return found;
         }
 
         // 原型：圆底直径 1、中心在原点、正面朝 -Z（观看者一侧）；名字在圆底下方。
@@ -1182,19 +1440,9 @@ namespace VRCKatamari.Editor.Story
 
         private static T AddUdon<T>(GameObject go, Counters c) where T : UdonSharpBehaviour
         {
-            try
-            {
-                T added = UdonSharpUndo.AddComponent<T>(go);
-                c.Created++;
-                return added;
-            }
-            catch (Exception exception)
-            {
-                c.Problems.Add("could not add " + typeof(T).Name + " to '" + go.name + "': "
-                    + exception.Message + " (does " + typeof(T).Name + ".asset, its UdonSharp"
-                    + " program asset, exist next to the .cs?)");
-                return null;
-            }
+            T added = VRCKatamari.Editor.Hub.UdonProgramAssets.AddComponent<T>(go, c.Problems, c.Notes);
+            if (added != null) c.Created++;
+            return added;
         }
 
         // The click prompt and its reach are fields of the backing UdonBehaviour, not of the

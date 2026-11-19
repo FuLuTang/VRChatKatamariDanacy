@@ -81,18 +81,16 @@ namespace VRCKatamari.Editor.LevelBuild
                 var go = new GameObject(PropFallHostObjectName);
                 Undo.RegisterCreatedObjectUndo(go, UndoLabel);
                 Undo.SetTransformParent(go.transform, levelRoot, UndoLabel);
-                try
+                var addProblems = new System.Collections.Generic.List<string>();
+                var addNotes = new System.Collections.Generic.List<string>();
+                host = VRCKatamari.Editor.Hub.UdonProgramAssets.AddComponent<PropFallHost>(go, addProblems, addNotes);
+                foreach (string note in addNotes) report.Note(V2Tag + note);
+                if (host == null)
                 {
-                    host = UdonSharpUndo.AddComponent<PropFallHost>(go);
-                    writes++;
-                }
-                catch (Exception exception)
-                {
-                    report.Error(V2Tag + "could not add PropFallHost to '" + go.name + "': " +
-                                 exception.Message + " (does PropFallHost.asset, its UdonSharp program " +
-                                 "asset, exist next to PropFallHost.cs? Unity generates it on import)");
+                    foreach (string problem in addProblems) report.Error(V2Tag + problem);
                     return;
                 }
+                writes++;
             }
 
             TerrainFieldHost terrain = FirstUnder<TerrainFieldHost>(levelRoot);

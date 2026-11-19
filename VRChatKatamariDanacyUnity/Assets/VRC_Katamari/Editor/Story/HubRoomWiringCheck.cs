@@ -197,6 +197,7 @@ namespace VRCKatamari.Editor.Story
             CheckVrStickInput(OptionalReference<HubSettingsHost>(host, "settings"), ref problems);
             int arrows = CheckPanels(host, entries, ref problems);
             CheckAbsorbFeedback(OptionalReference<HubSettingsHost>(host, "settings"), ref problems);
+            CheckLocalViews(host.gameObject.scene, ref problems);
 
             int presenters = Object.FindObjectsOfType<StoryResultPresenter>().Length;
             if (presenters == 0)
@@ -448,6 +449,18 @@ namespace VRCKatamari.Editor.Story
                     Report("PickupFieldHost on '" + field.name + "' does not point absorbFeedback at"
                         + " the scene's AbsorbFeedbackHost", ref problems);
             }
+        }
+
+        // 碰撞线框、性能诊断、物品名 HUD 的接线：与 All-Maps 装配的读回是同一个实现
+        // （RideUxAssembler.ReadLocalWiring），每处缺接线一条 problem，再打一行汇总。
+        private static void CheckLocalViews(UnityEngine.SceneManagement.Scene scene, ref int problems)
+        {
+            var found = new System.Collections.Generic.List<string>();
+            RideUxAssembler.LocalWiring wiring = RideUxAssembler.ReadLocalWiring(scene, found);
+            for (int i = 0; i < found.Count; i++) Report(found[i], ref problems);
+            Debug.Log("[hub-check] " + RideUxAssembler.LocalWiringSummary(wiring.DiagnosticsWired,
+                wiring.DiagnosticsHosts, wiring.CatchWired, wiring.CatchHosts, wiring.WireframeFound,
+                wiring.WireframeSettingsWired));
         }
 
         // The Udon table of owner holds field = target's backing UdonBehaviour.

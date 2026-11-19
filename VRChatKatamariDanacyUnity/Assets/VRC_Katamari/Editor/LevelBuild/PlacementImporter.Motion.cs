@@ -76,18 +76,16 @@ namespace VRCKatamari.Editor.LevelBuild
                 var go = new GameObject(MotionHostObjectName);
                 Undo.RegisterCreatedObjectUndo(go, UndoLabel);
                 Undo.SetTransformParent(go.transform, levelRoot, UndoLabel);
-                try
+                var addProblems = new System.Collections.Generic.List<string>();
+                var addNotes = new System.Collections.Generic.List<string>();
+                host = VRCKatamari.Editor.Hub.UdonProgramAssets.AddComponent<MotionHost>(go, addProblems, addNotes);
+                foreach (string note in addNotes) report.Note(V2Tag + note);
+                if (host == null)
                 {
-                    host = UdonSharpUndo.AddComponent<MotionHost>(go);
-                    report.V2MotionHostWrites++;
-                }
-                catch (Exception exception)
-                {
-                    report.Error(V2Tag + "could not add MotionHost to '" + go.name + "': " +
-                                 exception.Message + " (does MotionHost.asset, its UdonSharp program " +
-                                 "asset, exist next to MotionHost.cs? Unity generates it on import)");
+                    foreach (string problem in addProblems) report.Error(V2Tag + problem);
                     return;
                 }
+                report.V2MotionHostWrites++;
             }
 
             var serialized = new SerializedObject(host);

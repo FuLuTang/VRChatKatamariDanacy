@@ -1142,20 +1142,11 @@ namespace VRCKatamari.Editor.Hub
 
         internal static T AddUdon<T>(GameObject go, Counters c) where T : UdonSharpBehaviour
         {
-            try
-            {
-                T added = UdonSharpUndo.AddComponent<T>(go);
-                c.Created++;
-                c.Proxies.Add(added);
-                return added;
-            }
-            catch (Exception exception)
-            {
-                c.Problems.Add("could not add " + typeof(T).Name + " to '" + go.name + "': "
-                    + exception.Message + " (does " + typeof(T).Name + ".asset, its UdonSharp"
-                    + " program asset, exist next to the .cs?)");
-                return null;
-            }
+            T added = UdonProgramAssets.AddComponent<T>(go, c.Problems, c.Notes);
+            if (added == null) return null;
+            c.Created++;
+            c.Proxies.Add(added);
+            return added;
         }
 
         // The click prompt and its reach are fields of the backing UdonBehaviour, not of the

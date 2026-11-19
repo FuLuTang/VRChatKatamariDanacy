@@ -170,6 +170,14 @@ namespace VRCKatamari.Editor.Hub
             // (the skin assembler refuses a dirty scene).
             bool skinApplied = AssembleCoreSkin(hub, lines);
 
+            // 新同步来的 U# 行为可能还没有程序资产，后面的 AddComponent 会抛；缺则建并编译。
+            // 放在核心皮肤之后（皮肤装配拒绝脏场景，编译可能把场景标脏）、任何 U# 组件添加之前。
+            var createdPrograms = new List<string>();
+            UdonProgramAssets.EnsureAll(createdPrograms, problems);
+            if (createdPrograms.Count > 0)
+                Line(lines, "created U# program assets: " + string.Join(", ", createdPrograms.ToArray()));
+            if (problems.Count > 0) return Finish(lines, problems, hc, output);
+
             // The hub room first, while the scene is exactly the base's (the importer's
             // known-good context); the levels then move around it.
             HubAssembler.AssembleRoomGeometry(hc);
@@ -273,6 +281,7 @@ namespace VRCKatamari.Editor.Hub
             HubAssembler.CopyAllToUdon(hc);
             VerifyAllTables(outcome, levelSwitch, data, hc, diagLines);
             VerifyGlobalBallCap(IslandImport.FirstIn<KatamariBallMotor>(output), hc, diagLines);
+            ReportLocalWiring(output, hc, diagLines);
 
             for (int i = 0; i < diagLines.Count; i++) Line(lines, diagLines[i]);
 
@@ -1090,6 +1099,17 @@ namespace VRCKatamari.Editor.Hub
                     }
                 }
             }
+        }
+
+        // 输出场景从基础场景复制而来，基础场景里没有 HubSettings 和关卡宿主，这三组接线只能
+        // 由装配完成（Ride UX 段接，这里在 Udon 拷贝之后读回）。缺一处就是 problem，场景不保存。
+        private static void ReportLocalWiring(Scene output, HubAssembler.Counters hc, List<string> diag)
+        {
+            VRCKatamari.Editor.Story.RideUxAssembler.LocalWiring wiring =
+                VRCKatamari.Editor.Story.RideUxAssembler.ReadLocalWiring(output, hc.Problems);
+            diag.Add(VRCKatamari.Editor.Story.RideUxAssembler.LocalWiringSummary(
+                wiring.DiagnosticsWired, wiring.DiagnosticsHosts, wiring.CatchWired, wiring.CatchHosts,
+                wiring.WireframeFound, wiring.WireframeSettingsWired));
         }
 
         private static void VerifyGlobalBallCap(KatamariBallMotor motor,

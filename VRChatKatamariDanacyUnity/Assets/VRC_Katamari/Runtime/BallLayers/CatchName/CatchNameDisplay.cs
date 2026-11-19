@@ -38,8 +38,8 @@ namespace VRCKatamari.BallLayers
         // 可选：吸到瞬间从物件收向圆底的一条线；空则不画。
         [SerializeField] private LineRenderer catchLine;
 
-        [SerializeField, Range(20f, 35f)] private float deadZoneDegrees = PushCueMath.DefaultDeadZoneDegrees;
-        [SerializeField, Range(0.3f, 0.6f)] private float catchUpSeconds = PushCueMath.DefaultCatchUpSeconds;
+        [SerializeField, Range(20f, 35f)] private float deadZoneDegrees = CatchNameMath.DefaultDeadZoneDegrees;
+        [SerializeField, Range(0.3f, 0.6f)] private float catchUpSeconds = CatchNameMath.DefaultCatchUpSeconds;
         [SerializeField, Range(1.2f, 1.6f)] private float distanceMeters = CatchNameMath.DefaultDistanceMeters;
         [SerializeField, Range(-20f, -10f)] private float elevationDegrees = CatchNameMath.DefaultElevationDegrees;
         [SerializeField, Range(-20f, -10f)] private float yawOffsetDegrees = CatchNameMath.DefaultYawOffsetDegrees;
@@ -127,7 +127,7 @@ namespace VRCKatamari.BallLayers
                 return;
             }
 
-            lastHeadYaw = PushCueMath.HeadYaw(head.rotation, lastHeadYaw);
+            lastHeadYaw = CatchNameMath.HeadYaw(head.rotation, lastHeadYaw);
             if (!hudVisible)
             {
                 anchorYaw = lastHeadYaw;
@@ -136,7 +136,7 @@ namespace VRCKatamari.BallLayers
             else
             {
                 bool following;
-                anchorYaw = PushCueMath.StepAnchorYaw(anchorYaw, lastHeadYaw, deadZoneDegrees,
+                anchorYaw = CatchNameMath.StepAnchorYaw(anchorYaw, lastHeadYaw, deadZoneDegrees,
                     catchUpSeconds, Time.deltaTime, followingYaw, out following);
                 followingYaw = following;
             }
@@ -144,10 +144,9 @@ namespace VRCKatamari.BallLayers
             float yaw = anchorYaw + yawOffsetDegrees;
             float distance = CatchNameMath.ScaledDistance(distanceMeters, player.GetAvatarEyeHeightAsMeters());
             Vector3 position;
-            Quaternion unusedRotation;
             float diameter;
-            if (!PushCueMath.TryEvaluate(head.position, yaw, yaw, distance, elevationDegrees,
-                angularSizeDegrees, out position, out unusedRotation, out diameter))
+            if (!CatchNameMath.TryEvaluateHudPlacement(head.position, yaw, distance, elevationDegrees,
+                angularSizeDegrees, out position, out diameter))
             {
                 ApplyVisibility(false);
                 return;

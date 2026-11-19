@@ -50,8 +50,8 @@ namespace VRCKatamari.BallLayers
     /// <para>
     /// The max rails bound the CONSTANT terms, never the radius-proportional ones. A rail in
     /// metres on <c>radius * factor</c> would pin the eye inside a growing ball sooner or
-    /// later: with the push stance (1.6546 * radius up, 1.1768 * radius back) the 400 m
-    /// global ball cap puts the eye 331 m above the centre, so any fixed ceiling below that
+    /// later: with the push stance (1.9001 * radius up, 1.0418 * radius back) the 400 m
+    /// global ball cap puts the eye 380 m above the centre, so any fixed ceiling below that
     /// buries the camera in the ball. The radius-proportional placement is the design and the
     /// ball-size cap is what bounds it; the rails exist to catch a mis-authored constant.
     /// </para>

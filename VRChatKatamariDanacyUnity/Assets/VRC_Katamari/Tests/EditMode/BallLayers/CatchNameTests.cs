@@ -131,14 +131,13 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void SharedFollowPoseAcceptsAPlacementBelowAndLeftOfTheSightLine()
+        public void HudPlacementAcceptsAPlacementBelowAndLeftOfTheSightLine()
         {
             Vector3 position;
-            Quaternion rotation;
             float scale;
-            Assert.IsTrue(PushCueMath.TryEvaluate(Vector3.zero, CatchNameMath.DefaultYawOffsetDegrees, 0f,
+            Assert.IsTrue(CatchNameMath.TryEvaluateHudPlacement(Vector3.zero, CatchNameMath.DefaultYawOffsetDegrees,
                 1.4f, CatchNameMath.DefaultElevationDegrees, CatchNameMath.DefaultAngularSizeDegrees,
-                out position, out rotation, out scale));
+                out position, out scale));
             Assert.AreEqual(1.4f * Mathf.Sin(-15f * Mathf.Deg2Rad), position.y, Tolerance);
             Assert.Less(position.x, 0f);
             Assert.AreEqual(1.4f, position.magnitude, Tolerance);
@@ -148,13 +147,12 @@ namespace VRCKatamari.Tests
         [TestCase(90f)]
         [TestCase(float.NaN)]
         [TestCase(float.NegativeInfinity)]
-        public void SharedFollowPoseStillRejectsVerticalAndNonFiniteElevation(float elevation)
+        public void HudPlacementStillRejectsVerticalAndNonFiniteElevation(float elevation)
         {
             Vector3 position;
-            Quaternion rotation;
             float scale;
-            Assert.IsFalse(PushCueMath.TryEvaluate(Vector3.zero, 0f, 0f, 1.4f, elevation, 7f,
-                out position, out rotation, out scale));
+            Assert.IsFalse(CatchNameMath.TryEvaluateHudPlacement(Vector3.zero, 0f, 1.4f, elevation, 7f,
+                out position, out scale));
             Assert.AreEqual(0f, scale);
         }
 

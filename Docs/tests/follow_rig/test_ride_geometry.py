@@ -8,21 +8,22 @@ import unittest
 
 import Docs.Design.BallLayers.FollowRig.ride_geometry as rg
 
-S45 = math.sqrt(0.5)
-# e = (1 + sin 45) / (1 - 0.125 - 0.328 sin 45) = 1.707107 / 0.643069
-E45 = (1 + S45) / (1 - 0.125 - 0.328 * S45)
+S52 = math.sin(math.radians(52))
+C52 = math.cos(math.radians(52))
+# e = (1 + sin 52) / (1 - 0.125 - 0.328 sin 52) = 1.788011 / 0.616532
+E52 = (1 + S52) / (1 - 0.125 - 0.328 * S52)
 DIAMETERS = (0.222, 0.3, 0.5, 2.0, 20.0)
 
 
 class StanceTests(unittest.TestCase):
-    def test_closed_form_at_45(self):
+    def test_closed_form_at_52(self):
         self.assertAlmostEqual(rg.push_reach(), 0.328, delta=1e-12)
-        self.assertAlmostEqual(rg.eye_height_per_radius(), 2.654625, delta=1e-5)
-        self.assertAlmostEqual(rg.eye_up_per_radius(), 1.654625, delta=1e-5)
-        # back = -0.055 e + (1 + 0.328 e) cos 45
-        self.assertAlmostEqual(rg.eye_back_per_radius(), -0.055 * E45 + (1 + 0.328 * E45) * S45,
+        self.assertAlmostEqual(rg.eye_height_per_radius(), 2.900108, delta=1e-5)
+        self.assertAlmostEqual(rg.eye_up_per_radius(), 1.900108, delta=1e-5)
+        # back = -0.055 e + (1 + 0.328 e) cos 52
+        self.assertAlmostEqual(rg.eye_back_per_radius(), -0.055 * E52 + (1 + 0.328 * E52) * C52,
                                delta=1e-12)
-        self.assertAlmostEqual(rg.eye_back_per_radius(), 1.176792, delta=1e-5)
+        self.assertAlmostEqual(rg.eye_back_per_radius(), 1.041795, delta=1e-5)
 
     def test_feet_on_ground_and_arm_through_the_centre(self):
         for psi in rg.CANDIDATE_ANGLES_DEG:
@@ -39,20 +40,25 @@ class StanceTests(unittest.TestCase):
             # The hand is on the surface.
             self.assertAlmostEqual(math.hypot(hx, hy - 1.0), 1.0, delta=1e-12)
 
-    def test_view_at_45(self):
+    def test_view_at_52(self):
         st = rg.stance()
-        # atan2(1.654625, 1.176792) = 54.58 deg; asin(1 / 2.0305) = 29.51 deg.
-        self.assertAlmostEqual(st.centre_depression_deg, 54.58, delta=0.01)
-        self.assertAlmostEqual(st.half_angle_deg, 29.51, delta=0.01)
-        self.assertAlmostEqual(st.top_edge_deg, 25.07, delta=0.01)
-        # Ball top 0.654625 r below the eye = 0.2466 E (the chest), hands 0.177 E forward and
-        # 0.357 E down from the eye.
-        self.assertAlmostEqual(st.top_below_eye_per_e, 0.654625 / 2.654625, delta=1e-5)
+        # atan2(1.900108, 1.041795) = 61.26 deg; asin(1 / 2.167) = 27.48 deg.
+        self.assertAlmostEqual(st.centre_depression_deg, 61.26, delta=0.01)
+        self.assertAlmostEqual(st.half_angle_deg, 27.48, delta=0.01)
+        self.assertAlmostEqual(st.top_edge_deg, 33.78, delta=0.01)
+        # Ball top 0.900108 r below the eye = 0.3104 E, hands 0.147 E forward and
+        # 0.383 E down from the eye.
+        self.assertAlmostEqual(st.top_below_eye_per_e, 0.900108 / 2.900108, delta=1e-5)
         f, d = st.hand_from_eye_per_e
-        self.assertAlmostEqual(f, (1.176792 - S45) / 2.654625, delta=1e-5)
-        self.assertAlmostEqual(d, (1.654625 - S45) / 2.654625, delta=1e-5)
-        # D / E = 2 / 2.654625 = 0.753.
-        self.assertAlmostEqual(st.diameter_per_e, 0.7534, delta=1e-4)
+        self.assertAlmostEqual(f, (1.041795 - C52) / 2.900108, delta=1e-5)
+        self.assertAlmostEqual(d, (1.900108 - S52) / 2.900108, delta=1e-5)
+        # D / E = 2 / 2.900108 = 0.690.
+        self.assertAlmostEqual(st.diameter_per_e, 0.6896, delta=1e-4)
+
+    def test_default_is_steepest_integer_with_leg_clearance(self):
+        # 腿中轴竖直过球心高度：净空是后退距离减球半径。
+        feasible = [a for a in range(35, 56) if rg.stance(a).back - 1.0 >= 0.03]
+        self.assertEqual(rg.PUSH_ANGLE_DEG, max(feasible))
 
     def test_hands_reach_across_real_bodies(self):
         # Straight reach 0.38-0.45 E: the push uses at most 0.328 / 0.38 = 86 % of it.
@@ -71,15 +77,15 @@ class SizeTests(unittest.TestCase):
         for d in DIAMETERS:
             e, clamped = rg.eye_height_for_diameter(d)
             self.assertFalse(clamped)
-            self.assertAlmostEqual(e, E45 * d / 2, delta=1e-9)
+            self.assertAlmostEqual(e, E52 * d / 2, delta=1e-9)
             e9, _ = rg.eye_height_for_diameter(d, 0.9)
             self.assertAlmostEqual(e9, e / 0.9, delta=1e-9)
 
     def test_hand_values(self):
-        # D = 0.3: E = 2.654625 * 0.15 = 0.398194; panel at 1.6 * 0.398194 / 1.64 = 0.388 m.
+        # D = 0.3: E = 2.900108 * 0.15 = 0.435016; panel at 1.6 * 0.435016 / 1.64 = 0.424 m.
         e, _ = rg.eye_height_for_diameter(0.3)
-        self.assertAlmostEqual(e, 0.398194, delta=1e-5)
-        self.assertAlmostEqual(rg.PANEL_DISTANCE_M * rg.panel_scale(e), 0.38848, delta=1e-4)
+        self.assertAlmostEqual(e, 0.435016, delta=1e-5)
+        self.assertAlmostEqual(rg.PANEL_DISTANCE_M * rg.panel_scale(e), 0.424406, delta=1e-4)
 
     def test_clamp(self):
         self.assertEqual(rg.eye_height_for_diameter(0.05), (0.1, True))
@@ -107,13 +113,13 @@ class SizeTests(unittest.TestCase):
         self.assertLess(rg.panel_clearance_deg(on_ball), 0.0)
 
     def test_reach_table(self):
-        # D = 2 (r = 1): E = 2.654625; contact (1.176792 - cos45, 1.654625 - sin45) from the eye;
+        # D = 2 (r = 1): E = 2.900108; contact (1.041795 - cos52, 1.900108 - sin52) from the eye;
         # shoulder to contact = 0.328 E.
         row = [x for x in rg.reach_table() if x[0] == 2.0][0]
-        self.assertAlmostEqual(row[1], E45, delta=1e-9)
-        self.assertAlmostEqual(row[4], 1.176792 - S45, delta=1e-5)
-        self.assertAlmostEqual(row[5], 1.654625 - S45, delta=1e-5)
-        self.assertAlmostEqual(row[7], 0.328 * E45, delta=1e-9)
+        self.assertAlmostEqual(row[1], E52, delta=1e-9)
+        self.assertAlmostEqual(row[4], 1.041795 - C52, delta=1e-5)
+        self.assertAlmostEqual(row[5], 1.900108 - S52, delta=1e-5)
+        self.assertAlmostEqual(row[7], 0.328 * E52, delta=1e-9)
 
 
 class FilterTests(unittest.TestCase):

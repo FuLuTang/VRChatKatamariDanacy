@@ -51,7 +51,7 @@
 | 8 | 低特效 | 关/开，默认关 | `CatchNameDisplay` 轮询设置修订号读 `IsLowEffects()`：开时不画吸物连线、HUD 小模型停转（`CatchNameMath.ShownSpinDegrees`）；只本地表现 | 代码已接；待 VR 看 |
 | 9 | 减弱自动转向 | 关/开，默认关 | `KatamariBallMotor.settings` 轮询设置修订号读 `IsReduceAutoRotate()`：开时骑乘跟随架（骑手视角）追球朝向限速 45°/s、最多落后 60°（`FollowRigMath.ComfortTargetYaw`，PROVISIONAL）；瞬移/重置直接对齐；只改表现层，不改球的运动 | 代码已接，`RideUxAssembler` 接线；待 VR 调参 |
 | 10 | 语言 简体中文 / English / 日本語 | 无存档时按客户端语言（`VRCPlayerApi.GetCurrentLanguage`：ja→日、zh→中、其他→英） | 三块板与提示行 | 本轮 |
-| 11 | 推进方向箭头 | 关 / 开，默认开 | `PushDirectionCue` 读 `IsPushCueEnabled()`；`vrck.set.pushCue` | 已接，面板有行 |
+| 11 | 推进方向箭头 | 关 / 开，默认开 | `PushDirectionCue` 读 `IsPushCueEnabled()`；`vrck.set.pushCue` | 已接，面板有行；箭头固定在球心前上方，随语义球径变大或缩小 |
 | 12 | 显示吸到的东西 | 关 / 开，默认开 | `CatchNameDisplay` 读 `IsCatchNameEnabled()`；`vrck.set.catchName` | 代码已接，面板 Prefab 待新增一行 |
 | 13 | 显示物理（碰撞线框） | 关 / 开，默认关 | `CollisionWireframe` 轮询设置；只本地 | 代码已接，面板 Prefab 待新增一行 |
 

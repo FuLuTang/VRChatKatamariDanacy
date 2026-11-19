@@ -13,7 +13,7 @@ namespace VRCKatamari.Tests
     /// <summary>
     /// Pins the push stance: where the eye sits relative to the ball so that a standing rider's
     /// hands meet the ball's back surface, where the panels hang, and the click target. Expected
-    /// numbers are hand calculations of the stated geometry (push angle 45 degrees, shoulder
+    /// numbers are hand calculations of the stated geometry (push angle 52 degrees, shoulder
     /// 0.125 E below and 0.055 E behind the eye, push reach 0.8 * 0.41 E, feet on the ground),
     /// plus the real <see cref="FollowRigMath"/> fed with the derived coefficients, so the test
     /// closes the loop through the code that actually moves the eye.
@@ -205,17 +205,17 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(FollowRigMath.TryUpdate(5f, 8f, ball, radius, targetYaw, 0.02f,
                 0f, RideViewMath.EyeUpPerRadius(), EyeUpMin, EyeUpMax,
                 0f, RideViewMath.EyeBackPerRadius(), EyeBackMax,
-                false, true, previousYaw, 1.654625f * radius,
+                false, true, previousYaw, 1.900108f * radius,
                 out Vector3 rig, out float yaw, out _));
             if (previousYaw != targetYaw) Assert.AreNotEqual(targetYaw, yaw);
             Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
             Quaternion toRig = Quaternion.Inverse(rotation);
-            Vector3 expected = new Vector3(0f, 1.654625f * radius, -1.176792f * radius);
+            Vector3 expected = new Vector3(0f, 1.900108f * radius, -1.041795f * radius);
             Assert.Less((toRig * (rig - ball) - expected).magnitude, 1e-5f);
 
             // The same anchor both carries the head and receives the compensation.
             // Sample a head that is not centred over the entry, then place the entry.
-            float eyeHeight = 2.654625f * radius;
+            float eyeHeight = 2.900108f * radius;
             Vector3 headOffset = new Vector3(0.03f, eyeHeight, -0.02f);
             Assert.IsTrue(SeatEyeMath.TrySampleHeadOffset(rig + rotation * headOffset, rig,
                 rotation, rotation, out Vector3 measured, out _, out _));
@@ -233,13 +233,15 @@ namespace VRCKatamari.Tests
         [Test]
         public void DerivedCoefficients_MatchTheirClosedForm()
         {
-            // s = sin 45 = 0.707107, reach = 0.8 * 0.41 = 0.328.
-            // e = (1 + s) / (1 - 0.125 - 0.328 s) = 1.707107 / 0.643069 = 2.654625.
+            // s = sin 52 = 0.788011, reach = 0.8 * 0.41 = 0.328.
+            // e = (1 + s) / (1 - 0.125 - 0.328 s) = 1.788011 / 0.616532 = 2.900108.
             Assert.AreEqual(0.328f, RideViewMath.PushReachPerEyeHeight(), 1e-6f);
-            Assert.AreEqual(2.654625f, RideViewMath.EyeHeightPerRadius(), 1e-4f);
-            Assert.AreEqual(1.654625f, RideViewMath.EyeUpPerRadius(), 1e-4f);
-            // back = -0.055 e + (1 + 0.328 e) cos 45 = -0.146004 + 1.870717 * 0.707107 = 1.176792.
-            Assert.AreEqual(1.176792f, RideViewMath.EyeBackPerRadius(), 1e-4f);
+            Assert.AreEqual(2.900108f, RideViewMath.EyeHeightPerRadius(), 1e-4f);
+            Assert.AreEqual(1.900108f, RideViewMath.EyeUpPerRadius(), 1e-4f);
+            // back = -0.055 e + (1 + 0.328 e) cos 52 = -0.159506 + 1.951235 * 0.615661 = 1.041795.
+            Assert.AreEqual(1.041795f, RideViewMath.EyeBackPerRadius(), 1e-4f);
+            // 居中站姿的腿中轴经过球心高度，此处净空为后退距离减球半径。
+            Assert.GreaterOrEqual(RideViewMath.EyeBackPerRadius() - 1f, 0.03f);
             // No additive base: the picture is the same at every size.
             Assert.AreEqual(0f, RideViewMath.EyeBaseUpMeters);
             Assert.AreEqual(0f, RideViewMath.EyeBaseBackMeters);
@@ -247,7 +249,7 @@ namespace VRCKatamari.Tests
 
         // The stance's own closure: the eye is one eye height above the ground (feet on the
         // ground beside the ball), and the shoulder-to-centre distance is the push reach plus
-        // the radius along a 45 degree line (the push goes through the centre).
+        // the radius along a 52 degree line (the push goes through the centre).
         [TestCase(0.15f)]
         [TestCase(1f)]
         [TestCase(10f)]
@@ -265,11 +267,11 @@ namespace VRCKatamari.Tests
             float dy = up - shoulderDown;
             float reach = RideViewMath.PushReachPerEyeHeight() * eye;
             Assert.AreEqual(reach + radius, Mathf.Sqrt(dx * dx + dy * dy), radius * 1e-3f);
-            Assert.AreEqual(45f, Mathf.Atan2(dy, dx) * Mathf.Rad2Deg, 1e-2f);
+            Assert.AreEqual(52f, Mathf.Atan2(dy, dx) * Mathf.Rad2Deg, 1e-2f);
         }
 
-        // Ball centre 54.58 deg below the horizon, half angle asin(1 / 2.0305) = 29.51 deg: the
-        // ball spans 25.07 to 84.08 deg below the horizon at every size.
+        // Ball centre 61.26 deg below the horizon, half angle asin(1 / 2.167)  = 27.48 deg: the
+        // ball spans 33.78 to 88.75 deg below the horizon at every size.
         [TestCase(0.111f)]
         [TestCase(0.25f)]
         [TestCase(0.4f)]
@@ -284,29 +286,29 @@ namespace VRCKatamari.Tests
             float halfAngle;
             Assert.IsTrue(RideViewMath.TryBallView(radius, up, back, out depression,
                 out halfAngle));
-            Assert.AreEqual(54.58f, depression, Tolerance);
-            Assert.AreEqual(29.51f, halfAngle, Tolerance);
-            Assert.AreEqual(25.07f, depression - halfAngle, Tolerance);
+            Assert.AreEqual(61.26f, depression, Tolerance);
+            Assert.AreEqual(27.48f, halfAngle, Tolerance);
+            Assert.AreEqual(33.78f, depression - halfAngle, Tolerance);
             if (radius == 1f)
             {
-                Assert.AreEqual(1.6546f, up, 1e-3f);
-                Assert.AreEqual(1.1768f, back, 1e-3f);
+                Assert.AreEqual(1.9001f, up, 1e-3f);
+                Assert.AreEqual(1.0418f, back, 1e-3f);
             }
         }
 
         [Test]
         public void HandContact_IsInFrontOfTheChestWithinReach()
         {
-            // At r = 1: forward = 1.176792 - cos 45 = 0.469685, down = 1.654625 - sin 45 =
-            // 0.947518, i.e. 0.177 E ahead of and 0.357 E below the eye (E = 2.654625).
+            // At r = 1: forward = 1.041795 - cos 52 = 0.426133, down = 1.900108 - sin 52 =
+            // 1.112097, i.e. 0.147 E ahead of and 0.383 E below the eye (E = 2.900108).
             float forward;
             float down;
             Assert.IsTrue(RideViewMath.TryHandContactFromEye(1f, out forward, out down));
-            Assert.AreEqual(0.469685f, forward, 1e-4f);
-            Assert.AreEqual(0.947518f, down, 1e-4f);
+            Assert.AreEqual(0.426133f, forward, 1e-4f);
+            Assert.AreEqual(1.112097f, down, 1e-4f);
             float eye = RideViewMath.EyeHeightPerRadius();
-            Assert.AreEqual(0.1769f, forward / eye, 1e-3f);
-            Assert.AreEqual(0.3569f, down / eye, 1e-3f);
+            Assert.AreEqual(0.1469f, forward / eye, 1e-3f);
+            Assert.AreEqual(0.3835f, down / eye, 1e-3f);
             Assert.IsFalse(RideViewMath.TryHandContactFromEye(-1f, out forward, out down));
         }
 
@@ -326,8 +328,8 @@ namespace VRCKatamari.Tests
         public void PanelScale_FollowsTheRider()
         {
             Assert.AreEqual(1f, RideViewMath.PanelScaleForEyeHeight(1.64f), 1e-6f);
-            // D = 0.3 m: E = 2.654625 * 0.15 = 0.398194, scale 0.398194 / 1.64 = 0.242801.
-            Assert.AreEqual(0.242801f, RideViewMath.PanelScaleForEyeHeight(0.398194f), 1e-5f);
+            // D = 0.3 m: E = 2.900108 * 0.15 = 0.435016, scale 0.435016 / 1.64 = 0.265254.
+            Assert.AreEqual(0.265254f, RideViewMath.PanelScaleForEyeHeight(0.435016f), 1e-5f);
             Assert.AreEqual(1f, RideViewMath.PanelScaleForEyeHeight(0f));
             Assert.AreEqual(1f, RideViewMath.PanelScaleForEyeHeight(float.NaN));
         }
@@ -343,8 +345,8 @@ namespace VRCKatamari.Tests
             RigFor(0.25f, out up, out back);
             Assert.AreEqual(expectedUp, up, 1e-4f);
             Assert.AreEqual(expectedBack, back, 1e-4f);
-            // Hand value: 1.654625 * 0.25 = 0.413656.
-            Assert.AreEqual(0.4137f, up, 1e-3f);
+            // Hand value: 1.900108 * 0.25 = 0.475027.
+            Assert.AreEqual(0.4750f, up, 1e-3f);
         }
 
         [Test]

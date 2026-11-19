@@ -293,17 +293,17 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheEyeStaysOutsideTheBallAtTheGlobalSizeCap()
         {
-            // The push stance (1.654625 r up, 1.176792 r back, no constant) at the global
+            // The push stance (1.900108 r up, 1.041795 r back, no constant) at the global
             // 400 m diameter cap, r = 200 m, with the scene's 128 m rails: a fixed metre
             // ceiling would pin the eye inside the ball, but the rails bound only the
-            // constants, so the frame is 330.925 m up and 235.3584 m back - outside.
+            // constants, so the frame is 380.022 m up and 208.359 m back - outside.
             RigHarness stance = new RigHarness();
             stance.HeightFilterHz = 0f;
             stance.YawFilterHz = 0f;
             Assert.IsTrue(stance.UpdateWith(new Vector3(0f, 200f, 0f), 200f, 0f, 0f,
-                0f, 1.654625f, 0.1f, 128f, 0f, 1.176792f, 128f, true));
-            Assert.AreEqual(200f + 1.654625f * 200f, stance.Position.y, 1e-3f);
-            Assert.AreEqual(-(1.176792f * 200f), stance.Position.z, 1e-3f);
+                0f, 1.900108f, 0.1f, 128f, 0f, 1.041795f, 128f, true));
+            Assert.AreEqual(200f + 1.900108f * 200f, stance.Position.y, 1e-3f);
+            Assert.AreEqual(-(1.041795f * 200f), stance.Position.z, 1e-3f);
             Assert.Greater(Mathf.Sqrt(
                 (stance.Position.y - 200f) * (stance.Position.y - 200f) +
                 stance.Position.z * stance.Position.z), 200f);

@@ -44,7 +44,7 @@ SHOULDER_BELOW = 0.125            # (0.936 - 0.818) / 0.936 = 0.126
 SHOULDER_BEHIND = 0.055           # estimate
 ARM_REACH = 0.41                  # (0.186 + 0.146 + 0.054) / 0.936 = 0.412, shoulder to palm centre
 PUSH_REACH_FRACTION = 0.8         # elbows slightly bent
-PUSH_ANGLE_DEG = 45.0             # the one tuning knob
+PUSH_ANGLE_DEG = 52.0             # 抬高眼点，居中站姿的腿中轴与球面留至少 0.03r
 
 # Udon's target eye height is clamped to this range; VRChat supports nothing outside it
 # (https://creators.vrchat.com/avatars/avatar-scaling/).
@@ -232,7 +232,7 @@ def panel_clearance_deg(panel, stance_: Stance = None, samples: int = 40) -> flo
 # --------------------------------------------------------------------------------------
 
 PRODUCT_DIAMETERS_M = (0.222, 0.3, 0.5, 0.8, 2.0, 20.0)
-CANDIDATE_ANGLES_DEG = (35.0, 40.0, 45.0, 50.0, 55.0)
+CANDIDATE_ANGLES_DEG = (35.0, 40.0, 45.0, 50.0, 52.0, 55.0)
 
 
 def size_table(diameters=PRODUCT_DIAMETERS_M):

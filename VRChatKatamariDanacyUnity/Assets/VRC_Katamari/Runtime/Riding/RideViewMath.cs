@@ -60,7 +60,8 @@ namespace VRCKatamari.Riding
         /// ball where the radius points back up along the arm. The one tuning knob of the
         /// stance (RIDE_GEOMETRY.md section 1.1 tabulates 35 to 55 degrees).
         /// </summary>
-        public const float PushAngleDegrees = 45f;
+        // 所有者 2026-11-19：吸附物挡住前路，提高眼点；居中站姿的腿中轴与球面留至少 0.03r。
+        public const float PushAngleDegrees = 52f;
 
         /// <summary>Shoulder joint below the eyes, per metre of eye height (human body).</summary>
         public const float ShoulderBelowEyePerEyeHeight = 0.125f;

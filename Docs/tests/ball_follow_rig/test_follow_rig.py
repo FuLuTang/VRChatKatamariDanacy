@@ -139,16 +139,16 @@ class FollowRigTests(unittest.TestCase):
         self.assertAlmostEqual(large.height_m, 3.19, delta=1e-12)
 
     def test_the_eye_stays_outside_the_ball_at_the_global_cap(self):
-        # The push stance: 1.654625 * r up and 1.176792 * r back, no constant. At the
+        # The push stance: 1.900108 * r up and 1.041795 * r back, no constant. At the
         # global 400 m diameter cap (r = 200 m) a fixed 128 m rail would pin the frame
         # inside the ball; with the rails bounding only the constants it is at
-        # (0, 330.925, 235.3584) from the centre, well outside a 200 m ball.
-        stance = (0.0, 1.654625, 0.1, 128.0, 0.0, 1.176792, 128.0)
+        # (0, 380.022, -208.359) from the centre, well outside a 200 m ball.
+        stance = (0.0, 1.900108, 0.1, 128.0, 0.0, 1.041795, 128.0)
         rig = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
         frame = _step(rig, (0.0, 200.0, 0.0), 200.0, 0.0, 0.0, reset=True, eye=stance)
-        self.assertAlmostEqual(frame.position[1] - 200.0, 1.654625 * 200.0, delta=1e-6)
-        self.assertAlmostEqual(-frame.position[2], 1.176792 * 200.0, delta=1e-6)
-        offset = math.hypot(1.654625 * 200.0, 1.176792 * 200.0)
+        self.assertAlmostEqual(frame.position[1] - 200.0, 1.900108 * 200.0, delta=1e-6)
+        self.assertAlmostEqual(-frame.position[2], 1.041795 * 200.0, delta=1e-6)
+        offset = math.hypot(1.900108 * 200.0, 1.041795 * 200.0)
         self.assertGreater(offset, 200.0)
         self.assertGreater(frame.position[1] - 200.0, 200.0)
 

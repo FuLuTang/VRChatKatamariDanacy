@@ -211,7 +211,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | 0.72 m | 0.360 | 1.414 m | 1.542 m | 2.09 m | 1.73 m | 1.77 m | 9.9° | 22.4° |
 | 1.43 m | 0.715 | 2.266 m | 2.323 m | 3.25 m | 2.53 m | 2.98 m | 12.7° | 20.4° |
 
-上表是 motor 字段的**默认值**（0.55/2.4/0.75/2.2）的几何。故事场景里这四个字段由 `RideUxAssembler` 按 `RideViewMath` 写成 0 / 1.654625 / 0 / 1.176792（上/后底座为 0，两项都正比于半径：站姿手推球的眼点，推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)），任何直径下平视时球心在视轴下 54.6°、球半角 29.5°、球上沿在视轴下 25.1°。
+上表是 motor 字段的**默认值**（0.55/2.4/0.75/2.2）的几何。故事场景里这四个字段由 `RideUxAssembler` 按 `RideViewMath` 写成 0 / 1.900108 / 0 / 1.041795（上/后底座为 0，两项都正比于半径：站姿手推球的眼点，推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)），任何直径下平视时球心在视轴下 61.3°、球半角 27.5°、球上沿在视轴下 33.8°。
 
 净空（上方 − 半径）随球**变大**：0.62 / 0.76 / 1.05 / 1.55 m。
 
@@ -235,13 +235,13 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 眼点由 7 个系数决定，没有离球心常量眼高的字段。模型 `Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧状态），7 个眼点系数是每次调用的参数；测试在 `Docs/tests/ball_follow_rig/` 与 `Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py`。改这里的式子，C# 与 Python 必须同一提交。
 
-### 推进方向箭头（本地视角 HUD）
+### 推进方向箭头（本地球上方提示）
 
-`PushDirectionCue` 在眼点前上方显示一个世界空间箭头，VR 和桌面都读本地玩家当前的 `GetTrackingData(Head)`。**位置取头部，朝向取跟随架的世界 yaw**：箭头始终水平指向推进/驾驶方向，静止时也有指向；它不指球速、视线、目标或下一区域。
+`PushDirectionCue` 从电机读世界球心和语义球径，把世界空间箭头摆在球心前上方；朝向和前移方向都取 `followRigRoot` 的世界偏航。不随头部移动或随球滚转，静止和倒推时也指驾驶方向，不指球速、视线、目标或下一区域。
 
-`PushCueMath` 的工程起点：相对眼点的直线距离 1.6 m，仰角相对水平面 +12°，名义视角 4°（约 0.112 m 长；水平旋转时允许透视缩短）。头部平移实时跟随；锚点只追 yaw，27° 内不转，超出后 0.4 秒约消去 95% 的角差，进入 1° 后贴到中心。低头、抬头、侧倾不会带着箭头转。距离、仰角、大小不读球径或 avatar 缩放。参数参考 [Meta 的空间 HUD 指南](https://github.com/facebook/immersive-web-sdk/blob/65c0b138da51263b1f58ffe032e88a43e33b4e92/docs/concepts/spatial-ui/hud.md)与 [Unity XRI Lazy Follow](https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.5/manual/lazy-follow.html)，不是原作值，舒适度待真机复测。
+`PushCueMath` 的工程起点（非原作值）：以语义半径 `r` 计，中心上移 `1.25r`、沿驾驶前向移 `0.6r`、全长 `0.9r`。随球等比缩放；按 52° 推球站姿的名义眼点，箭尾也在球顶前方，不遮挡眼睛到球顶的直线。实际视野和粘物遮挡待真机复测。
 
-只在本地骑乘且回合进行时显示；未接回合控制的实验场只检查骑乘。大厅设置「推进方向箭头」默认开，玩家可以关；场景没有设置宿主时沿用默认开。`RideUxAssembler` 将已有箭头移到独立的单位缩放场景根，不挂球或骑乘面板。箭头没有碰撞，也不参与吸附或其他玩法。几何测试见 `Tests/EditMode/BallLayers/PushCueTests.cs`。
+只在本地骑乘且回合进行时显示；未接回合控制的实验场只检查骑乘。大厅设置「推进方向箭头」默认开，玩家可以关；场景没有设置宿主时沿用默认开。`RideUxAssembler` 将已有箭头移到独立的单位缩放场景根并接好电机与跟随架，不把它设为球或骑乘面板的子物体。箭头没有碰撞，也不参与吸附或其他玩法。几何测试见 `Tests/EditMode/BallLayers/PushCueTests.cs`。
 
 ### 刻意不在这里
 

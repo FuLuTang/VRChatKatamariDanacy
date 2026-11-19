@@ -32,7 +32,7 @@ namespace VRCKatamari.Editor.Story
     /// <list type="number">
     /// <item><description>The follow frame's four eye coefficients on the motor, written
     /// from <see cref="RideViewMath"/> (the one source; the bases are zero): the push stance,
-    /// eye 1.655 r above and 1.177 r behind the ball centre, so a standing rider's hands meet
+    /// eye 1.900 r above and 1.042 r behind the ball centre, so a standing rider's hands meet
     /// the ball's back surface at every size.</description></item>
     /// <item><description>The VRCStation as a standing station (<c>seated</c> off): the
     /// station carries the avatar by its feet, which the seat puts on the ground.</description></item>
@@ -102,11 +102,8 @@ namespace VRCKatamari.Editor.Story
         // scales it with the rider): distance from the eye, azimuth to the right, elevation
         // above the horizon, canvas scale (metres per canvas unit) and the canvas size in units.
         // 0.0014 puts a 30-unit glyph at 4.2 cm, about 1.5 degrees at 1.6 m, which is legible in
-        // a headset. Every panel stays at least 9 degrees off the ball's silhouette (the ball
-        // spans 25 to 84 degrees below the horizon straight ahead, 29.5 degrees half width);
-        // ride_geometry.py PANELS carries the same numbers and checks the clearance.
-        // The HUD hangs low on the left, beside the ball: a rider looking down at the hands on
-        // the ball sees it, and it no longer needs the head raised 26 degrees.
+        // a headset.
+        // 面板与裸球轮廓的净空见 ride_geometry.py 的 PANELS；HUD 位于球的左下方。
         private const float PanelDistance = 1.6f;
         private const float PanelScale = 0.0014f;
 
@@ -226,7 +223,7 @@ namespace VRCKatamari.Editor.Story
                 AssembleExitLocation(station, ballRoot, motor, c);
                 AssembleStationLinks(station, motor, ballInteract, panel, hint, rigRoot, panels, c);
                 NormalizePanelLayers(panels, c);
-                AssemblePushCue(rigRoot, station, round, c);
+                AssemblePushCue(motor, rigRoot, station, round, c);
                 AssembleCatchName(station, round, c);
             }
             AssembleLocalViews(motor, c);
@@ -248,7 +245,7 @@ namespace VRCKatamari.Editor.Story
             changed |= SetFloat(so, "eyeUpPerRadius", RideViewMath.EyeUpPerRadius(), c);
             changed |= SetFloat(so, "eyeBaseBackMeters", RideViewMath.EyeBaseBackMeters, c);
             changed |= SetFloat(so, "eyeBackPerRadius", RideViewMath.EyeBackPerRadius(), c);
-            // The 20 m ball (r = 10 m) needs 16.6 m of lift and 11.8 m of back-off.
+            // 这两个护栏只限制加性底座，不限制半径项。
             changed |= SetFloat(so, "eyeUpMaxMeters", 128f, c);
             changed |= SetFloat(so, "eyeMaxBackM", 128f, c);
             if (changed)
@@ -442,7 +439,7 @@ namespace VRCKatamari.Editor.Story
         }
 
         // 复用场景中已有的箭头外观；不生成另一套网格或材质。显示根节点独立于球和缩放面板。
-        private static void AssemblePushCue(Transform rigRoot, BallRideStation station,
+        private static void AssemblePushCue(KatamariBallMotor motor, Transform rigRoot, BallRideStation station,
             StoryRoundController round, Counters c)
         {
             var scene = station.gameObject.scene;
@@ -502,13 +499,14 @@ namespace VRCKatamari.Editor.Story
             }
 
             var so = new SerializedObject(cue);
-            bool changed = SetObject(so, "pushYawSource", rigRoot, c);
+            bool changed = SetObject(so, "motor", motor, c);
+            changed |= SetObject(so, "pushYawSource", rigRoot, c);
             changed |= SetObject(so, "rideStation", station, c);
             changed |= SetObject(so, "roundController", round, c);
             changed |= SetObject(so, "settings", settings, c);
             if (changed) so.ApplyModifiedPropertiesWithoutUndo();
             c.Proxies.Add(cue);
-            c.Notes.Add("push cue is scene-rooted; local settings "
+            c.Notes.Add("push cue is scene-rooted and ball-relative; local settings "
                 + (settings == null ? "absent (default on)" : "wired"));
         }
 

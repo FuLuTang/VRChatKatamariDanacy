@@ -7,7 +7,7 @@ namespace VRCKatamari.BallLayers
 {
     /// <summary>
     /// 「刚吸到的东西」提示的纯规则：逐字计时、名字停留、同帧替换优先级、语言选择、
-    /// 小模型缩放与自转。跟随视角的位置不在这里，复用 <see cref="PushCueMath"/>。
+    /// 小模型缩放与自转，以及面板跟随视角的位置。
     /// </summary>
     /// <remarks>
     /// 计时取自 WLK REROLL+（v20230608）的 UIMonoNameDisplay.Start：_NEXT_CHR_WAIT = 2 帧/字，
@@ -27,6 +27,68 @@ namespace VRCKatamari.BallLayers
         public const float DefaultElevationDegrees = -15f;
         public const float DefaultYawOffsetDegrees = -12f;
         public const float DefaultAngularSizeDegrees = 7f;
+        public const float DefaultDeadZoneDegrees = 27f;
+        public const float DefaultCatchUpSeconds = 0.4f;
+
+        private const float SettleDegrees = 1f;
+        private const float MinFlatForwardSquared = 0.0001f;
+
+        /// <summary>从头部前向的水平投影取偏航；近乎垂直时沿用上次有效方向。</summary>
+        public static float HeadYaw(Quaternion headRotation, float previousYawDegrees)
+        {
+            Vector3 headForward = headRotation * Vector3.forward;
+            float flatSquared = headForward.x * headForward.x + headForward.z * headForward.z;
+            if (flatSquared < MinFlatForwardSquared) return previousYawDegrees;
+            return Mathf.Atan2(headForward.x, headForward.z) * Mathf.Rad2Deg;
+        }
+
+        /// <summary>
+        /// 死区只决定何时开始追随；已在追随时继续向中心靠拢，不在死区边缘停住。
+        /// 目标不动时，经过 catchUpSeconds 约消去 95% 的角差（3 个时间常数）。
+        /// </summary>
+        public static float StepAnchorYaw(float anchorYawDegrees, float headYawDegrees,
+            float deadZoneDegrees, float catchUpSeconds, float deltaSeconds, bool wasFollowing,
+            out bool following)
+        {
+            float delta = Mathf.DeltaAngle(anchorYawDegrees, headYawDegrees);
+            following = wasFollowing || Mathf.Abs(delta) > deadZoneDegrees;
+            if (!following || deltaSeconds <= 0f) return anchorYawDegrees;
+
+            float remaining = delta * Mathf.Exp(-3f * deltaSeconds / catchUpSeconds);
+            if (Mathf.Abs(remaining) <= SettleDegrees)
+            {
+                following = false;
+                return headYawDegrees;
+            }
+            return headYawDegrees - remaining;
+        }
+
+        /// <summary>按眼点、偏航、世界仰角和名义视角计算圆底中心及直径。</summary>
+        public static bool TryEvaluateHudPlacement(Vector3 headPosition, float yawDegrees,
+            float distanceMeters, float elevationDegrees, float angularSizeDegrees,
+            out Vector3 position, out float diameter)
+        {
+            position = Vector3.zero;
+            diameter = 0f;
+            if (!KatamariMath.IsFiniteVector(headPosition)
+                || !KatamariMath.IsFiniteFloat(yawDegrees)
+                || !KatamariMath.IsFiniteFloat(distanceMeters) || distanceMeters <= 0f
+                || !(elevationDegrees > -90f && elevationDegrees < 90f)
+                || !(angularSizeDegrees > 0f && angularSizeDegrees < 90f)) return false;
+
+            float yaw = yawDegrees * Mathf.Deg2Rad;
+            float elevation = elevationDegrees * Mathf.Deg2Rad;
+            float horizontal = distanceMeters * Mathf.Cos(elevation);
+            Vector3 offset = new Vector3(horizontal * Mathf.Sin(yaw),
+                distanceMeters * Mathf.Sin(elevation), horizontal * Mathf.Cos(yaw));
+            Vector3 candidate = headPosition + offset;
+            float size = distanceMeters * (2f * Mathf.Tan(0.5f * angularSizeDegrees * Mathf.Deg2Rad));
+            if (!KatamariMath.IsFiniteVector(candidate) || !KatamariMath.IsFiniteFloat(size)) return false;
+
+            position = candidate;
+            diameter = size;
+            return true;
+        }
 
         /// <summary>原型里模型占圆底直径的比例（圆底直径 = 1）。</summary>
         public const float DefaultModelFitDiameter = 0.75f;

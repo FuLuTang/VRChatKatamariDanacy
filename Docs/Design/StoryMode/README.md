@@ -80,7 +80,7 @@
 ### 必需的物体布局（少一条就不成立）
 
 1. **FollowRig** 必须是 motor 的 `followRigRoot`（`KatamariBallMotor.cs:160`；每帧只写它的 `position` 与 yaw，`:1026-1032`）。不接的话 rig 帧没有落点，载人整段不生效。
-2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 1.654625·r`、`back = 1.176792·r`（无加性底座）（`RideViewMath` 推出，`RideUxAssembler` 写进 motor 的四个眼点字段；站姿推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)）：玩家站在球后、手按在球背上。**不要再把 rig 根调成贴球心。**
+2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 1.900108·r`、`back = 1.041795·r`（无加性底座）（`RideViewMath` 推出，`RideUxAssembler` 写进 motor 的四个眼点字段；站姿推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)）：玩家站在球后、手按在球背上。**不要再把 rig 根调成贴球心。**
 3. **VRCStation + `BallRideStation` 同物体**：`OnStationEntered`/`OnStationExited` 送到 VRCStation 所在物体的 Behaviour。座位上**没有**点击 Collider（座位在眼点上，不在球上，点它等于点空中）；点击由球上的 `BallSeatInteract` 承担（第 6 条）。
 4. **Station 是 rig 根的子物体**，`localPosition` 起始 `(0, 0, 0)`。「球后上方」已经由 rig 根本身给出（0.5 m 球时后方 1.85 m、上方 1.75 m），**不要再叠进 Station 的局部偏移**；坐着的人由 Station 承载，跟随靠 motor 写 rig 根，不靠任何脚本搬人。坐姿视点补偿（VRCStation 把人的眼睛放在座位上方的某个高度，本仓未实测）在首次 Build & Test 里量，本文不编数。
 5. **VRCStation 保持 Disable Station Exit 开**：移动轴驱球，跳跃是物品/退出输入，若允许移动或一次跳跃就离座，一次误触就结束骑乘（T04 实测：关掉退出后 Jump 不退座，且 `InputJump` 仍送达）。下车改为有意识的两条路：按住跳跃键 1.5 s，或面板上的按钮点两次。场景里 Player Mobility 是 `1`（Immobilize）；实验场景是 `0`，**Immobilize 下 `InputJump` 是否仍送达没有实测**，是真实客户端验收项。
@@ -484,7 +484,7 @@ prop_bench_01@size=1.25
 
 所有地图共用 `KatamariBallMotor.GlobalMaxBallDiameterM`。球长到 400 m（语义直径）时，由 `SizeModelMath.TryDerive` 饱和；切关只切换起始大小，不改变上限。它不是每张图的可达值，实际能长多大取决于可吸内容和成长量。
 
-**骑手缩放到平台上限就停**：骑乘时 avatar 眼高 E = 2.6546·r ÷ η 由 `RideScaleMath.TryEyeHeightForDiameter` 夹到 `[0.1, 100] m`（`MaxSupportedEyeHeightMeters`；VRChat 不支持 >100 m 的头像缩放）。η ≈ 1 时球径约 75 m 起眼高就停在 100 m，球继续长到 400 m 而骑手不再变大——这是平台限制，不是待修项。
+**骑手缩放到平台上限就停**：骑乘时 avatar 眼高 E = 2.9001·r ÷ η 由 `RideScaleMath.TryEyeHeightForDiameter` 夹到 `[0.1, 100] m`（`MaxSupportedEyeHeightMeters`；VRChat 不支持 >100 m 的头像缩放）。η ≈ 1 时球径约 69 m 起眼高就停在 100 m，球继续长到 400 m 而骑手不再变大——这是平台限制，不是待修项。
 
 ### 2. 第一关星级带：1.25 / 1.40 / 1.42
 

@@ -10,7 +10,7 @@
 
 1. **玩家站在球后、脚在地上、手从肩向前下方按在球背上推球。** 所有者 2026-11-18 的要求："手推着球"，触地点—球顶—视点（座位）构成相似三角形。
 2. **整套安排是球径的相似变换。** 触地点 G、球顶 T、视点 V、肩 S、手 H、脚 F 的位置都是球半径 r 的固定倍数，没有加性底座：任何球径下是同一个三角形、同一幅画面、同样够得着。
-3. **公式**（推的角度 ψ = 45°，唯一的调节量）：骑手眼高 **E = 2.6546·r**，眼点在球心上方 **1.6546·r**、后方 **1.1768·r**。
+3. **公式**（推的角度 ψ = 52°，唯一的调节量）：骑手眼高 **E = 2.9001·r**，眼点在球心上方 **1.9001·r**、后方 **1.0418·r**。
 4. **手是玩家自己的。** VR 里手就是控制器，Udon 摆不了；VRChat 把玩家真实身体按眼高映射到 avatar，所以站姿用**人体**比例（肩、臂长按眼高计），不用 avatar 的比例。
    avatar 只通过 η（站立时头高于 Station 锚点 ÷ 眼高，≈ 1）进入，入座后实测，眼高请求除以 η。
 5. **面板随 E 缩放。** 面板根 `RidePanels` 挂在眼点上，缩放 = E / 1.64，面板的角大小、相对眼睛的方位不随骑手大小变；HUD 放在左下、球的左边，低头看手时也在视野里。
@@ -26,7 +26,7 @@
 | 肩在眼后 | 0.055·E | 估计值（1.62 m 眼高时约 9 cm） |
 | 直臂长（肩到掌心） | 0.41·E | (0.186 + 0.146 + 0.054)/0.936 |
 | 推时用到的比例 | 0.8 | 肘微弯，推距 0.328·E |
-| ψ（臂在水平下） | 45° | 唯一调节量 |
+| ψ（臂在水平下） | 52° | 唯一调节量 |
 
 约束链：
 
@@ -34,14 +34,14 @@
 肩 = 眼 + (−0.055·E, −0.125·E)
 球心 = 肩 + (0.328·E + r)·(cos ψ, −sin ψ)      手臂沿球半径指向球心，手 H 在球面上
 眼.y = E                                         脚在地上（VRChat 的眼高 = 站立时视点离脚的高度）
-⇒ e = E/r = (1 + sin ψ) / (1 − 0.125 − 0.328·sin ψ) = 2.654625
-   up = (e − 1)·r = 1.654625·r        back = (−0.055·e + (1 + 0.328·e)·cos ψ)·r = 1.176792·r
+⇒ e = E/r = (1 + sin ψ) / (1 − 0.125 − 0.328·sin ψ) = 2.900108
+   up = (e − 1)·r = 1.900108·r        back = (−0.055·e + (1 + 0.328·e)·cos ψ)·r = 1.041795·r
 ```
 
-**相似三角形**：G (0,0)、T (0, 2r)、V (−1.1768r, 2.6546r) 三点只随 r 缩放，三角形 GTV 在任何球径下相似；手 H = 球心 + r·(−cos ψ, sin ψ) = (−0.7071r, 1.7071r)，
-肩 S = (−1.3228r, 2.3228r)，S→H→球心共线。motor 的四个眼点字段写成 `eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.654625`、`eyeBaseBackMeters = 0`、
-`eyeBackPerRadius = 1.176792`。`FollowRigMath` 低通高度增量和 yaw；水平位置由当步球心与滤波 yaw 直接计算，不二次混合上一帧世界 X/Z。
-motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是离球心距离的上限：球径上限 400 m（半径 200 m）时站姿眼点在球心上 330.9 m、后 235.4 m，任何固定米数天花板都会把眼点钉进球里；半径项本身由球径上限约束，不需要也不允许再钳一次。
+**相似三角形**：G (0,0)、T (0, 2r)、V (−1.0418r, 2.9001r) 三点只随 r 缩放，三角形 GTV 在任何球径下相似；手 H = 球心 + r·(−cos ψ, sin ψ) = (−0.6157r, 1.7880r)，
+肩 S = (−1.2013r, 2.5376r)，S→H→球心共线。motor 的四个眼点字段写成 `eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.900108`、`eyeBaseBackMeters = 0`、
+`eyeBackPerRadius = 1.041795`。`FollowRigMath` 低通高度增量和 yaw；水平位置由当步球心与滤波 yaw 直接计算，不二次混合上一帧世界 X/Z。
+motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是离球心距离的上限：球径上限 400 m（半径 200 m）时站姿眼点在球心上 380.0 m、后 208.4 m，任何固定米数天花板都会把眼点钉进球里；半径项本身由球径上限约束，不需要也不允许再钳一次。
 
 ### 1.1 ψ 的候选（每单位 r；pitch 0 时的视角）
 
@@ -49,34 +49,34 @@ motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 35° | 2.291 | 0.873 | 1.291 | 1.309 | 44.6° | 33.0° | 11.7° | 77.6° | 9.80r | 0.127 | 0.214 / 0.313 |
 | 40° | 2.473 | 0.809 | 1.473 | 1.251 | 49.7° | 31.1° | 18.5° | 80.8° | 6.14r | 0.191 | 0.196 / 0.336 |
-| **45°** | **2.655** | **0.753** | **1.655** | **1.177** | **54.6°** | **29.5°** | **25.1°** | **84.1°** | **4.50r** | **0.247** | **0.177 / 0.357** |
+| 45° | 2.655 | 0.753 | 1.655 | 1.177 | 54.6° | 29.5° | 25.1° | 84.1° | 4.50r | 0.247 | 0.177 / 0.357 |
 | 50° | 2.831 | 0.706 | 1.831 | 1.084 | 59.4° | 28.0° | 31.4° | 87.4° | 3.56r | 0.294 | 0.156 / 0.376 |
+| **52°** | **2.900** | **0.690** | **1.900** | **1.042** | **61.3°** | **27.5°** | **33.8°** | **88.7°** | **3.29r** | **0.310** | **0.147 / 0.383** |
 | 55° | 3.000 | 0.667 | 2.000 | 0.973 | 64.1° | 26.7° | 37.3° | 90.8° | 2.96r | 0.333 | 0.133 / 0.394 |
 
-读法：ψ 越大人越高、站得越近、越要低头才看见球；ψ = 45° 时球顶在眼下 0.247·E（胸口高度），直视前方时球的上沿在视轴下 25°，
-球后 4.5r 处地面重新露出。推距只用掉直臂长的 80 %，直臂长 0.38–0.45·E 的人都够得着（用掉 ≤ 86 %）。
+吸附物挡前路，故提高眼点，但居中站姿的腿中轴与未附着球面至少留 0.03r。侧视模型中腿中轴竖直经过球心高度，净空为 `back − r`；在 35°–55° 的整数候选中，52° 净空为 0.0418r，53° 只有 0.0196r，更大的角度净空继续减小。这不是模型腿宽或附着物的防穿保证。52° 时球顶点在眼下 0.310·E，直视前方时球的轮廓上沿在视轴下 33.8°（球顶点本身俯角 40.8°），球后 3.29r 处地面重新露出。推距只用掉直臂长的 80 %，直臂长 0.38–0.45·E 的人都够得着（用掉 ≤ 86 %）。
 
 ### 1.2 关键数字（η = 1；`reach_table()`）
 
 | 球径 D (m) | 眼高 E (m) | 眼离地 (m) | 眼到球心水平距离 (m) | 手接触点：眼前 / 眼下 (m) | 眼到接触点 (m) | 肩到接触点 (m) |
 |---:|---:|---:|---:|---|---:|---:|
-| 0.3 | 0.398 | 0.398 | 0.177 | 0.070 / 0.142 | 0.159 | 0.131 |
-| 1 | 1.327 | 1.327 | 0.588 | 0.235 / 0.474 | 0.529 | 0.435 |
-| 2 | 2.655 | 2.655 | 1.177 | 0.470 / 0.948 | 1.058 | 0.871 |
-| 5 | 6.637 | 6.637 | 2.942 | 1.174 / 2.369 | 2.644 | 2.177 |
+| 0.3 | 0.435 | 0.435 | 0.156 | 0.064 / 0.167 | 0.179 | 0.143 |
+| 1 | 1.450 | 1.450 | 0.521 | 0.213 / 0.556 | 0.595 | 0.476 |
+| 2 | 2.900 | 2.900 | 1.042 | 0.426 / 1.112 | 1.191 | 0.951 |
+| 5 | 7.250 | 7.250 | 2.604 | 1.065 / 2.780 | 2.977 | 2.378 |
 
 产品球径全表（`size_table()`；面板距离 = 1.6 m × E/1.64）：
 
 | D (m) | E (m) | up (m) | back (m) | 面板距眼 (m) |
 |---:|---:|---:|---:|---:|
-| 0.222 | 0.2947 | 0.1837 | 0.1306 | 0.287 |
-| 0.3 | 0.3982 | 0.2482 | 0.1765 | 0.388 |
-| 0.5 | 0.6637 | 0.4137 | 0.2942 | 0.647 |
-| 0.8 | 1.0618 | 0.6618 | 0.4707 | 1.036 |
-| 2 | 2.6546 | 1.6546 | 1.1768 | 2.590 |
-| 20 | 26.5462 | 16.5462 | 11.7679 | 25.899 |
+| 0.222 | 0.3219 | 0.2109 | 0.1156 | 0.314 |
+| 0.3 | 0.4350 | 0.2850 | 0.1563 | 0.424 |
+| 0.5 | 0.7250 | 0.4750 | 0.2604 | 0.707 |
+| 0.8 | 1.1600 | 0.7600 | 0.4167 | 1.132 |
+| 2 | 2.9001 | 1.9001 | 1.0418 | 2.829 |
+| 20 | 29.0011 | 19.0011 | 10.4179 | 28.294 |
 
-眼高夹在 0.1–100 m：D < 0.0753 m 时 E 被钳在 0.1 m（骑手比规则大，`clamped` 为真并记日志）；D = 20 m 时 E = 26.5 m，不碰上限。原作 5 cm 起始球（MAS1）会被钳制，该关另议。
+眼高夹在 0.1–100 m：D < 0.0690 m 时 E 被钳在 0.1 m（骑手比规则大，`clamped` 为真并记日志）；D = 20 m 时 E = 29.0 m，不碰上限；D 约在 69.0 m·η 以上时才顶到 100 m，之后几何眼点仍随 r 增长，但骑手不再成比例放大。原作 5 cm 起始球（MAS1）会被钳制，该关另议。
 
 ## 2. 三件事与谁控制
 
@@ -92,7 +92,7 @@ motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是
 
 - Station 由装配器设为**站立**（VRCStation `seated` 关）且是**移动站**（`PlayerMobility = ImmobilizeForVehicle`）：Station 是 rig 根的子物体，眼点每帧动、补偿又写它的位置，所以它是"会动的 station"；VRChat 对这类的文档配置就是 Immobilize For Vehicle。装配器把 VRCStation 所在 Transform 与 `stationEnterPlayerLocation` 都归一到 `FollowRigRoot` 的位姿（enter 相对 station 因而零偏移），并把 `SeatEyeCompensation.followRigRoot` / `seatAnchor` 分别写成 rig 根与 **VRCStation 本体**。装配完成后回读代理字段、Udon 变量表与 VRCStation 的 `seated`/`PlayerMobility`。
 - 为什么锚点是 Station 本体而不是子物体 enter：VRChat 用 `VRCStation` 所在 Transform 搬运坐着的玩家（车辆 Station 就是这么动的），`stationEnterPlayerLocation` 只在入座瞬间决定落点。把补偿写到 enter 子物体会在 ClientSim 里生效（它每帧 `SitPosition(EnterLocation())`），却不一定被真客户端搬运；写 Station 本体在两种实现下都搬运玩家，前提是 enter 相对 Station 零偏移（本装配保证）。
-- StoryMode 基底的实际 enter 是 `FollowRigRoot/RideRoot/RideSeat/StandPoint`，原值是 (+0.45, −0.15, 0) m；跳过装配会保留这个偏移。它会被当成头偏移的一部分，而水平护栏是 0.35 m × E/1.64（站姿 E = 2.6546·r，即 0.566·r）：0.3 m 球（r = 0.15）只补偿 0.085 m，残余 0.365 m 横向偏移——这就是"坐在球的右侧"；同时 −0.15 m 让有 η 时头比眼点低 0.15 m。装配后 enter 局部为 (0, 0, 0)、姿态与 Station 相同。HUD 直接跟随眼点和 yaw，所以 HUD 朝向正常不能证明头在正确位置。
+- StoryMode 基底的实际 enter 是 `FollowRigRoot/RideRoot/RideSeat/StandPoint`，原值是 (+0.45, −0.15, 0) m；跳过装配会保留这个偏移。它会被当成头偏移的一部分，而水平护栏是 0.35 m × E/1.64（站姿 E = 2.9001·r，即 0.619·r）：0.3 m 球（r = 0.15）只补偿 0.093 m，残余 0.357 m 横向偏移——这就是"坐在球的右侧"；同时 −0.15 m 让有 η 时头比眼点低 0.15 m。装配后 enter 局部为 (0, 0, 0)、姿态与 Station 相同。HUD 直接跟随眼点和 yaw，所以 HUD 朝向正常不能证明头在正确位置。
 - 入座并稳定后，在 `PostLateUpdate` 里读本地玩家 `GetTrackingData(Head)`，换算到 rig 坐标系、相对锚点，取窗口平均，冻结。η = 头.y ÷ 测量时的眼高
   （`RideStanceMath.TryMeasureEta`），护栏 [0.75, 1.25]（不是产品值：坐姿头约 0.5 个眼高）。
 - **座位**：水平位置让视点落在眼点；有 η 时竖直位置让锚点（脚）落在球最低点（`FeetTargetInRig` = 球心.y − r − rig.y，每帧从 motor 读，球的滤波滞后不会让脚离地），
@@ -131,7 +131,7 @@ motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是
 
 ## 5. 触发器与下车
 
-1. **座位永远不在球上**：座位水平位置让视点落在眼点（球心后 1.1768·r），竖直位置让脚落地。
+1. **座位在球后**：座位水平位置让视点落在眼点（球心后 1.0418·r），竖直位置让脚落地。
 2. **触发器在球上，随球缩放**：`BallSeatTrigger` 挂在 motor 的 `ballPhysicsRoot` 下，半径 = 1.25 × 碰撞半径，下限 0.25 m。座位自己的 0.45 m 盒子由装配器删掉。
 3. **退出**：按住跳跃键 1.5 s，或下车面板按钮点两次，都进 `BallRideStation.RequestExit`，先把 exit location 放到球旁可站立的地面再 `ExitStation`。
 4. 下车落点（`RideExitMath`）：球面外 0.9 m，按后/右/左/前各向下射线，法线 y ≥ 0.7、高度在球底 +0.6 m 与 −1.5 m 之间者胜出，抬 5 cm、朝向球；
@@ -146,12 +146,12 @@ motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是
 
 | 面板 | 方位 / 仰角 | 尺寸 × 每单位米数 | 离球轮廓最近 | 内容 |
 |---|---|---|---:|---|
-| `StoryHud` | 左 38° / 下 12°（中心锚点） | 1000 × 260 × 0.0014 | 9.6° | 目标、当前、剩余、起始提示 |
-| `RideResultCard` | 正前 / 上 6° | 1152 × 576 × 0.001 | 20.9° | 结果文字（TMP）+ 卡面 + uGUI Button「再来一次」「回大厅」（`Prefabs/Story/RideResultCard.prefab` 实例） |
-| `RideExitPanel` | 右 24° / 下 8° | 360 × 150 × 0.0014 | 15.0° | 「下车（点两次）」+「按住跳跃键下车」；仅入座时显示 |
+| `StoryHud` | 左 38° / 下 12°（中心锚点） | 1000 × 260 × 0.0014 | 17.9° | 目标、当前、剩余、起始提示 |
+| `RideResultCard` | 正前 / 上 6° | 1152 × 576 × 0.001 | 29.6° | 结果文字（TMP）+ 卡面 + uGUI Button「再来一次」「回大厅」（`Prefabs/Story/RideResultCard.prefab` 实例） |
+| `RideExitPanel` | 右 24° / 下 8° | 360 × 150 × 0.0014 | 23.3° | 「下车（点两次）」+「按住跳跃键下车」；仅入座时显示 |
 
 "离球轮廓最近"是面板上任一点到球的角半径边界的最小夹角（pitch 0，`panel_clearance_deg`；面板随 E 缩放、站姿正比于 E，所以与球径无关）。
-HUD 放在球的左边、视轴下 12°：直视前方和低头看手（接触点在视轴下 63.6°）时都在视野里，不挡球和手。
+HUD 放在球的左边、视轴下 12°。手的接触点相对水平视轴俯 69.0°；低头看到手时能否同时读到 HUD，取决于头显视场，待真机验证。
 
 ### 6.1 VR 里看不到 HUD 的根因（2026-11-18，只读核对 Windows 工作区场景文件）
 
@@ -180,28 +180,28 @@ HUD 放在球的左边、视轴下 12°：直视前方和低头看手（接触�
 
 0. `refresh_unity`，`read_console` 0 错误（`BallRideStation` 新增 `vrInput` 字段，U# 程序要重编）。
 1. 执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（会从 `StoryMode.unity` 重新生成 AllMapsHub 并自动跑骑乘装配）。预期：
-   - 报告里有 `ride: [ride-ux] done: +N ~M problems=0` 一段，note 里有 `push stance written to the motor (push angle 45 deg)`、`the VRCStation is a standing, moving-station station (seated off, PlayerMobility=ImmobilizeForVehicle)`、
+   - 报告里有 `ride: [ride-ux] done: +N ~M problems=0` 一段，note 里有 `push stance written to the motor (push angle 52 deg)`、`the VRCStation is a standing, moving-station station (seated off, PlayerMobility=ImmobilizeForVehicle)`、
      `panel root created under the follow frame`、`HUD canvas 'StoryHud' is world-space under RidePanels`；总报告 `problems=0` 且 `saved Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`；
    - 若报告 `BallRideStation's Udon variable table lacks: … vrInput`（或 `panelRoot`）：按提示编译 → 存 base 与程序资产 → 重开 → 再生成一次，不可当通过；
    - 然后 `VRC Katamari/Hub/Check Room Wiring` 结尾 `0 problem(s)`。
    在单独的 `StoryMode.unity`（非大厅）上手动执行 `Assemble Ride UX` 时，场景里没有 `VrStickMoveInput` 是正常的，报告记 note `BallRideStation.vrInput left as it is`，不算 PROBLEM。
 2. 读场景（Inspector 或 MCP 读组件）：
-   - motor：`eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.654625`、`eyeBaseBackMeters = 0`、`eyeBackPerRadius = 1.176792`、`eyeUpMaxMeters = eyeMaxBackM = 128`（这两个只钳加性底座，本装配的底座为 0，所以它们不限制眼点；半径项由球径上限约束）；
+   - motor：`eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.900108`、`eyeBaseBackMeters = 0`、`eyeBackPerRadius = 1.041795`、`eyeUpMaxMeters = eyeMaxBackM = 128`（这两个只钳加性底座，本装配的底座为 0，所以它们不限制眼点；半径项由球径上限约束）；
    - VRCStation `seated = false`、`PlayerMobility = Immobilize For Vehicle`（2，不是 Immobilize）；`BallRideStation.scaleRiderWithBall = true`、`panelRoot` 指向 `FollowRigRoot/RidePanels`、`vrInput` 指向根物体 `VrStickMoveInput`（与 `StoryRoundController.vrInput` 同一个）；
    - `SeatEyeCompensation.motor` 已连、`verticalLimitMeters = 2.1`、`followRigRoot = FollowRigRoot`、`seatAnchor = RideSeat`（VRCStation 本体，不是子物体 `StandPoint`）；VRCStation 的 `stationEnterPlayerLocation = RideSeat/StandPoint`，`stationExitPlayerLocation = RideSeat/RideExitPoint`；
    - 场景位姿：`RideSeat`、`StandPoint` 与 `FollowRigRoot` 世界位置/朝向相同（`RideSeat` 经 `RideRoot` 两级 local 均为零；`StandPoint.localPosition = (0, 0, 0)`、`localRotation = identity`、`localScale = 1`）。若仍是 (0.45, −0.15, 0)，说明骑乘装配没跑或失败，按报告 PROBLEM 处理，不能当通过；
    - `StoryHud`：Canvas Render Mode = World Space，父物体 `RidePanels`，层 8，pivot (0.5, 0.5)，sizeDelta (1000, 260)，localScale 0.0014，
      localPosition ≈ (−0.964, −0.333, 1.233)（`HudLocalPosition(1.6, −38, −12)`）；`RideResultCard`（`RideResultCard.prefab` 实例，localScale 0.001）与 `RideExitPanel` 也在 `RidePanels` 下；场景里不再有 Render Mode = Screen Space Overlay 的 `StoryHud`，也没有旧的 `HubResultBoard`。
-   - AllMapsHub 文件只读复核（Linux 侧可用 `ssh pc114514` + `Select-String`）：`StoryHud` 的 `m_RenderMode: 2`，`eyeUpPerRadius: 1.654625`、`eyeBackPerRadius: 1.176792`，
+   - AllMapsHub 文件只读复核（Linux 侧可用 `ssh pc114514` + `Select-String`）：`StoryHud` 的 `m_RenderMode: 2`，`eyeUpPerRadius: 1.900108`、`eyeBackPerRadius: 1.041795`，
      `seated: 0`、`PlayerMobility: 2`，`scaleRiderWithBall: 1`，`StandPoint` 的 `m_LocalPosition: {x: 0, y: 0, z: 0}`，`m_Name: RidePanels` 存在，`vrInput:` 不是 `{fileID: 0}`，`SeatEyeCompensation` 的 `seatAnchor` 指向 `RideSeat`。
 3. `run_tests`：`VRCKatamari.Tests.EditMode` 中 `Riding` 全过（RideView / RideScale / RideStance / SeatEye）；U# 全量编译无新错误。其中 `RideAssemblerAlignsTheStationAndEntryToTheRideFrame` 需要真编辑器（预览场景 + UdonSharpUndo），本地 Roslyn 运行器会报"不可执行"，以 Unity 里跑的结果为准；它断言装配后 `StandPoint`/`RideSeat` 都在 rig 位姿、`seatAnchor = RideSeat`、VRCStation 为站立移动站（`seated=false`、`PlayerMobility=2`）。
 4. Play（ClientSim），从大厅选关入座，读 Console：
    - `[seat] locked` 行里的 `offset` 水平分量应接近测量到的人头小偏移（不再是固定 −0.34 左右）、`left` ≈ 0；若 `left` 很大说明 enter 仍有固定偏移；`[ride] seat calibrated: eta ≈ 1 …`（或 `no usable stance (reason N)`，记下 N）；
-   - 球径约 0.3 / 1 / 2 m 时 `[ride] eye height …`：E ≈ 0.398 / 1.327 / 2.655 m（÷η），`eyeError` < 0.02·E；`handGap` 记下（ClientSim 的手是动画手，只作参考）；
-   - `RidePanels.localScale` ≈ E/1.64（0.3 m 球约 0.243）。
-5. 同一帧记录球心、FollowRigRoot 位置/yaw、实际 enter 位置/朝向、VRCStation 位置/朝向、HMD 追踪头的位置/朝向以及 `RidePanels` 位置/朝向。用 rig 的四元数逆旋转各位置差（不除缩放）；在静止、横移及左右转向各测一次。`Rig−球心` 坐标的 X 应接近 0，Z ≈ −1.176792·r，静止时 Y ≈ 1.654625·r；`RidePanels−Rig` 应为零；`Station−Rig` 与 `Enter−Rig` 应为零。居中站立、校准锁定并完成缩放后，`Head−Rig` 水平应接近零（侧向 |right| < 0.05 m 视为测量噪声）；入座静止时 `Head−Station` 与 `Head−Enter` 相同。如果不为零，记 `GetState()`、`GetLastRefusal()`、`GetSeatOffsetMeters()`、`GetUncompensatedMeters()`、请求/读回的眼高，再对比 `Head−Enter` 与 `Head−TrackingData(Origin)`；真实 VR 左右换站位后分别重新上球，区分房间追踪偏移与补偿限幅，保留探头自由。
+   - 球径约 0.3 / 1 / 2 m 时 `[ride] eye height …`：E ≈ 0.435 / 1.450 / 2.900 m（÷η），`eyeError` < 0.02·E；`handGap` 记下（ClientSim 的手是动画手，只作参考）；
+   - `RidePanels.localScale` ≈ E/1.64（0.3 m 球约 0.265）。
+5. 同一帧记录球心、FollowRigRoot 位置/yaw、实际 enter 位置/朝向、VRCStation 位置/朝向、HMD 追踪头的位置/朝向以及 `RidePanels` 位置/朝向。用 rig 的四元数逆旋转各位置差（不除缩放）；在静止、横移及左右转向各测一次。`Rig−球心` 坐标的 X 应接近 0，Z ≈ −1.041795·r，静止时 Y ≈ 1.900108·r；`RidePanels−Rig` 应为零；`Station−Rig` 与 `Enter−Rig` 应为零。居中站立、校准锁定并完成缩放后，`Head−Rig` 水平应接近零（侧向 |right| < 0.05 m 视为测量噪声）；入座静止时 `Head−Station` 与 `Head−Enter` 相同。如果不为零，记 `GetState()`、`GetLastRefusal()`、`GetSeatOffsetMeters()`、`GetUncompensatedMeters()`、请求/读回的眼高，再对比 `Head−Enter` 与 `Head−TrackingData(Origin)`；真实 VR 左右换站位后分别重新上球，区分房间追踪偏移与补偿限幅，保留探头自由。
 6. 截图（玩家视角，Game 视图 1920×1080；pitch 0 一张、低头看手一张；球径 0.3 m 和 ≥ 1 m 各一组）：要能同时看到 **手的位置、球、HUD**。
-   预期：直视时球上沿在视轴下约 25°、HUD 在左下离球约 10°；低头时手在球背上（接触点在视轴下约 64°）。另截一张 Scene 视图侧视：脚在地面、眼在球心后上方。
+   预期：直视时球上沿在视轴下约 34°、HUD 在左下离裸球轮廓约 18°；低头时手在球背上（接触点在水平视轴下约 69°），并记录 HUD 是否仍可读。另截一张 Scene 视图侧视：脚在地面、眼在球心后上方。
 7. 下车：`[ride] station exit reason=station-exit wasSeated=True inputWired=True vrInputWired=True seatEyeWired=True`、`[ride] eye height restored to <原值>`，`RidePanels.localScale` 回 1；重复入座/下车 3 次结果一致。
 
 **给所有者亲测**（头显，桌面各一次）：

@@ -7,18 +7,18 @@ namespace VRCKatamari.Tests
     /// Pins the rider-size rules: the push stance's eye height is proportional to the diameter
     /// and inversely proportional to the avatar's measured eta, requests are clamped to what
     /// VRChat supports, a size changed from outside is recovered, and the smoothing and the rate
-    /// limit behave. Hand values: <c>E = e * r / eta</c> with <c>e = 2.654625</c>
+    /// limit behave. Hand values: <c>E = e * r / eta</c> with <c>e = 2.900108</c>
     /// (RideViewTests derives it).
     /// </summary>
     public class RideScaleTests
     {
-        // D, eta, expected E = 2.654625 * D / 2 / eta.
-        [TestCase(0.222f, 1f, 0.294663f)]
-        [TestCase(0.3f, 1f, 0.398194f)]
-        [TestCase(0.5f, 1f, 0.663656f)]
-        [TestCase(2f, 1f, 2.654625f)]
-        [TestCase(2f, 0.9f, 2.949583f)]
-        [TestCase(20f, 1f, 26.54625f)]
+        // D, eta, expected E = 2.900108 * D / 2 / eta.
+        [TestCase(0.222f, 1f, 0.321912f)]
+        [TestCase(0.3f, 1f, 0.435016f)]
+        [TestCase(0.5f, 1f, 0.725027f)]
+        [TestCase(2f, 1f, 2.900108f)]
+        [TestCase(2f, 0.9f, 3.222342f)]
+        [TestCase(20f, 1f, 29.00108f)]
         public void EyeHeight_IsTheStanceOverEta(float diameter, float eta, float expectedEye)
         {
             float eye;
@@ -57,12 +57,12 @@ namespace VRCKatamari.Tests
         {
             float eye;
             bool clamped;
-            // 2.654625 * 0.025 = 0.0664 m, under the 0.1 m floor.
+            // 2.900108 * 0.025 = 0.0725 m, under the 0.1 m floor.
             Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.05f, 1f, out eye,
                 out clamped));
             Assert.AreEqual(RideScaleMath.MinSupportedEyeHeightMeters, eye, 1e-6f);
             Assert.IsTrue(clamped);
-            // 2.654625 * 100 = 265.5 m, over the 100 m ceiling.
+            // 2.900108 * 100 = 290.0 m, over the 100 m ceiling.
             Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(200f, 1f, out eye,
                 out clamped));
             Assert.AreEqual(RideScaleMath.MaxSupportedEyeHeightMeters, eye, 1e-4f);

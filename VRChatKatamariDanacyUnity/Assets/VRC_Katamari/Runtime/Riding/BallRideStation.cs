@@ -214,6 +214,10 @@ namespace VRCKatamari.Riding
 
         private const string ExitHintIdle = "按住跳跃键下车";
 
+        // VRChat's default VRCWorld prefab uses 3; the API defaults to 0.
+        // Station Platform Lab read back 3 (Docs/Evidence/StationPlatform/pc_results.md).
+        private const float DefaultStandingJumpImpulse = 3f;
+
         private void Start()
         {
             // Start runs before the local player can sit, so this always closes the
@@ -226,6 +230,13 @@ namespace VRCKatamari.Riding
                 // nothing", which is the same trap the input gate had.
                 Debug.Log("[ride] no seat-eye compensation wired: the seat stays on the eye point");
             }
+        }
+
+        public override void OnPlayerJoined(VRCPlayerApi player)
+        {
+            if (player == null || !player.isLocal) return;
+            player.SetJumpImpulse(DefaultStandingJumpImpulse);
+            Debug.Log("[ride] standing jump impulse=" + player.GetJumpImpulse());
         }
 
         public override void Interact()

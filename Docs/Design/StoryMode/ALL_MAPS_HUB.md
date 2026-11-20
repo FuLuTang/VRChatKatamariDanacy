@@ -130,7 +130,7 @@
 7. 每关数据：竞技场顺序 = `arenaFirst`（缺省取驱动的 `sandboxFrame`）→ 驱动 `cells` 的竞技场顺序 → 其余按层级顺序；地面高度 = 第一个竞技场的 `groundOffset`（无竞技场取源电机的 `groundPlaneOffset`）；白名单 = 驱动的 `kindWhitelist`；地形宿主一关至多一个；道具宿主 = 源回合控制器的 `pickupHost`（否则岛下第一个）；起点 = `start.center`（缺省：驱动出生点，再缺省：源电机 `startCenterWorld`）+ 偏移；朝向 `start.headingDeg`；**起始体积 = `SizeModelMath.TrySphereVolumeMm3(diameterM, 底板电机的 semanticDiameterPerCoreDiameter)`**，`diameterM` 缺省取源电机的 `startDiameterWorldM`，仍无则用底板电机自己的起始体积；从不读源电机的 `startVolumeMm3`（有 `startDiameterWorldM` 时它在运行时被覆盖，存的值不是起点）。
 8. 回合计划：自由练习关用 F 型；计时关先取源回合控制器的值，`roundFromPlacement` 再用 placement 文档覆盖，最后是清单 `round` 块覆盖。`allowAbort` 取清单；`stars` 取清单（自由练习关恒无星）；星级阈值数组（含第一档）从结果卡读取，不从过关门槛推导。B 型的 definition 白名单与 placement 实例按 `itemId` 匹配，将计数标签写到 `PickupFieldHost.objectiveKinds`；找不到对应 id 会报 PROBLEM，不改物理类别或候选白名单。
 9. 写 `LevelSwitch`（`LevelSwitchHost`，根物体）的并行数组；跑 `HubAssembler.Run`（多关模式）：N 张墙面关卡卡片（顺序 = `hubs[].levels`）、启动器（含 `levelSwitch`）、房间宿主、**每关一颗返回按钮 `HubReturnButton_<id>`**（站在入口标记旁，没有入口则站在该关起点旁；底板里原来的根 `HubReturnButton` 改名成第一关的）、控制器按关数组与结果卡按关数组。结算卡不在 `HubAssembler.Run` 里：随后的骑乘装配（`RideUxAssembler`）在 `FollowRigRoot/RidePanels` 下实例化 `RideResultCard.prefab`，写两颗卡按钮与 presenter/回合控制器的引用，并删掉旧的 `HubResultBoard`、`HubReturnCardButton` 与卡外 `StoryRetryButton`。
-10. **GPU instancing**（`Editor/LevelBuild/MaterialInstancing.cs`，装配器自动做）：遍历场景里启用中的 `MeshRenderer`，给每个「不透明（renderQueue < 2450、shader 名不含 `Transparent`/`Cutout`）+ shader 有 instancing 变体（`Standard`、`Standard (Specular setup)`）」的材质打开 `enableInstancing`。同一材质 + 同一网格的 n 个渲染器从 n 次 draw 变 1 次；摸底里非骨骼道具的 mesh+material 分组是 372 次 draw → 130 组。参考岛的**道具材质是 FBX 的只读内嵌材质**（Unity「Use Embedded Materials」下不能改），所以先把每份去重材质复制成 `Assets/_RefUnlicensed/Materials/Instanced/<模型名>_<材质名>.mat`（等同 Unity 的 Extract Materials，保留 shader/keywords/属性/renderQueue），再把渲染器的材质槽换成副本；`Assets/VRC_Katamari/` 下已入 git 的材质不在装配里改（由创建它的代码负责，见 6.1.2）。`Legacy Shaders/*`（地形 visual）没有 instancing 变体，跳过。报告行：`[allmaps] instancing: enabled=N duplicated=M already=K renderers=R skipped committed=… unsupported=… non-opaque=…`（都是**去重后的材质数**，不是槽位/渲染器次数）；命名不出来的内嵌材质是 `warn:` 行，不阻止保存。同一输入重跑不新建资产、不重写渲染器。
+10. **GPU instancing**（`Editor/LevelBuild/MaterialInstancing.cs`，装配器自动做）：遍历场景里启用中的 `MeshRenderer`，给每个「不透明（renderQueue < 2450、shader 名不含 `Transparent`/`Cutout`）+ shader 有 instancing 变体（`Standard`、`Standard (Specular setup)`）」的材质打开 `enableInstancing`。同一材质 + 同一网格的 n 个渲染器从 n 次 draw 变 1 次；摸底里非骨骼道具的 mesh+material 分组是 372 次 draw → 130 组。参考岛的**道具材质是 FBX 的只读内嵌材质**（Unity「Use Embedded Materials」下不能改），所以先把每份去重材质复制成 `Assets/_RefUnlicensed/Materials/Instanced/<模型名>_<材质名>.mat`（等同 Unity 的 Extract Materials，保留 shader/keywords/属性/renderQueue），再把渲染器的材质槽换成副本；已有副本的 renderQueue、keywords、主贴图或颜色与内嵌材质不同（例如模型重导后透明模式变了）时，副本按内嵌材质重写，计入 `duplicated=`，所以副本不会把旧的不透明状态留下来；Cutout/Fade 材质的 renderQueue ≥ 2450，不实例化，渲染器直接用内嵌材质（透明模式见 §6.1.4）；`Assets/VRC_Katamari/` 下已入 git 的材质不在装配里改（由创建它的代码负责，见 6.1.2）。`Legacy Shaders/*`（地形 visual）没有 instancing 变体，跳过。报告行：`[allmaps] instancing: enabled=N duplicated=M already=K renderers=R skipped committed=… unsupported=… non-opaque=…`（都是**去重后的材质数**，不是槽位/渲染器次数）；命名不出来的内嵌材质是 `warn:` 行，不阻止保存。同一输入重跑不新建资产、不重写渲染器。
 11. **静态遮挡标记**（`Editor/Hub/OccluderRule.cs`，装配器自动做，不手摆）：按「是什么」判定场景里的固定结构几何，只写 `StaticEditorFlags`，**不烘焙**（烘焙是操作员的下一步，见 6.1.1）：
     - `OccludeeStatic`：关卡文档的结构（`Structures` 根下的网格，含 `Visual` 子物体）、参考岛的 `TerrainVisual` 地形、地形实验室的岛根 `Ground`、大厅的返回按钮 `HubReturnButton_<id>`。吸收道具（`Props`）、球、基础设施、背景壳不标。
     - 其中再标 `OccluderStatic` 的条件：网格闭合（重合顶点焊起来后，每条边恰被两个三角形共用）、全部材质不透明（renderQueue < 2450 且 shader 名不含 `Transparent`/`Cutout`）、至少两个方向跨度 ≥1 m、最大三角面 ≤80 m²。细杆/薄斜面（C05/C06 斜坡、树桩、路牌、床/桌斜坡）、单面地形、带 cutout 的视觉网格、整块地面板都只作 occludee；任一边 >150 m 的视为背景壳（`area2_sector1_model0` 242 m）完全不标。阈值与实测依据见 `OccluderRule` 注释。
@@ -162,7 +162,7 @@
 |---|---|---|
 | 骨骼蟹 Animator 的 `cullingMode` | 120/120 = `CullUpdateTransforms` | `SkeletalAnimationAssembler` 给每个 `Skin` 的 Animator 写；先重跑骨骼动画菜单再存 RefCancer（§7 第 2 步）。 |
 | 骨骼蟹 `SkinnedMeshRenderer.skinnedMotionVectors` | 120/120 = false | 同上，Skin 下每个 SMR。 |
-| `enableInstancing=true` 的材质 | 装配报告 `instancing: enabled=N duplicated=M already=K`；参考岛每份去重内嵌材质一个（量级 100–170） | `MaterialInstancing` 写 `_RefUnlicensed/Materials/Instanced/*.mat` 并换到渲染器槽位；地形 visual 的 158 个 `Legacy Shaders/Diffuse` 材质没有 instancing 变体，报告 `unsupported=158`。跑过 §7 第 3 步的材质同步后，已入 git 的 prop 材质会出现在 `already=` 而不是 `skipped committed=`。 |
+| `enableInstancing=true` 的材质 | 装配报告 `instancing: enabled=N duplicated=M already=K`；参考岛每份去重内嵌材质一个（量级 100–170） | `MaterialInstancing` 写 `_RefUnlicensed/Materials/Instanced/*.mat` 并换到渲染器槽位；地形 visual 的 158 个 `Legacy Shaders/Diffuse` 材质没有 instancing 变体，报告 `unsupported=158`。跑过 §7 第 4 步的材质同步后，已入 git 的 prop 材质会出现在 `already=` 而不是 `skipped committed=`。 |
 | `BatchingStatic` 渲染器 | 6（蟹座 `TerrainVisual` 的 6 个非背景壳部件） | 装配报告 `[allmaps] static: … batching=6`。 |
 | 出生点视锥 draw call | 预计 1192 → 约 900（instancing -约 240，地形静态合批 -约 47） | 真实数字只能在 Play/VR 里量（Frame Debugger 的 Batches/SetPass，或头显内 frame time）；编辑模式手动 `Camera.Render` 的 ProfilerRecorder 读数是 0，不能用（摸底结论）。骨骼两项改的是每帧 CPU 骨骼动画与一次 skinning，不直接减 draw。 |
 | 骨骼动画 CPU | 120 只蟹里视野外的不再逐帧写 5 根骨骼（`skinnedMotionVectors` 关掉是去掉本世界用不到的 motion-vector 变体，没有后处理请求它） | Profiler 的 `Animators.Update` / `Mesh.Skinning`；VR 里蟹群不在视野内的角度差别最明显。 |
@@ -178,8 +178,8 @@
   `SetBool`），它只写道具根 transform、在远处把 Animator 关掉，吸附判定用道具根/碰撞体，不用骨骼。
 - 透明/带 cutout 的地形子网格在合批后按材质分组，绘制顺序可能与原来不同：Play 时看一眼地形边缘/接缝有无闪烁；
   如有，把对应部件从 batching 里排除（是视觉验收，不是数据问题）。
-- 内嵌材质复制后 shader/keywords/属性/renderQueue 全同，外观应与原来一致；若某个道具颜色/贴图不对，删除
-  `_RefUnlicensed/Materials/Instanced/` 下对应 `.mat` 重跑装配（不要手改场景）。
+- 内嵌材质复制后 shader/keywords/属性/renderQueue 全同，外观应与原来一致；内嵌材质变了的副本在下次装配时跟着重写。
+  若某个道具颜色/贴图仍不对，先查模型的导入警告（`[ref-material]`，§6.1.4），不要手改场景或副本。
 
 ### 6.1.3 参考关卡装配对账
 
@@ -198,6 +198,17 @@
 
 操作员重跑 **Assemble All-Maps Hub** 后抄录 `[ref-parity]` 汇总及缺口行。若要对比缺失的原作 Animator 或完整运动行，应先放好对应关卡的原作旁表。运动方向、材质像素透明和动画实播仍需单独验证。
 
+### 6.1.4 参考道具材质的透明模式
+
+参考道具 FBX（`Assets/_RefUnlicensed/Models/<def>/<def>.fbx`）是抽取 GLB 经 Blender 转出来的，转换没有保留 glTF 的 `alphaMode`/`alphaCutoff`；FBX 里剩下的「贴图连 TransparencyFactor」Unity 的 FBX 材质导入不当透明处理，所以不补的话全部是 Standard Opaque，叶子、纸门等贴图的透明区画成实色方块。现行做法：
+
+- `Editor/LevelBuild/ReferenceModelMaterialPostprocessor.cs` 在模型导入时（`OnPreprocessMaterialDescription`，只管 `Assets/_RefUnlicensed/Models/` 下的 FBX，导入模式须为 `ImportViaMaterialDescription`）读同目录 manifest 的 `source_glb`，从本机 `%USERPROFILE%\KatamariRef\models\glb-pack\<源>.glb` 取 `materials[]`，按材质名对上 FBX 材质。manifest 取法：`<def>.manifest.json` 优先，没有时同目录所有 manifest 必须指向同一个 GLB（`eggplant` 目录两份 manifest 指向不同 GLB，以自名那份为准）。
+- 规则在 `ReferenceMaterialAlphaMath`：`OPAQUE`→不改；`MASK`→Standard Cutout，`_Cutoff`=`alphaCutoff`（缺省 0.5；抽取数据是 1/255，即原作的 alpha≠0 测试）；`BLEND`→Standard Fade（直通 alpha，对应原作的 (Cs−Cd)·As+Cd；不用预乘的 Transparent）。写入的 `_Mode`、RenderType、混合因子、ZWrite、关键字、renderQueue 与 Standard 检视器切换模式时一致。
+- 同一后处理器给源 GLB 含 MASK/BLEND 材质的模型目录里的 PNG 打开 `Alpha Is Transparency`：抽取贴图 alpha=0 处的 RGB 是杂色（番茄是粉色），打开后 Unity 用邻近不透明像素填它，切边过滤不会泛出底色。每个参考模型目录只有一个 FBX，源 GLB 也都只有一张图，所以按目录判断。
+- 源 GLB 缺失、不可读或材质名对不上时只出导入警告 `[ref-material] …`，材质保持 Opaque，不让导入失败。源材质 `doubleSided` 时也只警告：Standard 只画正面；目前参考道具 238 个材质槽里双面为 0。
+- GLB 在工程外，Unity 不跟踪它的变动：放好或更新 GLB 后对 `Assets/_RefUnlicensed/Models` 右键 Reimport。改了映射规则就提高后处理器的 `Version`，Unity 会自动重导全部模型。
+- 透明材质 renderQueue ≥ 2450：不做 GPU instancing（§6.1 第 10 步），也不当遮挡体（`OccluderRule`）。
+
 ### 6.2 `MoveGameObjectToScene` 与 UdonSharp 的已知未知
 
 默认用 `MoveGameObjectToScene`：同一批对象（含 U# 代理 + backing `UdonBehaviour` 一对）整体换场景，搬运集合内部引用不变，只有指回源场景的引用要重映射。**这条路没有在 UdonSharp 的 backing 上实测过。** 若搬后某个行为的变量为空或 `CopyProxyToUdon` 报错：勾选“Use Instantiate Fallback”重跑。后备路径：对每个 takeRoot `Object.Instantiate(…, 外壳, true)`，删掉克隆里的 `leaveBehind` 子树，沿两棵层级同步遍历建“原件→克隆”表，把所有仍指向原件的引用改指克隆、仍指向源场景的按路径重映射，之后的步骤相同。底板即源时（野餐关）不用后备路径（对象本来就在输出场景里）。
@@ -206,9 +217,10 @@
 
 1. 工作区里所有场景无未保存修改；编译通过；`LevelSwitchHost` 与（若有改动的）程序资产 `.asset`/`.meta` 就位（见 `Labs/README.md` 必做序列第 1 步）。
 2. **参考关重建骨骼动画**（本轮新增）：打开 `Assets/_RefUnlicensed/Scenes/RefCancer.unity`，跑 `VRC Katamari/Level/Assemble Skeletal Animation (reference)`。应 `problems=0`；这版代码第一次跑是 `[anim] +0 ~120 -0 …`（120 个 `Skin` 都要改 Animator `cullingMode` 与 SMR `skinnedMotionVectors`），之后再跑应 `+0 ~0 -0`；保存 RefCancer。蟹座素材不在就不做这步（合集跳过该关）。
-3. **材质同步**（可选但建议）：`VRC Katamari/Prop Art/Resync All Prop Materials`。首次会把已入 git 的 prop `.mat` 写成 `enableInstancing=true`（报告 `MaterialsUpdated>0`），这些是 git 里的资产，要单独提交；不跑也能装配，只是合集里这些道具材质仍沿用旧标志（装配报告 `skipped committed=` 不为 0）。
-4. `Inspect All-Maps Sources`：应 `problems=0`；确认每关 `take`、宿主、“leaves the taken set”里只有指向底板基础设施的路径（`PlayerBall/MotorHost`、`PlayerBall/BallPhysicsRoot/BallVisualRollRoot/AttachmentRoot` 之类）。
-5. `Assemble All-Maps Hub`：应 `problems=0`、有 `[allmaps] instancing: …`、`[allmaps] static: occluders=26 occludees=44 batching=6 …`、末行 `saved Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`；再跑一次，报告应与第一次逐字相同（保存到文本比对）。装配后按 6.1.2 核对渲染读数。
-6. **遮挡剔除烘焙**（见 6.1.1）：`Window > Rendering > Occlusion Culling`，`Smallest Occluder`=1、`Smallest Hole`=0.05、`Backface Threshold`=100，Bake；窗口里 Occluders 应为 26，然后保存输出场景。
-7. 若出现 “lacks Udon variables” / “deferRegistration … does not have”：编译 → 保存相关源场景或底板 → 重开 → 再跑（Labs/README.md “两张表”）。
-8. 进 Play 验收（设计稿 §8.1），并按 6.1.2 核对读数（真 VR 帧时间由 owner 在头显里看）。
+3. **参考道具透明模式**（§6.1.4）：确认 `%USERPROFILE%\KatamariRef\models\glb-pack\` 有源 GLB；首次编译新后处理器后 Unity 会因 `Version` 自动重导 `_RefUnlicensed/Models` 下的 FBX，没有自动重导就对该文件夹右键 Reimport。Console 不应有 `[ref-material]` 警告。
+4. **材质同步**（可选但建议）：`VRC Katamari/Prop Art/Resync All Prop Materials`。首次会把已入 git 的 prop `.mat` 写成 `enableInstancing=true`（报告 `MaterialsUpdated>0`），这些是 git 里的资产，要单独提交；不跑也能装配，只是合集里这些道具材质仍沿用旧标志（装配报告 `skipped committed=` 不为 0）。
+5. `Inspect All-Maps Sources`：应 `problems=0`；确认每关 `take`、宿主、“leaves the taken set”里只有指向底板基础设施的路径（`PlayerBall/MotorHost`、`PlayerBall/BallPhysicsRoot/BallVisualRollRoot/AttachmentRoot` 之类）。
+6. `Assemble All-Maps Hub`：应 `problems=0`、有 `[allmaps] instancing: …`、`[allmaps] static: occluders=26 occludees=44 batching=6 …`、末行 `saved Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`；再跑一次，报告应与第一次逐字相同（保存到文本比对）。装配后按 6.1.2 核对渲染读数。
+7. **遮挡剔除烘焙**（见 6.1.1）：`Window > Rendering > Occlusion Culling`，`Smallest Occluder`=1、`Smallest Hole`=0.05、`Backface Threshold`=100，Bake；窗口里 Occluders 应为 26，然后保存输出场景。
+8. 若出现 “lacks Udon variables” / “deferRegistration … does not have”：编译 → 保存相关源场景或底板 → 重开 → 再跑（Labs/README.md “两张表”）。
+9. 进 Play 验收（设计稿 §8.1），并按 6.1.2 核对读数（真 VR 帧时间由 owner 在头显里看）。

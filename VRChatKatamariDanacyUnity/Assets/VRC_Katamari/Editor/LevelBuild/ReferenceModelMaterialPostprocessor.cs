@@ -147,6 +147,52 @@ namespace VRCKatamari.Editor.LevelBuild
             return true;
         }
 
+        /// <summary>
+        /// A texture beside a reference model whose source GLB has a MASK or BLEND material gets
+        /// "Alpha Is Transparency": Unity then fills the RGB of fully transparent texels from
+        /// their neighbours, so filtering at the cut edge blends towards the leaf colour instead
+        /// of the colour the extraction left under alpha 0 (tomato: pink). Every reference model
+        /// folder holds one model and its textures, and every source GLB has at most one image.
+        /// </summary>
+        private void OnPreprocessTexture()
+        {
+            if (string.IsNullOrEmpty(assetPath) ||
+                !assetPath.StartsWith(ModelsRoot, StringComparison.Ordinal) ||
+                !assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var importer = assetImporter as TextureImporter;
+            if (importer == null || importer.alphaIsTransparency) return;
+
+            string folder = Path.GetDirectoryName(assetPath) ?? "";
+            string[] models;
+            try
+            {
+                models = Directory.GetFiles(folder, "*.fbx");
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (models.Length != 1) return;
+            ReferenceMaterialAlphaMath.SourceMaterial[] materials;
+            string error;
+            if (!TryReadSourceMaterials(models[0].Replace('\\', '/'), out materials, out error)) return;
+            for (int i = 0; i < materials.Length; i++)
+            {
+                ReferenceMaterialAlphaMath.RenderMode mode = materials[i].Mode;
+                if (mode == ReferenceMaterialAlphaMath.RenderMode.Cutout ||
+                    mode == ReferenceMaterialAlphaMath.RenderMode.Fade)
+                {
+                    importer.alphaIsTransparency = true;
+                    return;
+                }
+            }
+        }
+
         private void OnPreprocessModel()
         {
             if (!IsReferenceModelPath(assetPath)) return;

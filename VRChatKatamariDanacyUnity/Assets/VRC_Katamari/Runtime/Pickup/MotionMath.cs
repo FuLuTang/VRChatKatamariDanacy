@@ -27,7 +27,8 @@ namespace VRCKatamari.Pickup
     /// frames, so a step of dt frames covers dt / 30 seconds.
     /// </para>
     /// <para>
-    /// Units: metres, radians, +Y up, single world space. Every entry point is pure: it
+    /// 输入和输出使用项目的米、弧度与 Y 向上；仅在公式和积分状态内保留原作轴向。
+    /// Every entry point is pure: it
     /// reads and writes only the caller's float[] state and its arguments, allocates
     /// nothing (no new, no List, no LINQ, no closures, no struct or class state), and
     /// never touches a Transform, a scene, a collider or a physics query. Ground height,
@@ -41,26 +42,20 @@ namespace VRCKatamari.Pickup
     /// <list type="bullet">
     /// <item><description>
     /// SPAWN-LOCAL: offset in metres from spawnPos, in the spawn frame, plus euler in
-    /// radians in the spawn frame. Spin, Flip, Bob, Sway, WhackAMole, Hop, WaitForPlayer,
-    /// DraggedAlong. Section 12.0 composes world = R(spawnQuat) * R(euler) *
+    /// radians in the spawn frame. Spin, Flip, Sway, WaitForPlayer, DraggedAlong. Section 12.0 composes world = R(spawnQuat) * R(euler) *
     /// translate(spawnPos), so these functions compute exactly the part the motion owns;
     /// the host multiplies by the spawn transform.
     /// </description></item>
     /// <item><description>
-    /// WORLD-AXIS offset from spawnPos with world yaw: SporadicWalk, and Clouds (which
-    /// passes ignoreYaw and so keeps its spawn orientation). The original walks along world
-    /// -X and its facing is yaw = pi + atan2(vx, vz), so its offset lives in world axes, not
-    /// in the spawn frame. That formula binds model yaw 0 to facing -Z (section 15.1 item 1;
-    /// item S1 is the prefab check that a +Z-forward prefab would fail).
+    /// 世界轴偏移：Bob、WhackAMole、Hop 只改世界 Y 并保留出生旋转；Clouds 也保留旋转，
+    /// 只有 SporadicWalk 写自己的世界偏航。游走与云初始方向为 PS2 −X，换算为项目
+    /// 世界 +X；偏移不经过出生旋转。世界方向 +Z 对应偏航 0（模型可见前端见 §15.2 S1）。
     /// </description></item>
     /// <item><description>
     /// YAW RANGE: every emitted euler.y is normalized into [0, 2*pi) - Spin, Flip,
     /// SporadicWalk and the three path classes (pitch and roll are not wrapped; their ranges
-    /// are already the useful ones). That is what makes the section 15.1 item 1 binding a
-    /// fixed range as well as a convention: walking -Z is 0, walking +Z is pi, and nothing
-    /// is emitted at the interval's 2*pi end. A direction a hair off -Z lands a hair below
-    /// 2*pi, so a consumer comparing facings should compare angles (Mathf.DeltaAngle), not
-    /// the wrapped numbers.
+    /// are already the useful ones). 行走朝 +Z 为 0，朝 −Z 为 π；比较朝向时应比较角差，
+    /// 不直接比较跨越 0 与 2π 接缝的数值。
     /// </description></item>
     /// <item><description>
     /// ABSOLUTE world position with world yaw/pitch: PathCollision, SlopingPath,
@@ -79,7 +74,7 @@ namespace VRCKatamari.Pickup
     /// <item><description>Spin 1: clock. Flip 1: clock.</description></item>
     /// <item><description>Bob 2: clock, idleFrames.</description></item>
     /// <item><description>Sway 1: clock.</description></item>
-    /// <item><description>WhackAMole 6: clock, sweepStart, holdFrames, rising, done, segmentIndex.</description></item>
+    /// <item><description>WhackAMole 4: clock, segmentStart, holdFrames, segmentIndex.</description></item>
     /// <item><description>Hop 7: clock, cycleStart, idleFrames, cycleIndex, offsetY, velocityY,
     /// airborne.</description></item>
     /// <item><description>SporadicWalk / Clouds 15: clock, phase, timer, extraTimer, axisX, axisZ,
@@ -97,7 +92,7 @@ namespace VRCKatamari.Pickup
     /// walked offset, and Hop keeps its height and vertical velocity. Hop is therefore the
     /// one class whose batched step is NOT equal to the same number of one-frame steps -
     /// that is the original's own semi-implicit arithmetic (section 15.1 item 2: at speed 4
-    /// one dt = 2 step drops 4 cm where two dt = 1 steps drop 5 cm, one g apart), not an
+    /// 一次 dt = 2 上升 4 cm，两次 dt = 1 上升 5 cm), not an
     /// implementation shortcut. Step it at its 30 Hz tier, dt = 1.
     /// </para>
     /// <para>
@@ -117,13 +112,12 @@ namespace VRCKatamari.Pickup
     /// never measured - section 13 item M4. PROVISIONAL, pending M4.
     /// </description></item>
     /// <item><description>
-    /// Hop idle 0-255 frames (0-8.5 s uniform): the dip is settled (6 cm, item M3 closed),
+    /// Hop idle 0-255 frames (0-8.5 s uniform): 上跳高度为 6 cm（M3）,
     /// but the interval was only measured as "3.4-5 s or more" and the uniform draw is a
     /// reference constant. PROVISIONAL, the spacing half of item M3 / H1.
     /// </description></item>
     /// <item><description>
-    /// WhackAMole hold 60-210 frames (2-7 s): reference constant; the settle/descent half
-    /// was never measured (section 6.7.3 "fall not measured"). PROVISIONAL.
+    /// WhackAMole 出生和两端驻留 60–210 帧（2–7 s）：noclip 参考常量；初代实机未确认。
     /// </description></item>
     /// <item><description>
     /// SporadicWalk turn / burst / pause timers and the 7-candidate turn table: reference
@@ -150,9 +144,8 @@ namespace VRCKatamari.Pickup
     /// (section 15.1 is the research's ruling on all of them):
     /// (a) the hop keeps the original's semi-implicit recurrence and order (vy += g * dt,
     /// then y += vy * dt) instead of its closed form, because the closed form only equals the
-    /// recurrence at dt = 1; (b) WhackAMole's first segment rises, which section 15.1 item 3
-    /// confirms is what the original does; (c) SporadicWalk turns are a Turn phase rather
-    /// than an angle advanced inside Walk, same timing; (d) a refused forward step
+    /// recurrence at dt = 1; (b) SporadicWalk turns are a Turn phase rather
+    /// than an angle advanced inside Walk, same timing; (c) a refused forward step
     /// is reverted and the next direction is chosen from the per-frame mask instead of the
     /// in-line zone rays. Where a class ignores its phase the remarks say so.
     /// </para>
@@ -187,23 +180,19 @@ namespace VRCKatamari.Pickup
         // props: 12.37 / 16.09 / 165.0 cm).
         public const float WhackTravelPerHalfHeight = 3f;
 
-        // The visible rise is a quarter sine: pi/2 at pi/45 per frame = 22.5 frames =
-        // 0.75 s (measured 0.7 s).
-        public const float WhackRiseFrames = (Mathf.PI / 2f) / SineStepRadiansPerFrame;
+        // 下沉和升回各走四分之一正弦，22.5 帧 = 0.75 s。
+        public const float WhackSweepFrames = (Mathf.PI / 2f) / SineStepRadiansPerFrame;
 
         // Bob: 0-60 frames of idle before the swing starts.
         public const float BobIdleMaxFrames = 60f;
 
-        // WhackAMole: 60 + 150 * draw frames of hold at the reached end (2-7 s).
-        // PROVISIONAL: reference constant, settle/descent never measured.
+        // WhackAMole 出生及每次到达端点后驻留 60 + 150 * draw 帧（2–7 s）；参考常量。
         public const float WhackHoldMinFrames = 60f;
         public const float WhackHoldRangeFrames = 150f;
 
         // Hop: gravity is 1 cm per frame per frame, and the speed table is per size group.
-        // The dip is settled: the dt = 1 recurrence is -3, -5, -6, -6, -5, -3, 0 cm, i.e.
-        // 6.0 cm deep over 7 frames, and the measured 6.05 / 6.60 cm match it (section 15.1
-        // item 2 closed item M3; the old 8 cm "theory" was the continuous solution). Only the
-        // 0-8.5 s spacing stays PROVISIONAL.
+        // dt = 1 的 PS2 帧位移为 −3、−5、−6、−6、−5、−3、0 cm；项目世界跳高 6 cm。
+        // 两件观测到的 6.05 / 6.60 cm 为观景器振幅；0–8.5 s 间隔仍是参考常量。
         public const float HopGravityMetresPerFrame2 = MetresPerCentimetre;
         public const float HopIdleMaxFrames = 255f;
 
@@ -220,9 +209,7 @@ namespace VRCKatamari.Pickup
         public const float CloudsTurnMinFrames = 90f;
         public const float CloudsTurnRangeFrames = 600f;
 
-        // Yaw output is normalized into [0, 2*pi); a value this close to 2*pi is reported as
-        // 0 instead, so walking straight along -Z reads as model yaw 0 (section 15.1 item 1)
-        // rather than as the 2*pi end of the interval. 1e-4 rad = 0.006 degrees.
+        // [0, 2π) 偏航输出的接缝：距 2π 不到 1e-4 rad（约 0.006°）视为 0。
         public const float YawSeamRadians = 1e-4f;
 
         // A path's adjacent points must be at least 5 cm apart (LEVEL_FORMAT_V2 6.7.4);
@@ -245,12 +232,11 @@ namespace VRCKatamari.Pickup
         // [0] clockFrames
         public const int SwayStateFloats = 1;
 
-        // [0] clockFrames, [1] sweepStartFrames, [2] holdFrames, [3] rising (1/0),
-        // [4] done (1/0), [5] segmentIndex
-        public const int WhackAMoleStateFloats = 6;
+        // [0] clockFrames, [1] segmentStartFrames, [2] holdFrames, [3] segmentIndex
+        public const int WhackAMoleStateFloats = 4;
 
         // [0] clockFrames, [1] cycleStartFrames, [2] idleFrames, [3] cycleIndex,
-        // [4] offsetY (metres, negative while airborne), [5] velocityY (metres per frame),
+        // [4] offsetY、[5] velocityY：PS2 轴向，单位为米、米/帧；空中 offsetY 为负。
         // [6] airborne (1/0). The flag is explicit because velocityY passes through exactly
         // zero at the top of the arc (float32: -0.01 + 0.01), so it cannot double as the flag.
         public const int HopStateFloats = 7;
@@ -258,6 +244,7 @@ namespace VRCKatamari.Pickup
         // [0] clockFrames, [1] phase (0 walk / 1 pause / 2 turn), [2] timerFrames,
         // [3] extraTimerFrames, [4] axisX, [5] axisZ, [6] angleRad, [7] angleStepRad,
         // [8] angleTargetRad, [9] offsetX, [10] offsetZ, [11] lastStepX, [12] lastStepZ,
+        // 上述平移和方向状态保留 PS2 轴向，只有输出在项目世界。
         // [13] drawCount, [14] yawRad
         public const int WanderStateFloats = 15;
 
@@ -282,6 +269,37 @@ namespace VRCKatamari.Pickup
         private const int PhaseWalk = 0;
         private const int PhasePause = 1;
         private const int PhaseTurn = 2;
+
+        // --- 运动帧边界 --------------------------------------------------------
+
+        /// <summary>
+        /// PS2 的位置映射为 −0.01 倍；这里的长度已换成米，只取反三轴。
+        /// 显式旋转不用变号：点反射与旋转可交换。出生点及路径点也已由抽取转换。
+        /// </summary>
+        public static Vector3 OriginalMotionOffsetToWorld(float xM, float yM, float zM)
+        {
+            return new Vector3(-xM, -yM, -zM);
+        }
+
+        /// <summary>世界方向对应的原作偏航：π + atan2(−dx, −dz) ≡ atan2(dx, dz)。</summary>
+        public static float OriginalMotionYawFromWorldDirection(float dx, float dz)
+        {
+            return NormalizeYaw(Mathf.Atan2(dx, dz));
+        }
+
+        /// <summary>原作斜坡式 −atan2(dy, 平距) 使用项目世界方向时，dy 须取反。</summary>
+        public static float OriginalMotionPitchFromWorldDirection(float dx, float dy, float dz)
+        {
+            float horizontal = Mathf.Sqrt(dx * dx + dz * dz);
+            return horizontal > 0f ? Mathf.Atan2(dy, horizontal) : 0f;
+        }
+
+        private static Vector3 PathBodyPosition(float x, float y, float z, float halfHeightM)
+        {
+            // 路径点已在项目世界；只转换原作的中心相对路径位移 (0, −b, 0)。
+            Vector3 offset = OriginalMotionOffsetToWorld(0f, -halfHeightM, 0f);
+            return new Vector3(x, y + offset.y, z);
+        }
 
         // --- Phase and deterministic draws (D-12) ------------------------------
 
@@ -513,7 +531,7 @@ namespace VRCKatamari.Pickup
         /// </summary>
         /// <remarks>
         /// Section 12.3: angle += dt * pi/45 (90 frames = 3.0 s per cycle);
-        /// pos.y = spawnY + halfHeight * 0.15 * sin(angle). Measured: 1.61 / 1.35 cm
+        /// PS2 帧为 spawnY + halfHeight * 0.15 * sin(angle)，偏移换算后首段向下。Measured: 1.61 / 1.35 cm
         /// peak-to-peak with 2.83 / 3.07 s, i.e. +-0.15 h with h = half the model height
         /// (section 5.7), so Bob is NOT PROVISIONAL. Deviation from the pseudocode: while
         /// the idle runs the offset is written as 0 instead of being left untouched, which
@@ -535,7 +553,7 @@ namespace VRCKatamari.Pickup
             float angle = (state[0] - idleFrames) * SineStepRadiansPerFrame;
             float y = halfHeightM * BobAmplitudePerHalfHeight * Mathf.Sin(angle);
             if (!KatamariMath.IsFiniteFloat(y)) return false;
-            offsetM = new Vector3(0f, y, 0f);
+            offsetM = OriginalMotionOffsetToWorld(0f, y, 0f);
             return true;
         }
 
@@ -560,7 +578,7 @@ namespace VRCKatamari.Pickup
         /// Section 12.4: angle += dt * pi/45 (3.0 s per full cycle); euler.z = sin(angle) *
         /// 10 degrees. The original rotates the local down vector by the model matrix and
         /// puts it back about the bottom pivot, which reduces to R_z(e) * (sin e, -cos e, 0)
-        /// = (sin 2e, -cos 2e, 0). With h = half height the spawn-local offset is therefore
+        /// = (sin 2e, -cos 2e, 0). 以下是 PS2 偏移（h = 半高）；输出取负，roll 不变。
         /// </para>
         /// <code>
         /// x = h * sin(2e), y = h * (1 - cos(2e)), z = 0
@@ -600,53 +618,35 @@ namespace VRCKatamari.Pickup
                 if (!KatamariMath.IsFiniteFloat(x)) return false;
                 if (!KatamariMath.IsFiniteFloat(y)) return false;
             }
-            offsetM = new Vector3(x, y, 0f);
+            offsetM = OriginalMotionOffsetToWorld(x, y, 0f);
             eulerRad = new Vector3(0f, 0f, tilt);
             return true;
         }
 
         // --- WhackAMole ---------------------------------------------------------
 
-        /// <summary>
-        /// Initialises WhackAMole's state: [0] clock, [1] sweep start, [2] hold frames
-        /// (2-7 s drawn from the seed), [3] rising = 1, [4] done = 0, [5] segment index.
-        /// </summary>
+        /// <summary>出生在伸出位，首次下沉前先驻留。每次驻留由道具相位种子确定。</summary>
         public static void ResetWhackAMole(float[] state, int phaseSeed)
         {
             if (state == null || state.Length < WhackAMoleStateFloats) return;
             state[0] = 0f;
             state[1] = 0f;
-            state[2] = WhackHoldMinFrames + WhackHoldRangeFrames * Draw01(phaseSeed, 0);
-            state[3] = 1f;
-            state[4] = 0f;
-            state[5] = 0f;
+            state[2] = WhackHoldFrames(phaseSeed, 0);
+            state[3] = 0f;
         }
 
-        /// <summary>
-        /// WhackAMole (motionID 0x22, 8 props): one vertical quarter-sine sweep of
-        /// 3 * halfHeight in 0.75 s, then a 2-7 s hold at the end it reached, then back.
-        /// No X/Z motion, no rotation, no queries.
-        /// </summary>
+        private static float WhackHoldFrames(int phaseSeed, int segmentIndex)
+        {
+            return WhackHoldMinFrames + WhackHoldRangeFrames * Draw01(phaseSeed, segmentIndex);
+        }
+
+        /// <summary>WhackAMole（0x22）：伸出位驻留、下沉、地下驻留、升回，反复交替。</summary>
         /// <remarks>
-        /// <para>
-        /// Section 12.5: travel = h + (h - (-h)) = 3h = 1.5 model heights (measured
-        /// 12.37 / 16.09 / 165.0 cm), sweep pi/2 at pi/45 per frame = 22.5 frames = 0.75 s
-        /// (measured 0.7 s), hold 60 + 150 * draw frames (2-7 s). Rising uses
-        /// depth * (1 - sin(angle)), sinking depth * sin(angle), with angle from pi/2 to pi;
-        /// at both ends sin is 1 or 0, so the pose is continuous across a segment change.
-        /// </para>
-        /// <para>
-        /// The first segment rises: the pseudocode's initial state flip makes the first
-        /// segment sink, which contradicts the measured "0.7 s rise, then sits at the top"
-        /// and v2's loop = false. Same constants, opposite first direction; recorded here so
-        /// the choice is visible.
-        /// </para>
-        /// <para>
-        /// loop = false ends the machine after the first sweep and holds the reached end
-        /// (v2 uses this for "stop at the top"). loop = true alternates forever, as the
-        /// pseudocode does. PROVISIONAL: the hold distribution is a reference constant and
-        /// the descent was never measured.
-        /// </para>
+        /// noclip objects.ts:1823–1840：每段先等 60 + 150 * draw 帧，包括出生后的首段。
+        /// PS2 帧首段 state=0，y 偏移为 depth * (1 − sin θ)；返程为 depth * sin θ，
+        /// θ 从 π/2 到 π，depth 为 3 倍半高。经运动帧换算后首段向下、返程向上。
+        /// 作者显式设 loop=false 时仅播首段并停在末态；原作抽取的条目循环。
+        /// 驻留范围与往复来自参考源码，初代实机未确认。
         /// </remarks>
         public static bool TryStepWhackAMole(float[] state, float dtFrames, int phaseSeed,
             float halfHeightM, bool loop, out Vector3 offsetM, out Vector3 eulerRad)
@@ -657,46 +657,39 @@ namespace VRCKatamari.Pickup
             if (!IsValidStep(dtFrames)) return false;
             if (!IsNonNegativeFinite(halfHeightM)) return false;
 
-            state[0] = state[0] + dtFrames;
-
-            bool finished = state[4] >= 0.5f;
-            if (!finished)
+            float clock = state[0] + dtFrames;
+            if (!KatamariMath.IsFiniteFloat(clock)) return false;
+            float segmentStart = state[1];
+            float hold = state[2];
+            int segment = (int)state[3];
+            float segmentEnd = segmentStart + hold + WhackSweepFrames;
+            while (loop && clock >= segmentEnd)
             {
-                // A segment is one sweep plus the hold that follows it. Advance while the
-                // clock has passed whole segments.
-                float segmentStart = state[1];
-                float hold = state[2];
-                while (state[0] >= segmentStart + WhackRiseFrames + hold)
-                {
-                    segmentStart = segmentStart + WhackRiseFrames + hold;
-                    if (!loop)
-                    {
-                        state[4] = 1f;
-                        finished = true;
-                        break;
-                    }
-                    state[5] = state[5] + 1f;
-                    state[3] = 1f - state[3];
-                    hold = WhackHoldMinFrames + WhackHoldRangeFrames * Draw01(phaseSeed, (int)state[5]);
-                    state[1] = segmentStart;
-                    state[2] = hold;
-                }
-                if (!finished)
-                {
-                    state[1] = segmentStart;
-                    state[2] = hold;
-                }
+                if (!(segmentEnd > segmentStart)) return false;
+                segmentStart = segmentEnd;
+                segment++;
+                hold = WhackHoldFrames(phaseSeed, segment);
+                segmentEnd = segmentStart + hold + WhackSweepFrames;
             }
 
-            float elapsed = state[0] - state[1];
-            if (elapsed < 0f) elapsed = 0f;
-            if (elapsed > WhackRiseFrames) elapsed = WhackRiseFrames;
-            float angle = (Mathf.PI / 2f) + elapsed * SineStepRadiansPerFrame;
-            float sine = Mathf.Sin(angle);
+            float elapsed = clock - (segmentStart + hold);
             float depth = WhackTravelPerHalfHeight * halfHeightM;
-            float y = state[3] >= 0.5f ? depth * (1f - sine) : depth * sine;
-            if (!KatamariMath.IsFiniteFloat(y)) return false;
-            offsetM = new Vector3(0f, y, 0f);
+            if (!KatamariMath.IsFiniteFloat(depth)) return false;
+            bool sinking = (segment & 1) == 0;
+            float y;
+            if (elapsed <= 0f) y = sinking ? 0f : depth;
+            else if (elapsed >= WhackSweepFrames) y = sinking ? depth : 0f;
+            else
+            {
+                float sine = Mathf.Sin(Mathf.PI / 2f + elapsed * SineStepRadiansPerFrame);
+                y = depth * (sinking ? 1f - sine : sine);
+            }
+
+            state[0] = clock;
+            state[1] = segmentStart;
+            state[2] = hold;
+            state[3] = segment;
+            offsetM = OriginalMotionOffsetToWorld(0f, y, 0f);
             return true;
         }
 
@@ -720,23 +713,20 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// Hop (motionID 0x19, 18 props): wait 0-8.5 s, drop and fall back to the spawn
-        /// height under the original's gravity. Vertical only, no rotation.
+        /// Hop（0x19，18 件）：驻留 0–8.5 s，向上跳，再回到出生高度；不旋转。
         /// </summary>
         /// <remarks>
         /// <para>
         /// Section 12.6 and section 15.1 item 2: the original adds gravity first, then moves
         /// (vy += g * dt, then y += vy * dt), with vy starting at -speed (the size group's
         /// 4/6/7/12/15 cm per frame) and g = 1 cm/frame^2. At speed 4 and dt = 1 the height
-        /// is -3, -5, -6, -6, -5, -3, 0 cm: 6.0 cm deep, two frames at the bottom, back at the
-        /// spawn height after seven frames. That is what item M3 settled (measured 6.05 /
-        /// 6.60 cm); the older 8 cm "theory" was the continuous v^2/2g and the wrong baseline.
+        /// in PS2 coordinates is −3, −5, −6, −6, −5, −3, 0 cm. 项目世界最高 +6 cm（两帧），
+        /// 七帧落回出生高度；观景器样本振幅为 6.05 / 6.60 cm。
         /// </para>
         /// <para>
         /// The recurrence is kept instead of its closed form - v * t + g * t * (t + 1) / 2,
         /// because the two are only equal at dt = 1. One dt = 2 step is vy += 2g then
-        /// y += 2vy, which sits 4 cm below the spawn after two game frames where two dt = 1
-        /// steps sit 5 cm: exactly one g apart, as section 15.1 records. Hop's update tier is
+        /// y += 2vy，换算到项目世界后上升 4 cm；两次 dt=1 上升 5 cm。Hop's update tier is
         /// 30 Hz (LEVEL_FORMAT_V2 6.7.3), so its host step is dt = 1; a batched frame then
         /// reproduces the original's own hitched arithmetic instead of silently quantising it.
         /// </para>
@@ -807,7 +797,7 @@ namespace VRCKatamari.Pickup
             state[4] = y;
             state[5] = vy;
             state[6] = airborne ? 1f : 0f;
-            offsetM = new Vector3(0f, y, 0f);
+            offsetM = OriginalMotionOffsetToWorld(0f, y, 0f);
             return true;
         }
 
@@ -820,7 +810,7 @@ namespace VRCKatamari.Pickup
         /// [13] draw count, [14] yaw.
         /// </summary>
         /// <remarks>
-        /// Section 12.7's init: the initial direction is world -X (not "forward"), the
+        /// Section 12.7's init: PS2 初始方向 −X，转换后为项目世界 +X；the
         /// first random turn is 120 + 570 * draw frames away, and the walk/pause burst
         /// counter starts at 30 frames.
         /// </remarks>
@@ -856,7 +846,8 @@ namespace VRCKatamari.Pickup
             state[11] = 0f;
             state[12] = 0f;
             state[13] = 1f;
-            state[14] = 0f;
+            Vector3 direction = OriginalMotionOffsetToWorld(state[4], 0f, state[5]);
+            state[14] = OriginalMotionYawFromWorldDirection(direction.x, direction.z);
         }
 
         /// <summary>
@@ -867,8 +858,8 @@ namespace VRCKatamari.Pickup
         /// <para>
         /// Section 12.7. speedMps is the resolved type speed (speedTable 1 cm/frame is the
         /// measured 30.3 cm/s). The offset returned is in WORLD axes from spawnPos, with
-        /// world yaw, because the original walks along world -X and yaws with a world
-        /// atan2. Ground following, the zone test and the "does the next step stay in my
+        /// world yaw. 运动状态保留 PS2 轴向，返回时才换至世界 +Y 向上的帧。
+        /// Ground following, the zone test and the "does the next step stay in my
         /// zone" rays belong to the host: it reports a refused step through
         /// forwardBlocked, and offers the candidates it accepts as bits in
         /// allowedTurnMask (bit 0..6 = +45, -45, +90, -90, +135, -135, 180 degrees, tried
@@ -882,12 +873,8 @@ namespace VRCKatamari.Pickup
         /// observed is the net speed of 20-25 cm/s and the instantaneous 30.3 (section 4.1).
         /// </para>
         /// <para>
-        /// Facing is the formula section 15.1 item 1 settled: yaw = pi + atan2(vx, vz) with v
-        /// the velocity direction, for walking and turning alike (the reference implementation
-        /// writes TAU/2 + atan2 and uses it in both places). The binding convention that comes
-        /// with it: v = (0, 0, -1) gives atan2(0, -1) + pi = 2*pi, so MODEL ZERO YAW MUST FACE
-        /// -Z. A prefab authored +Z forward walks backwards; that binding is item S1 in
-        /// section 15.2, and the tests pin it.
+        /// 原作偏航用 PS2 速度求 π + atan2(vx, vz)，等价于用世界速度求 atan2(vx, vz)。
+        /// 世界 +Z 对应模型偏航 0；模型实际可见前端需独立验证。
         /// </para>
         /// </remarks>
         public static bool TryStepSporadicWalk(float[] state, float dtFrames, int phaseSeed,
@@ -940,7 +927,7 @@ namespace VRCKatamari.Pickup
                 state[11] = 0f;
                 state[12] = 0f;
                 ChooseTurn(state, phaseSeed, allowedTurnMask);
-                offsetM = new Vector3(state[9], 0f, state[10]);
+                offsetM = OriginalMotionOffsetToWorld(state[9], 0f, state[10]);
                 if (!ignoreYaw) eulerRad = new Vector3(0f, state[14], 0f);
                 if (!KatamariMath.IsFiniteVector(offsetM) ||
                     !KatamariMath.IsFiniteVector(eulerRad))
@@ -992,8 +979,7 @@ namespace VRCKatamari.Pickup
                 }
             }
 
-            // Velocity is the base direction rotated by the current turn angle, in world
-            // axes; the axis is unit length by construction, and the rotation preserves it.
+            // 在 PS2 轴向里旋转单位基向量；旋转与点反射可交换。
             float angle = state[6];
             float axisX = state[4];
             float axisZ = state[5];
@@ -1016,16 +1002,14 @@ namespace VRCKatamari.Pickup
 
             if (!ignoreYaw)
             {
-                // Section 15.1 item 1: pi + atan2(vx, vz), one formula for walking and
-                // turning alike, then normalized into [0, 2*pi) so that v = (0, 0, -1) is 0
-                // (model zero yaw faces -Z) instead of the interval's 2*pi end.
-                float yaw = NormalizeYaw(Mathf.PI + Mathf.Atan2(velocityX, velocityZ));
+                Vector3 direction = OriginalMotionOffsetToWorld(velocityX, 0f, velocityZ);
+                float yaw = OriginalMotionYawFromWorldDirection(direction.x, direction.z);
                 if (!KatamariMath.IsFiniteFloat(yaw)) return false;
                 state[14] = yaw;
                 eulerRad = new Vector3(0f, yaw, 0f);
             }
 
-            offsetM = new Vector3(state[9], 0f, state[10]);
+            offsetM = OriginalMotionOffsetToWorld(state[9], 0f, state[10]);
             if (!KatamariMath.IsFiniteVector(offsetM)) return false;
             return true;
         }
@@ -1237,10 +1221,9 @@ namespace VRCKatamari.Pickup
         /// <remarks>
         /// <para>
         /// Sections 12.9 and 13 M7. The prop starts at the polyline point nearest spawnPos
-        /// (not index 0), then walks at speedMps, sinking by halfHeightM so its bounding
-        /// box's bottom sits on the path (pos = point - (0, b, 0)). Yaw is
-        /// PI + atan2(dx, dz) of the current segment, eased from the previous segment's
-        /// heading across the current segment's length, which is the pseudocode's
+        /// (not index 0), then walks at speedMps. 原作中心在路径上方半高（PS2：point − (0,b,0)）。
+        /// 偏航按项目世界段方向 atan2(dx,dz) 求值，从上一段朝向缓动到当前段；
+        /// 缓动跨越当前段长度，which is the pseudocode's
         /// "turn over d / speed frames" written as a function of distance instead of time.
         /// closed = true wraps at the end (the original's pathIndex % pointCount);
         /// closed = false stops at the last point.
@@ -1284,7 +1267,7 @@ namespace VRCKatamari.Pickup
             float yaw = NormalizeYaw(EaseAngle(previousYaw, targetYaw, fraction));
             if (!KatamariMath.IsFiniteFloat(yaw)) return false;
 
-            positionM = new Vector3(sample.x, sample.y - halfHeightM, sample.z);
+            positionM = PathBodyPosition(sample.x, sample.y, sample.z, halfHeightM);
             if (!KatamariMath.IsFiniteVector(positionM)) return false;
             eulerRad = new Vector3(0f, yaw, 0f);
             return true;
@@ -1297,9 +1280,8 @@ namespace VRCKatamari.Pickup
         /// <remarks>
         /// Section 12.9: same movement as PathCollision, plus adjustPitch with
         /// angleTarget = fromPathSlope and the pitch eased over 0.25 * d / speed frames,
-        /// which here is the first quarter of the segment's length. Pitch is about X, with
-        /// the sign Unity uses for "nose down on a descent": -atan2(dy, horizontal).
-        /// PROVISIONAL: easing and sign are unmeasured (M7).
+        /// which here is the first quarter of the segment's length. pitch = +atan2(世界 dy, 平距)。
+        /// 角度与缓动未在观景器逐帧复核（M7）。
         /// </remarks>
         public static bool TryStepSlopingPath(float[] state, float dtFrames,
             Vector3 spawnPositionM, float[] pathPointsM, int pointCount, float speedMps,
@@ -1339,7 +1321,7 @@ namespace VRCKatamari.Pickup
             if (!KatamariMath.IsFiniteFloat(yaw)) return false;
             if (!KatamariMath.IsFiniteFloat(pitch)) return false;
 
-            positionM = new Vector3(sample.x, sample.y - halfHeightM, sample.z);
+            positionM = PathBodyPosition(sample.x, sample.y, sample.z, halfHeightM);
             if (!KatamariMath.IsFiniteVector(positionM)) return false;
             eulerRad = new Vector3(pitch, yaw, 0f);
             return true;
@@ -1391,7 +1373,7 @@ namespace VRCKatamari.Pickup
                 out sample, out segmentIndex, out fraction))
                 return false;
 
-            positionM = new Vector3(sample.x, sample.y - halfHeightM, sample.z);
+            positionM = PathBodyPosition(sample.x, sample.y, sample.z, halfHeightM);
             if (!KatamariMath.IsFiniteVector(positionM)) return false;
             return true;
         }
@@ -1520,8 +1502,7 @@ namespace VRCKatamari.Pickup
             int to = NextPointIndex(segmentIndex, pointCount, closed) * 3;
             float dx = points[to] - points[from];
             float dz = points[to + 2] - points[from + 2];
-            // Section 12.9: euler.y = PI + atan2(dx, dz).
-            return Mathf.PI + Mathf.Atan2(dx, dz);
+            return OriginalMotionYawFromWorldDirection(dx, dz);
         }
 
         private static float SegmentPitch(float[] points, int pointCount, bool closed,
@@ -1532,9 +1513,7 @@ namespace VRCKatamari.Pickup
             float dx = points[to] - points[from];
             float dy = points[to + 1] - points[from + 1];
             float dz = points[to + 2] - points[from + 2];
-            float horizontal = Mathf.Sqrt(dx * dx + dz * dz);
-            if (!(horizontal > 0f)) return 0f;
-            return -Mathf.Atan2(dy, horizontal);
+            return OriginalMotionPitchFromWorldDirection(dx, dy, dz);
         }
 
         private static float EaseAngle(float fromYaw, float toYaw, float fraction)
@@ -1563,8 +1542,7 @@ namespace VRCKatamari.Pickup
             return true;
         }
 
-        // Samples the polyline at distanceM. The result's y is the path's own y: the
-        // caller subtracts halfHeightM (the original's pos = point - (0, b, 0)).
+        // 采样已换到项目世界的路径点；道具中心偏移只由 PathBodyPosition 应用。
         private static bool TrySamplePath(float[] points, int pointCount, bool closed,
             float distanceM, out Vector3 sample, out int segmentIndex, out float fraction)
         {
@@ -1797,7 +1775,7 @@ namespace VRCKatamari.Pickup
             float x = pathPointsM[from] + (pathPointsM[to] - pathPointsM[from]) * along;
             float y = pathPointsM[from + 1] + (pathPointsM[to + 1] - pathPointsM[from + 1]) * along;
             float z = pathPointsM[from + 2] + (pathPointsM[to + 2] - pathPointsM[from + 2]) * along;
-            positionM = new Vector3(x, y - halfHeightM, z);
+            positionM = PathBodyPosition(x, y, z, halfHeightM);
             if (kind == PathKindBackAndForth) return true;
 
             int yawFrom = lengths + segments;

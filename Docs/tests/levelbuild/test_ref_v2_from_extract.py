@@ -608,7 +608,12 @@ class RealExtractionTests(unittest.TestCase):
         self.assertEqual(hop["updatesPerSecond"], 30)     # §6.7.5: displacement decides
         whack = [motion for motion in motions if motion["class"] == "whack_a_mole"][0]
         self.assertEqual(whack["updatesPerSecond"], 30)
-        self.assertFalse(whack["loop"])                   # "stop at the top"
+        self.assertEqual(whack["provenance"]["moveType"], 5)
+        self.assertEqual(whack["provenance"]["motionID"], 0x22)
+        self.assertEqual(whack["provenance"]["action"], "Misc")
+        self.assertTrue(whack["loop"])
+        users = [prop for prop in document["props"] if prop.get("motion") == whack["id"]]
+        self.assertEqual(len(users), 8)
 
     def test_paths_keep_their_shape_and_speed(self):
         paths = self.document["paths"]

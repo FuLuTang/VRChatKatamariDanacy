@@ -474,16 +474,37 @@ class ReferenceTrajectoryTests(unittest.TestCase):
         self.assertAlmostEqual(max(ys) - min(ys), 0.030 * full_height,
                                delta=0.01 * full_height)
 
-    def test_hop_dips_the_measured_six_centimetres_and_comes_back(self):
-        # 12.6 / 15.1 item 2: at speed 4 the dt = 1 recurrence is -3, -5, -6, -6, -5, -3, 0 cm,
-        # i.e. 6.0 cm deep, and the measured dips are 6.05 / 6.60 cm.  The prop waits 0-8.5 s
-        # between hops, so a 20 s window is guaranteed to contain one.
+    def test_hop_rises_six_centimetres_above_spawn_and_comes_back(self):
+        # PS2 七帧偏移经过三轴点反射；只比峰峰值无法区分上跳与下陷。
         item_id, _row = self.example("hop")
         _payload, positions, _rotations = self.samples(item_id, 20.0)
+        start_y = positions[0][1]
         ys = [point[1] for point in positions]
-        depth = max(ys) - min(ys)
-        self.assertGreater(depth, 0.055)
-        self.assertLess(depth, 0.075)
+        self.assertAlmostEqual(min(ys), start_y, delta=0.0002)
+        self.assertAlmostEqual(max(ys) - start_y, 0.06, delta=0.0002)
+        self.assertIn(start_y, ys[255:])
+
+    def test_whack_sinks_on_world_y_even_when_spawn_is_tilted_and_returns(self):
+        item_id = "small_fiddler_crab_046"
+        _payload, positions, rotations = self.samples(item_id, 30.0)
+        x, y, z = positions[0]
+        depth = 3.0 * self.rows[item_id]["halfHeightM"]
+        self.assertEqual(set(positions[:60]), {positions[0]})
+        self.assertEqual({(point[0], point[2]) for point in positions}, {(x, z)})
+        self.assertEqual(len(set(rotations)), 1)
+        self.assertGreater(abs(rotations[0][2]), 0.5)  # 出生绕 Z 倾倒，不能把它写回单位旋转
+        ys = [point[1] for point in positions]
+        self.assertEqual(max(ys), y)
+        self.assertAlmostEqual(y - min(ys), depth, delta=0.0002)
+        first_bottom = ys.index(min(ys))
+        next_top = ys.index(y, first_bottom)
+        self.assertIn(min(ys), ys[next_top:])
+
+    def test_back_and_forth_keeps_spawn_rotation_while_moving_on_the_path(self):
+        _payload, positions, rotations = self.samples("fiddler_crab_034", 3.0)
+        self.assertGreater(math.dist(positions[0], positions[-1]), 0.1)
+        self.assertEqual(len(set(rotations)), 1)
+        self.assertAlmostEqual(self.yaw(rotations[0]), -math.pi / 2, delta=1e-4)
 
     def test_a_path_prop_walks_at_the_recorded_24_4_centimetres_per_second(self):
         item_id, row = self.example("path_collision")

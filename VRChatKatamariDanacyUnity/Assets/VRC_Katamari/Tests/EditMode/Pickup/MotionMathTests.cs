@@ -48,6 +48,34 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(expected.z, actual.z, PositionTolerance, what + " (z)");
         }
 
+        [Test]
+        public void OriginalMotionFrameReflectsAllThreeAxesAfterScalingToMetres()
+        {
+            // 非对称输入区别三轴点反射与绕 X 转 180°，也能抓到重复的厘米换算。
+            Vector3 offset = MotionMath.OriginalMotionOffsetToWorld(1f, -2f, 3f);
+            Assert.AreEqual(-1f, offset.x, 0f);
+            Assert.AreEqual(2f, offset.y, 0f);
+            Assert.AreEqual(-3f, offset.z, 0f);
+        }
+
+        [TestCase(0f, 1f, 0f)]
+        [TestCase(1f, 0f, Mathf.PI / 2f)]
+        [TestCase(0f, -1f, Mathf.PI)]
+        [TestCase(-1f, 0f, 3f * Mathf.PI / 2f)]
+        [TestCase(3f, 4f, 0.6435011f)]
+        public void OriginalYawUsesTheWorldDirectionWithoutASecondHalfTurn(float dx, float dz, float expected)
+        {
+            Assert.AreEqual(expected, MotionMath.OriginalMotionYawFromWorldDirection(dx, dz), 1e-6f);
+        }
+
+        [TestCase(0.5f, 0.4636476f)]
+        [TestCase(-0.5f, -0.4636476f)]
+        public void OriginalPitchFlipsTheVerticalDirectionButNotThePlanarLength(float worldDy, float expected)
+        {
+            Assert.AreEqual(expected, MotionMath.OriginalMotionPitchFromWorldDirection(0.6f, worldDy, 0.8f),
+                1e-6f);
+        }
+
         // --- Phase (D-12) -------------------------------------------------------
 
         [Test]
@@ -136,7 +164,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void BobFloatsAtThreeSecondsWithTheMeasuredAmplitude()
         {
-            // Sections 12.3 and 5.7: pos.y = halfHeight * 0.15 * sin(angle), angle +=
+            // Sections 12.3 and 5.7: PS2 y = halfHeight * 0.15 * sin(angle), angle +=
             // dt * pi/45 -> 90 frames = 3.0 s per cycle. Measured on the spider (full height
             // 10.7 cm, so half height 5.35 cm): +-0.81 cm = 0.15 * 5.35 cm = 0.008025 m,
             // near the observed +-0.68/+-0.81 cm and the 2.83/3.07 s periods.
@@ -155,19 +183,19 @@ namespace VRCKatamari.Tests
             // The swing needs 22.5 frames to reach sin = 1 (pi/2 at pi/45 per frame).
             Assert.IsTrue(MotionMath.TryStepBob(state, idle * 0.5f + 22.5f, halfHeightM,
                 out offset, out euler));
-            Assert.AreEqual(0.15f * halfHeightM, offset.y, 1e-6f);
-            Assert.AreEqual(0.008025f, offset.y, 1e-6f);
+            Assert.AreEqual(-0.15f * halfHeightM, offset.y, 1e-6f);
+            Assert.AreEqual(-0.008025f, offset.y, 1e-6f);
             Assert.AreEqual(0f, offset.x, 0f);
             Assert.AreEqual(0f, offset.z, 0f);
             AssertOffset(NoRotation, euler, "bob has no rotation");
 
             // One cycle later (90 frames = 3 s) it is at the same height.
             Assert.IsTrue(MotionMath.TryStepBob(state, 90f, halfHeightM, out offset, out euler));
-            Assert.AreEqual(0.008025f, offset.y, 1e-6f);
-
-            // On the other side of the swing it is at the bottom: sin(-pi/2) = -1.
-            Assert.IsTrue(MotionMath.TryStepBob(state, 45f, halfHeightM, out offset, out euler));
             Assert.AreEqual(-0.008025f, offset.y, 1e-6f);
+
+            // 半周期之后 PS2 正弦为 −1，世界偏移在顶点。
+            Assert.IsTrue(MotionMath.TryStepBob(state, 45f, halfHeightM, out offset, out euler));
+            Assert.AreEqual(0.008025f, offset.y, 1e-6f);
         }
 
         // --- Sway ---------------------------------------------------------------
@@ -176,7 +204,7 @@ namespace VRCKatamari.Tests
         public void SwayMovesOnTheEllipseOfHalfTheModelHeight()
         {
             // Section 12.4: euler.z = sin(angle) * 10 degrees with angle += dt * pi/45
-            // (90 frames = 3.0 s per cycle). The spawn-local offset is
+            // (90 frames = 3.0 s per cycle). 以下为 PS2 偏移，世界输出取负：
             //   x = h*sin(2e), y = h*(1 - cos(2e)),  h = modelBboxM[1] / 2.
             // At the swing's end e = 10 degrees, so x = h*sin(20) = 0.342 h and
             // y = h*(1-cos20) = 0.0603 h; the peak-to-peak is 0.684 h = 0.342 of the full
@@ -197,20 +225,20 @@ namespace VRCKatamari.Tests
                 out offset, out euler));
 
             Assert.AreEqual(MotionMath.SwayAngleRadians, euler.z, 1e-5f);   // +10 degrees
-            Assert.AreEqual(0.4112792f, offset.x, 1e-4f);   // 1.2025 * sin(20) = 41.13 cm
-            Assert.AreEqual(0.0725196f, offset.y, 1e-4f);   // 1.2025 * (1-cos20) = 7.25 cm
+            Assert.AreEqual(-0.4112792f, offset.x, 1e-4f);   // 1.2025 * sin(20) = 41.13 cm
+            Assert.AreEqual(-0.0725196f, offset.y, 1e-4f);  // 世界向下 7.25 cm
             Assert.AreEqual(0f, offset.z, 0f);
             Assert.AreEqual(0f, euler.x, 0f);
             Assert.AreEqual(0f, euler.y, 0f);
 
             // The doc's warning, as an assertion: a naive "rotate +-10 degrees about the
             // pivot" gives 2h*sin(10) = 41.7 cm of horizontal travel, half the truth.
-            Assert.AreEqual(0.8225585f, 2f * offset.x, 1e-4f);
-            Assert.Greater(offset.x, 0.4f);
+            Assert.AreEqual(0.8225585f, -2f * offset.x, 1e-4f);
+            Assert.Less(offset.x, -0.4f);
 
             // A full 3 s cycle later it is back at the same point.
             Assert.IsTrue(MotionMath.TryStepSway(state, 90f, halfHeightM, true, out offset, out euler));
-            Assert.AreEqual(0.4112792f, offset.x, 1e-4f);
+            Assert.AreEqual(-0.4112792f, offset.x, 1e-4f);
             Assert.AreEqual(MotionMath.SwayAngleRadians, euler.z, 1e-5f);
 
             // Half a swing later (22.5 frames) the tilt has crossed zero and the offset is
@@ -238,100 +266,92 @@ namespace VRCKatamari.Tests
         // --- WhackAMole ---------------------------------------------------------
 
         [Test]
-        public void WhackAMoleRisesThreeHalfHeightsIn075Seconds()
+        public void WhackAMoleWaitsAtSpawnThenSinksThreeHalfHeightsIn075Seconds()
         {
-            // Section 12.5: travel = 3h (1.5 model heights), the rise is a quarter sine, and
-            // pi/2 at pi/45 per frame is 22.5 frames = 0.75 s (measured 0.7 s). The pose is
-            //   rising:  y = 3h * (1 - sin(angle)),  angle from pi/2 to pi.
-            // So y goes from 0 to 3h as angle goes from pi/2 to pi, and at the halfway point
-            // angle = 3pi/4, sin = 0.7071, y = 3h * 0.2929.
             const float halfHeightM = 0.05f;
-            int seed = 7;
+            const int seed = 7;
             float[] state = new float[MotionMath.WhackAMoleStateFloats];
             MotionMath.ResetWhackAMole(state, seed);
-
+            float hold = 60f + 150f * MotionMath.Phase01(seed);
             Vector3 offset;
             Vector3 euler;
-            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 0f, seed, halfHeightM, true,
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, hold - 1f, seed, halfHeightM, true,
                 out offset, out euler));
-            Assert.AreEqual(0f, offset.y, 1e-6f);   // starts buried
+            Assert.AreEqual(0f, offset.y, 0f);
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 1f, seed, halfHeightM, true,
+                out offset, out euler));
+            Assert.AreEqual(0f, offset.y, 1e-6f);
+
+            // θ = 3π/4：PS2 位移 +0.15 * (1 − sin θ)，世界向下。
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 11.25f, seed, halfHeightM, true,
+                out offset, out euler));
+            Assert.AreEqual(-0.0439340f, offset.y, 1e-5f);
             AssertOffset(NoRotation, euler, "whack-a-mole does not rotate");
-
             Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 11.25f, seed, halfHeightM, true,
                 out offset, out euler));
-            Assert.AreEqual(0.0439340f, offset.y, 1e-5f);   // 0.15 * (1 - sin 3pi/4)
-
-            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 11.25f, seed, halfHeightM, true,
-                out offset, out euler));
-            Assert.AreEqual(0.15f, offset.y, 1e-5f);        // 3h = 1.5 * 10 cm
-            Assert.AreEqual(MotionMath.WhackRiseFrames / MotionMath.GameFramesPerSecond, 0.75f, 1e-5f);
-
-            // Then it holds at the top for 2-7 s: the hold is 60 + 150 * phase frames.
-            float hold = 60f + 150f * MotionMath.Phase01(seed);
-            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, hold * 0.5f, seed, halfHeightM, true,
-                out offset, out euler));
-            Assert.AreEqual(0.15f, offset.y, 1e-5f);
+            Assert.AreEqual(-0.15f, offset.y, 1e-5f);
+            Assert.AreEqual(0.75f, MotionMath.WhackSweepFrames / MotionMath.GameFramesPerSecond, 1e-5f);
         }
 
         [Test]
-        public void WhackAMoleSinksBackAfterItsHoldWhenLooping()
+        public void WhackAMoleHoldsRisesAndRepeatsWithSeededEndPointDelays()
         {
-            // Section 12.5 alternates rising and sinking segments. One hold after the first
-            // rise, the next segment starts at sin(pi/2) = 1 so the pose is continuous at the
-            // top, then reaches the bottom 22.5 frames later at sin(pi) = 0.
             const float halfHeightM = 0.05f;
-            int seed = 7;
+            const int seed = 7;
             float[] state = new float[MotionMath.WhackAMoleStateFloats];
             MotionMath.ResetWhackAMole(state, seed);
-            float hold = 60f + 150f * MotionMath.Phase01(seed);
-            float sweepAndHold = 22.5f + hold;
-
+            float initialHold = 60f + 150f * MotionMath.Phase01(seed);
             Vector3 offset;
             Vector3 euler;
-            // Reach the end of the first sweep, then the end of the hold.
-            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 22.5f, seed, halfHeightM, true,
-                out offset, out euler));
-            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, hold, seed, halfHeightM, true,
-                out offset, out euler));
-            Assert.AreEqual(0.15f, offset.y, 1e-5f);
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, initialHold + 22.5f, seed,
+                halfHeightM, true, out offset, out euler));
+            Assert.AreEqual(-0.15f, offset.y, 1e-5f);
 
-            // The sinking segment begins at the top and ends at the bottom.
-            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 22.5f, seed, halfHeightM, true,
+            float undergroundHold = state[2];
+            Assert.That(undergroundHold, Is.InRange(60f, 210f));
+            Assert.AreNotEqual(initialHold, undergroundHold);
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, undergroundHold, seed, halfHeightM, true,
                 out offset, out euler));
-            Assert.AreEqual(0f, offset.y, 1e-4f);
-            Assert.Greater(sweepAndHold, 0f);
+            Assert.AreEqual(-0.15f, offset.y, 1e-5f);
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 11.25f, seed, halfHeightM, true,
+                out offset, out euler));
+            Assert.AreEqual(-0.1060660f, offset.y, 1e-5f); // −0.15 * sin(3π/4)
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 11.25f, seed, halfHeightM, true,
+                out offset, out euler));
+            Assert.AreEqual(0f, offset.y, 1e-5f);
+
+            float raisedHold = state[2];
+            Assert.That(raisedHold, Is.InRange(60f, 210f));
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, raisedHold, seed, halfHeightM, true,
+                out offset, out euler));
+            Assert.AreEqual(0f, offset.y, 1e-5f);
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 11.25f, seed, halfHeightM, true,
+                out offset, out euler));
+            Assert.AreEqual(-0.0439340f, offset.y, 1e-5f);
         }
 
         [Test]
-        public void WhackAMoleStaysAtTheTopWhenLoopIsFalse()
+        public void WhackAMoleStaysBuriedForAuthoredOneShot()
         {
-            // v2 uses loop = false for "stop at the top" (LEVEL_FORMAT_V2 6.7.2/6.7.3).
             const float halfHeightM = 0.05f;
-            int seed = 7;
+            const int seed = 7;
             float[] state = new float[MotionMath.WhackAMoleStateFloats];
             MotionMath.ResetWhackAMole(state, seed);
-            Vector3 offset = Vector3.zero;
+            Vector3 offset;
             Vector3 euler;
-            for (int i = 0; i < 500; i++)
-            {
-                Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 1f, seed, halfHeightM, false,
-                    out offset, out euler));
-                Assert.LessOrEqual(offset.y, 0.15f + 1e-5f);
-            }
-            Assert.AreEqual(0.15f, offset.y, 1e-5f);
+            Assert.IsTrue(MotionMath.TryStepWhackAMole(state, 500f, seed, halfHeightM, false,
+                out offset, out euler));
+            Assert.AreEqual(-0.15f, offset.y, 1e-5f);
         }
 
         // --- Hop ----------------------------------------------------------------
 
         [Test]
-        public void HopDipsSixCentimetresInTheOriginalsSevenFrameArc()
+        public void HopRisesSixCentimetresInTheOriginalsSevenFrameArc()
         {
             // Sections 12.6 and 15.1 item 2: the original adds gravity first, then moves
             // (vy += g * dt; y += vy * dt) with vy starting at -4 cm/frame and g = 1
-            // cm/frame^2, so at dt = 1 the height is -3, -5, -6, -6, -5, -3, 0 cm: 6.0 cm
-            // deep, two frames at the bottom, back at the spawn height after 7 frames.
-            // Item M3 settled this: 6 cm is the truth (measured 6.05 / 6.60 cm match it) and
-            // the older 8 cm was the continuous v^2/2g solution, i.e. the wrong baseline.
+            // PS2 的离散 y 为 −3、−5、−6、−6、−5、−3、0 cm，换算后在 +6 cm 处两帧。
             int seed = 0;
             float[] state = new float[MotionMath.HopStateFloats];
             MotionMath.ResetHop(state, seed);
@@ -345,28 +365,28 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                     out offset, out euler));
                 frames = frames + 1;
-                if (offset.y < 0f) break;
+                if (offset.y > 0f) break;
                 AssertOffset(NoOffset, offset, "hop rests while idle");
                 Assert.Less(frames, 300);
             }
             AssertOffset(NoRotation, euler, "hop has no rotation");
-            Assert.AreEqual(-0.03f, offset.y, 1e-6f);   // vy = -4 + 1 = -3 cm/frame
+            Assert.AreEqual(0.03f, offset.y, 1e-6f);   // vy = -4 + 1 = -3 cm/frame
 
             Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.05f, offset.y, 1e-6f);
+            Assert.AreEqual(0.05f, offset.y, 1e-6f);
             Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.06f, offset.y, 1e-6f);   // the 6 cm dip
+            Assert.AreEqual(0.06f, offset.y, 1e-6f);   // the 6 cm jump
             Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.06f, offset.y, 1e-6f);   // two frames at the bottom
+            Assert.AreEqual(0.06f, offset.y, 1e-6f);   // two frames at the apex
             Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.05f, offset.y, 1e-6f);
+            Assert.AreEqual(0.05f, offset.y, 1e-6f);
             Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.03f, offset.y, 1e-6f);
+            Assert.AreEqual(0.03f, offset.y, 1e-6f);
             Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
             Assert.AreEqual(0f, offset.y, 1e-6f);       // back at the spawn height
@@ -401,7 +421,7 @@ namespace VRCKatamari.Tests
             }
             Assert.IsTrue(MotionMath.TryStepHop(two, 2f, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.04f, offset.y, 1e-6f);
+            Assert.AreEqual(0.04f, offset.y, 1e-6f);
 
             for (int i = 0; i < idleTicks - 1; i++)
             {
@@ -410,10 +430,10 @@ namespace VRCKatamari.Tests
             }
             Assert.IsTrue(MotionMath.TryStepHop(ones, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.03f, offset.y, 1e-6f);
+            Assert.AreEqual(0.03f, offset.y, 1e-6f);
             Assert.IsTrue(MotionMath.TryStepHop(ones, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.05f, offset.y, 1e-6f);
+            Assert.AreEqual(0.05f, offset.y, 1e-6f);
         }
 
         [Test]
@@ -455,19 +475,17 @@ namespace VRCKatamari.Tests
         // --- SporadicWalk -------------------------------------------------------
 
         [Test]
-        public void SporadicWalkStartsAlongNegativeXAtItsTypeSpeed()
+        public void SporadicWalkStartsAlongWorldPositiveXAtItsTypeSpeed()
         {
-            // Section 12.7: the initial direction is world -X (not "forward"), at the type
-            // speed. speedTable 1 = 1 cm/frame = 30.3 cm/s measured, so one frame at
-            // 0.303 m/s covers 0.303 / 30 = 0.0101 m. The yaw is pi + atan2(-1, 0) = pi/2
-            // (section 15.1 item 1).
+            // 原作选择 PS2 −X，偏航 π + atan2(−1,0) = π/2。
+            // 一帧 0.303 / 30 m 的位移换算后应朝世界 +X。
             float[] state = new float[MotionMath.WanderStateFloats];
             MotionMath.ResetSporadicWalk(state, 12345);
             Vector3 offset;
             Vector3 euler;
             Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
                 out offset, out euler));
-            Assert.AreEqual(-0.303f / 30f, offset.x, 1e-6f);
+            Assert.AreEqual(0.303f / 30f, offset.x, 1e-6f);
             Assert.AreEqual(0f, offset.z, 0f);
             Assert.AreEqual(0f, offset.y, 0f);
             Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);
@@ -587,7 +605,7 @@ namespace VRCKatamari.Tests
                 out offset, out euler));
             // The new base direction is the current one; after 12 frames the turn is done and
             // the walk continues along the previous direction rotated by -90 degrees:
-            // (-1, 0) rotated -90 degrees is (0, -1) in x/z, i.e. straight along -Z.
+            // PS2 (−1,0) 转 −90° 后为 (0,−1)，世界方向为 +Z。
             for (int i = 0; i < 12; i++)
             {
                 Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
@@ -597,36 +615,27 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
                 out offset, out euler));
             Assert.AreEqual(0f, offset.x - previous.x, 1e-4f);
-            Assert.AreEqual(-0.303f / 30f, offset.z - previous.z, 1e-4f);
-            // Section 15.1 item 1: walking -Z is model yaw 0. The formula lands on the 2*pi
-            // end of the interval and the library folds that seam to 0, so the emitted value
-            // is exactly 0 and euler.y always lives in [0, 2*pi).
+            Assert.AreEqual(0.303f / 30f, offset.z - previous.z, 1e-4f);
+            // 世界 +Z 是零偏航，微小浮点误差不会让结果贴在 2π。
             Assert.AreEqual(0f, euler.y, 1e-6f);
             Assert.GreaterOrEqual(euler.y, 0f);
             Assert.Less(euler.y, 2f * Mathf.PI);
         }
 
         [Test]
-        public void WalkFacingIsPiPlusAtan2AndZeroYawFacesMinusZ()
+        public void WalkFacingTracksTheConvertedVelocityThroughATurn()
         {
-            // Section 15.1 item 1: the reference implementation has ONE facing formula,
-            // euler.y = TAU/2 + atan2(vx, vz) = pi + atan2(vx, vz), used for walking and
-            // turning alike and fed the velocity direction. Its binding convention is that
-            // v = (0, 0, -1) gives atan2(0, -1) + pi = 2*pi, normalized to 0, i.e. MODEL ZERO
-            // YAW FACES -Z; a prefab authored +Z forward would walk backwards
-            // (section 15.2 item S1).
             float[] state = new float[MotionMath.WanderStateFloats];
             MotionMath.ResetSporadicWalk(state, 12345);
             Vector3 offset;
             Vector3 euler;
 
-            // World -X gives pi + atan2(-1, 0) = pi/2.
+            // 世界 +X 对应 π/2。
             Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
                 out offset, out euler));
             Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);
 
-            // Force the +90 degree candidate (bit 2); from -X that heads +Z, so the facing
-            // must be pi + atan2(0, 1) = pi.
+            // 世界 +X 转 +90° 之后沿 −Z，偏航为 π。
             Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 1 << 2, true,
                 out offset, out euler));
             for (int i = 0; i < 14; i++)
@@ -634,7 +643,11 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
                     out offset, out euler));
             }
-            Assert.AreEqual(Mathf.PI, euler.y, 1e-3f);      // walking +Z, the far end of the range
+            Vector3 previous = offset;
+            Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
+                out offset, out euler));
+            Assert.AreEqual(-0.303f / 30f, offset.z - previous.z, 1e-4f);
+            Assert.AreEqual(Mathf.PI, euler.y, 1e-5f);
             Assert.GreaterOrEqual(euler.y, 0f);
             Assert.Less(euler.y, 2f * Mathf.PI);
         }
@@ -657,6 +670,7 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(MotionMath.TryStepClouds(state, Dt, 12345, 3.03f, 0x7F,
                     out offset, out euler));
                 AssertOffset(NoRotation, euler, "clouds do not yaw");
+                if (i == 0) Assert.AreEqual(3.03f / 30f, offset.x, 1e-6f); // PS2 −X → 世界 +X
                 Assert.AreEqual(0f, offset.y, 0f);
                 float dx = offset.x - previous.x;
                 float dz = offset.z - previous.z;
@@ -764,7 +778,7 @@ namespace VRCKatamari.Tests
         public void PathCollisionWalksAtTheRecordedSpeed()
         {
             // Sections 12.9 and 6.7.4: the prop starts at the nearest point of the world
-            // polyline, one half height below it, yaw = PI + atan2(dx, dz), and walks at the
+            // polyline, one half height above it, yaw = atan2(worldDx, worldDz), and walks at the
             // path record's speed. Path p23's 24.4 cm/s is 0.244 m/s, so one second (30
             // frames) covers 0.244 m.
             float[] points = { 0f, 0f, 0f, 10f, 0f, 0f };
@@ -775,14 +789,14 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(MotionMath.TryStepPathCollision(state, 0f, new Vector3(0.5f, 0f, 0f),
                 points, 2, 0.244f, 0.5f, false, out position, out euler));
             Assert.AreEqual(0f, position.x, 1e-5f);
-            Assert.AreEqual(-0.5f, position.y, 1e-5f);
-            Assert.AreEqual(3f * Mathf.PI / 2f, euler.y, 1e-5f);   // PI + atan2(1, 0)
+            Assert.AreEqual(0.5f, position.y, 1e-5f);
+            Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);    // 世界 +X
             Assert.AreEqual(0f, euler.x, 0f);                      // no pitch without the host
 
             Assert.IsTrue(MotionMath.TryStepPathCollision(state, 30f, new Vector3(0.5f, 0f, 0f),
                 points, 2, 0.244f, 0.5f, false, out position, out euler));
             Assert.AreEqual(0.244f, position.x, 1e-4f);
-            Assert.AreEqual(-0.5f, position.y, 1e-4f);
+            Assert.AreEqual(0.5f, position.y, 1e-4f);
         }
 
         [Test]
@@ -831,7 +845,7 @@ namespace VRCKatamari.Tests
         {
             // Section 12.9 with adjustPitch: the body follows the path's slope, eased over
             // the first quarter of the segment. For a segment rising 0.1 m per 1 m the pitch
-            // is -atan2(0.1, 1) = -0.09967 rad about X. At a quarter of the way the ease is
+            // is +atan2(0.1, 1) = +0.09967 rad about X. At a quarter of the way the ease is
             // finished, and the position is a quarter along the segment.
             float[] points = { 0f, 0f, 0f, 1f, 0.1f, 0f };
             float[] state = new float[MotionMath.SlopingPathStateFloats];
@@ -844,9 +858,9 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(MotionMath.TryStepSlopingPath(state, quarterSegmentFrames, Vector3.zero,
                 points, 2, 0.366f, 0.05f, false, out position, out euler));
             Assert.AreEqual(0.25f, position.x, 1e-3f);
-            Assert.AreEqual(0.025f - 0.05f, position.y, 1e-3f);
-            Assert.AreEqual(-0.0996687f, euler.x, 1e-4f);
-            Assert.AreEqual(Mathf.PI + Mathf.Atan2(1f, 0f), euler.y, 1e-5f);
+            Assert.AreEqual(0.025f + 0.05f, position.y, 1e-3f);
+            Assert.AreEqual(0.0996687f, euler.x, 1e-4f);
+            Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);
         }
 
         [Test]
@@ -1080,7 +1094,7 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1, MotionMath.FlipStateFloats);
             Assert.AreEqual(2, MotionMath.BobStateFloats);
             Assert.AreEqual(1, MotionMath.SwayStateFloats);
-            Assert.AreEqual(6, MotionMath.WhackAMoleStateFloats);
+            Assert.AreEqual(4, MotionMath.WhackAMoleStateFloats);
             Assert.AreEqual(7, MotionMath.HopStateFloats);
             Assert.AreEqual(15, MotionMath.WanderStateFloats);
             Assert.AreEqual(1, MotionMath.WaitForPlayerStateFloats);

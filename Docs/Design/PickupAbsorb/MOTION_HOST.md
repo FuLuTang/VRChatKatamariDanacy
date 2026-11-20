@@ -33,8 +33,8 @@
 ## 3. 语义
 
 - **时间**：每行按自己的档（`updatesPerSecond`：hop/whack 30、sway/路径/游走 15、bob/clouds 10、spin/flip/触发检测 5）走**固定日程**；每个到期步推进正好 `30/rate` 游戏帧（拆成 ≤2 的块，`MotionMath` §12.0），结果与渲染帧率无关。每帧最多补 3 步，落后太多重排日程。
-- **平滑**：<30 Hz 的行在两步之间每渲染帧 `Lerp/Slerp`（视觉比目标滞后一个间隔，最多 0.2 s 的 spin）；30 Hz 的 hop/whack 只在步进帧写，不抹平 7 帧的下陷。
-- **三种空间**：spawn 局部（spin/flip/bob/sway/whack/hop）、世界轴偏移 + 世界 yaw（游走、云；云保持出生朝向）、绝对世界（三种路径）。路径行把 `spawnPos` 只用于首次找最近点。路径点在地面上，路径类的位置是 `point + (0, 半高, 0)`（`MotionHostMath.PathStep` 把 `MotionMath` 的 `point − (0, b, 0)` 抬 `2b`，依据见 ORIGINAL_SKELETAL_ANIMATION §11）；`motion_sim`（编辑器预览）仍用 `MotionMath` 原式，路径件在预览里会低一个全高。
+- **平滑**：<30 Hz 的行在两步之间每渲染帧 `Lerp/Slerp`（视觉比目标滞后一个间隔，最多 0.2 s 的 spin）；30 Hz 的 hop/whack 只在步进帧写，不抹平 约 7 帧的上跳。
+- **三种空间**：出生局部（spin/flip/sway）；世界轴偏移（bob/whack/hop 沿世界 Y，云沿水平轴；四类保留出生旋转，只有游走写世界偏航）；绝对世界（三种路径，`back_and_forth` 保留出生旋转）。`MotionMath` 负责统一运动帧换算，已转世界的路径点只加从 PS2 转来的半高偏移 `point + (0, 半高, 0)`；宿主与预览都直接用这个结果。
 - **父链**：行按父在前排序；子 = `world(P) · inverse(spawn(P)) · own(child)`（`inherit:"position"` 只带平移）。子件自己的运动是叠在父变换上的局部运动。绝对世界类不吃父链。
   - **场景里的父子是文件夹，不是 Transform 父子**：导入器把子件放进 `Props/<kind>/<zone>/Hierarchy/<父id>_children/`（单位位姿的空文件夹，没有 Renderer），子件仍是 `Props` 下带 Renderer 的顶层对象，宿主行用 `IndexProps`（只收带 Renderer 的对象）解析，所以 `rowTransforms` 永远指向真道具。文件夹不叫 `<父id>`：曾经同名，按名递归查找（探针 `Find(root, name)`）会先命中那个恒为 (0,0,0) 的空文件夹，把"带子件的父蟹"读成"卡在原点、propY=0、没有 SkinnedMeshRenderer（只看到子件的网格）"——R37 的 coconut_crab_009/011、fiddler_crab_034 就是这样被误报的。现在场景里不再有与道具同名的容器。
   - **原作里蟹真的"带"东西**：`parentProp.monoControlIndex`（REROLL dump）与抽取器的父表逐条一致（83/83，其余 7 条父是不在 511 件里的 Dummy Hit）；483 号电视、426 号纸拉门、428/425 号小蟹挂在 482/424/427 号蟹下，电视底面与地面同高、蟹在电视体积内（蟹"穿"着电视）。不是抽取器推错。
@@ -121,7 +121,7 @@
 2. EditMode 测试：`MotionHostMathTests`（31）、`MotionHostSchedulingTests`（17：预计算路径与原步进逐位一致、远处行/步进行降频写入的位姿等于全频版、写入门规则）、`PlacementMotionRowsTests`（10，其中"参考关卡行数"与"带子件的路径蟹仍是自有程序行"两条本机跑不了，需 Unity：前者期望 `Own=113 Rider=42 paths=3 errors=0`）；另有 `PlacementImporterHierarchyTests`（子件文件夹名 `<父id>_children`、容器不与道具同名）与 `PlacementV2StructureProxyTests`（有同 id 道具的 proxy 固体关 Renderer 留 BoxCollider、二次导入 `~0`）。
 3. （可选，要骨骼）把 `~/KatamariRef/props/skinned_fbx/*` 拷到 Windows 工程 `Assets/_RefUnlicensed/Animation/`，跑菜单 `Assemble Skeletal Animation`：期望 `[anim] +N ~0`、每行 `[anim_fit]` 比值接近 1；再跑一次 `+0 ~0`。
 4. 重新导入 RefCancer（`Import Placement`）：期望首次 `motion host: rows=155`（有骨骼则 +已装配的纯动画行）、`writes>0`；**第二次 `writes=0`、headline `other=0`**。
-5. Play：院子里螃蟹游走、风铃/云/旗杆摆动、hop 的蟹短促下陷；勾 `logStatsEachSecond`，每秒 `steps≈1,800–1,900`，`MotionHost.Update` 的 Profiler 耗时记录下来（PC 与 Quest 分别），并与 `decimateFarWrites=false` 对比；蟹座关目标 ≈ 2 ms 量级（基线 ≈ 9 ms）。
+5. Play：院子里螃蟹游走、风铃摇荡、云平移、旗杆出生驻留后下沉并升回、hop 蟹短促向上跳；勾 `logStatsEachSecond`，每秒 `steps≈1,800–1,900`，`MotionHost.Update` 的 Profiler 耗时记录下来（PC 与 Quest 分别），并与 `decimateFarWrites=false` 对比；蟹座关目标 ≈ 2 ms 量级（基线 ≈ 9 ms）。
 6. 吸收一只在动的蟹：它立刻停在球上（`away` +1），不抖、不回弹；`ResetField`/重开回合后它回到出生位姿重新走（`away` 回落）。
 7. 球走到离某蟹 2 m 内：`GetTriggeredCount` +1、该蟹 Animator `Panic`；球在 3–12 m：蟹照常游走，不触发。
 8. 路径蟹（coconut_crab_009/010/011、fiddler_crab_034/038/041/042、small_fiddler_crab_045）：Animator 参数 `Moving=true`、当前状态 `walk`（不再是 `idle`）；**按物体名取位姿时先确认拿到的是带 Renderer 的那个**（`GetComponent<Renderer>() != null`）：带子件的父蟹下面有 `Hierarchy/<id>_children` 文件夹（单位位姿，名字不再等于蟹 id）。预期 30 s 内这 8 只的世界 xz 都在变、coconut_crab_009/011 与 fiddler_crab_034 不再读到 (0,0,0)，它们的子件（fiddler_crab_037、color_tv_001、fiddler_crab_035、shoji_001）跟着走。

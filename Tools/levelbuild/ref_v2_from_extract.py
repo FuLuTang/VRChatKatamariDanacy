@@ -581,7 +581,14 @@ def build_motions(motion_document, path_document, level_index, orders_by_item):
         else:
             motion["speed"] = {"source": "none"}
         motion["updatesPerSecond"] = MOTION_RATES[motion_class]
-        motion["loop"] = motion_class != "whack_a_mole"
+        if motion_class == "whack_a_mole":
+            # 抽取没有 loop 位。Misc/0x22 分派到交替翻转的鼹鼠式状态机。
+            motion["loop"] = ((entry.get("mainAction") or {}).get("name") == "Misc"
+                              and entry.get("motionID") == 0x22)
+            if not motion["loop"]:
+                raise RefV2Error("unrecognized whack_a_mole action for moveType %r" % move_type)
+        else:
+            motion["loop"] = True
         provenance = {"moveType": move_type, "action": (entry.get("mainAction") or {}).get("name"),
                       "backupIndex": entry.get("backupIndex"),
                       "pathIndex": entry.get("pathIndex")}

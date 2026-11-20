@@ -148,8 +148,7 @@ namespace VRCKatamari.Tests
         public void PathClassesPutTheBodyOnThePathNotUnderIt()
         {
             // Ground-level path points at y = -0.6563 (Cancer p23): a prop with half height 0.11 has its
-            // centre 0.11 above them, so its bottom rests on the path. MotionMath alone returns
-            // point - b, which would bury the body.
+            // centre 0.11 above them, so its bottom rests on the path. PS2 的 −b 由 MotionMath 转换。
             float[] points = { 0f, -0.6563f, 0f, 2f, -0.6563f, 0f };
             int[] classes = { MotionHostMath.ClassPathCollision, MotionHostMath.ClassSlopingPath,
                               MotionHostMath.ClassBackAndForth };
@@ -349,7 +348,7 @@ namespace VRCKatamari.Tests
             // Spawn yawed 90 degrees: a +Y offset stays up, a +X offset (spawn-local) goes to -Z.
             Quaternion spawn = YawDeg(90f);
             Vector3 position; Quaternion rotation;
-            MotionHostMath.StandalonePose(MotionHostMath.ClassBob, new Vector3(1f, 0f, 0f), spawn,
+            MotionHostMath.StandalonePose(MotionHostMath.ClassSway, new Vector3(1f, 0f, 0f), spawn,
                 new Vector3(0.5f, 0.2f, 0f), Vector3.zero, out position, out rotation);
             Assert.AreEqual(1f, position.x, Tol);
             Assert.AreEqual(0.2f, position.y, Tol);
@@ -371,6 +370,42 @@ namespace VRCKatamari.Tests
                 new Vector3(7f, 8f, 9f), Vector3.zero, out position, out rotation);
             Assert.AreEqual(7f, position.x, Tol);
             Assert.AreEqual(8f, position.y, Tol);
+        }
+
+        [TestCase(MotionHostMath.ClassBob)]
+        [TestCase(MotionHostMath.ClassWhackAMole)]
+        [TestCase(MotionHostMath.ClassHop)]
+        public void VerticalMotionDoesNotRotateTheOffsetWithTheSpawnPose(int motionClass)
+        {
+            // 倾倒 90° 的出生姿态可区分世界 Y 和局部 Y。
+            Quaternion spawn = new Quaternion(0.70710678f, 0f, 0f, 0.70710678f);
+            Vector3 position;
+            Quaternion rotation;
+            MotionHostMath.StandalonePose(motionClass, new Vector3(1f, 2f, 3f), spawn,
+                new Vector3(0f, -0.25f, 0f), Vector3.zero, out position, out rotation);
+            Assert.AreEqual(1f, position.x, Tol);
+            Assert.AreEqual(1.75f, position.y, Tol);
+            Assert.AreEqual(3f, position.z, Tol);
+            Assert.AreEqual(spawn.x, rotation.x, Tol);
+            Assert.AreEqual(spawn.y, rotation.y, Tol);
+            Assert.AreEqual(spawn.z, rotation.z, Tol);
+            Assert.AreEqual(spawn.w, rotation.w, Tol);
+        }
+
+        [Test]
+        public void BackAndForthKeepsItsSpawnOrientationAtAnAbsolutePathPoint()
+        {
+            Quaternion spawn = YawDeg(-90f);
+            Vector3 point = new Vector3(7f, 8f, 9f);
+            Vector3 position;
+            Quaternion rotation;
+            MotionHostMath.StandalonePose(MotionHostMath.ClassBackAndForth, new Vector3(1f, 2f, 3f),
+                spawn, point, Vector3.zero, out position, out rotation);
+            Assert.AreEqual(point.x, position.x, Tol);
+            Assert.AreEqual(point.y, position.y, Tol);
+            Assert.AreEqual(point.z, position.z, Tol);
+            Assert.AreEqual(spawn.y, rotation.y, Tol);
+            Assert.AreEqual(spawn.w, rotation.w, Tol);
         }
 
         [Test]

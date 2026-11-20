@@ -71,7 +71,7 @@ Every response carries them, and the editor shows them in its motion panel:
 
 1. **Size group 0.** `katamari.placement/2` carries no original size id, so the size-group
    tables run at group 0. Every Make Cancer motion prop is original size 2 (group 0), and
-   the hop dip that results (6 cm) is the measured one.
+   the resulting hop rises 6 cm above spawn, matching the converted viewer data.
 2. **No host queries.** Ground-following, zone membership, and the "is the next step
    blocked" ray are not modelled. Walkers and clouds move as if every step and every turn
    were allowed; the editor draws the WaitForPlayer ring using a terrain height from the
@@ -81,10 +81,7 @@ Every response carries them, and the editor shows them in its motion panel:
 4. **Phase.** Always the D-12 hash seed. A `props[].phase` in the document is *not* applied,
    because `MotionMath`'s `Reset*` entry points take only a seed; a document that declares
    one gets an assumption line saying so.
-5. **Composition.** `world = spawn * local` (spawn-local classes); a child's placement is
-   rigid relative to its parent with its own motion on top; the absolute-world classes
-   (paths) do not compose onto a parent. This is the one rule that is this tool's decision
-   rather than `MotionMath`'s, and it is echoed in every response.
+5. **位姿合成。** Spin、Flip、Sway 的结果叠加在出生局部帧；Bob、Whack、Hop 的位移沿世界 Y，云沿世界水平面，均不覆盖出生旋转。路径直接给出世界位置，不再叠加父件；`back_and_forth` 保留出生旋转。
 
 ## Output shape
 
@@ -109,6 +106,7 @@ Every response carries them, and the editor shows them in its motion panel:
 
 `Docs/tests/leveleditor/test_editor_motion.py` covers both modes against the reference
 level: Spin's 4.19 s turn, Sway's 0.342 / 0.030 ellipse of the full model height, Hop's 6 cm
-dip, the p23 path's 24.4 cm/s, and the whole level's 30 s trajectory (155 props × 901
+rise, Whack's world-Y loop for a tilted prop, unchanged facing on the back-and-forth path,
+the p23 path's 24.4 cm/s, and the whole level's 30 s trajectory (155 props × 901
 samples, ~1 s). Those tests skip themselves when the .NET SDK or the (unlicensed, local)
 reference level is absent.

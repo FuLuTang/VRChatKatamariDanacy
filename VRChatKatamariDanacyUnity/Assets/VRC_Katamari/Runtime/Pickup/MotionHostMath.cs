@@ -158,7 +158,8 @@ namespace VRCKatamari.Pickup
         /// <summary>Which of the three output spaces the class answers in.</summary>
         public static int SpaceOf(int motionClass)
         {
-            if (motionClass == ClassSporadicWalk || motionClass == ClassClouds)
+            if (motionClass == ClassSporadicWalk || motionClass == ClassClouds ||
+                motionClass == ClassBob || motionClass == ClassWhackAMole || motionClass == ClassHop)
                 return SpaceWorldAxis;
             if (motionClass == ClassPathCollision || motionClass == ClassSlopingPath ||
                 motionClass == ClassBackAndForth) return SpaceAbsolute;
@@ -184,10 +185,12 @@ namespace VRCKatamari.Pickup
             return IsPathClass(motionClass);
         }
 
-        /// <summary>Clouds ignore yaw: they keep the spawn orientation.</summary>
+        /// <summary>只改位置的世界轴与绝对路径运动保留出生朝向。</summary>
         public static bool KeepsSpawnRotation(int motionClass)
         {
-            return motionClass == ClassClouds;
+            return motionClass == ClassClouds || motionClass == ClassBob ||
+                motionClass == ClassWhackAMole || motionClass == ClassHop ||
+                motionClass == ClassBackAndForth;
         }
 
         /// <summary>
@@ -220,20 +223,6 @@ namespace VRCKatamari.Pickup
             else if (motionClass == ClassBackAndForth) MotionMath.ResetBackAndForthNoYaw(state);
             if (IsPathClass(motionClass) && state != null && state.Length >= MotionMath.PreparedPathStateFloats)
                 state[2] = 0f;
-        }
-
-        /// <summary>
-        /// Puts a path class's position on the path in our y-up frame. The program's
-        /// <c>point - (0, b, 0)</c> is the original's own y convention; here the path points lie on
-        /// the ground (Cancer p23: within 3 mm of the contact mesh) and the props' spawn centres sit
-        /// one half height above them (nine of ten path props, 0.5-1.1 cm), so the centre belongs at
-        /// <c>point + (0, b, 0)</c>: the result of the program is lifted by <c>2 b</c>. Left alone, a
-        /// walking crab's body would be entirely below the ground.
-        /// </summary>
-        private static bool PathStep(bool stepped, float halfHeightM, ref Vector3 positionM)
-        {
-            if (stepped) positionM.y += 2f * halfHeightM;
-            return stepped;
         }
 
         /// <summary>
@@ -281,25 +270,25 @@ namespace VRCKatamari.Pickup
                 return MotionMath.TryStepClouds(state, dtFrames, phaseSeed, speedMps, 0x7F,
                     out offsetOrPositionM, out eulerRad);
             if (motionClass == ClassPathCollision)
-                return PathStep(MotionMath.TryStepPathCollision(state, dtFrames, spawnPositionM,
+                return MotionMath.TryStepPathCollision(state, dtFrames, spawnPositionM,
                     pathPointsM, pointCount, speedMps, halfHeightM, pathClosed,
-                    out offsetOrPositionM, out eulerRad), halfHeightM, ref offsetOrPositionM);
+                    out offsetOrPositionM, out eulerRad);
             if (motionClass == ClassSlopingPath)
-                return PathStep(MotionMath.TryStepSlopingPath(state, dtFrames, spawnPositionM,
+                return MotionMath.TryStepSlopingPath(state, dtFrames, spawnPositionM,
                     pathPointsM, pointCount, speedMps, halfHeightM, pathClosed,
-                    out offsetOrPositionM, out eulerRad), halfHeightM, ref offsetOrPositionM);
+                    out offsetOrPositionM, out eulerRad);
             if (motionClass == ClassBackAndForth)
-                return PathStep(MotionMath.TryStepBackAndForthNoYaw(state, dtFrames, spawnPositionM,
+                return MotionMath.TryStepBackAndForthNoYaw(state, dtFrames, spawnPositionM,
                     pathPointsM, pointCount, speedMps, halfHeightM, out offsetOrPositionM,
-                    out eulerRad), halfHeightM, ref offsetOrPositionM);
+                    out eulerRad);
             // WaitForPlayer, DraggedAlong and ClassNone have no pose of their own.
             return false;
         }
 
         /// <summary>
         /// <see cref="TryStep"/> for a path class from a prepared table
-        /// (<see cref="MotionMath.BuildPathTable"/>): the same position and euler, the same
-        /// <c>2 b</c> lift, without re-measuring the polyline. BackAndForth needs the table of the
+        /// (<see cref="MotionMath.BuildPathTable"/>): 与普通步进使用相同的世界位姿，不重复测量折线。
+        /// BackAndForth needs the table of the
         /// path built open. The caller has checked <see cref="MotionMath.PathRowInputsOk"/>.
         /// </summary>
         public static bool TryStepPreparedPath(int motionClass, float[] state, float dtFrames,
@@ -309,9 +298,8 @@ namespace VRCKatamari.Pickup
             int kind = motionClass == ClassSlopingPath ? MotionMath.PathKindSloping
                 : motionClass == ClassBackAndForth ? MotionMath.PathKindBackAndForth
                 : MotionMath.PathKindCollision;
-            return PathStep(MotionMath.TryStepPathPrepared(kind, state, dtFrames, spawnPositionM,
-                pathPointsM, table, speedMps, halfHeightM, out offsetOrPositionM, out eulerRad),
-                halfHeightM, ref offsetOrPositionM);
+            return MotionMath.TryStepPathPrepared(kind, state, dtFrames, spawnPositionM,
+                pathPointsM, table, speedMps, halfHeightM, out offsetOrPositionM, out eulerRad);
         }
 
         /// <summary>
@@ -614,7 +602,7 @@ namespace VRCKatamari.Pickup
             if (space == SpaceAbsolute)
             {
                 positionM = offsetOrPositionM;
-                rotation = EulerToQuaternion(eulerRad);
+                rotation = keepsSpawnRotation ? spawnRotation : EulerToQuaternion(eulerRad);
                 return;
             }
             if (space == SpaceWorldAxis)

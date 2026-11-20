@@ -25,12 +25,11 @@
 // Composition is the one part that is genuinely this tool's decision, so it is stated once
 // here and echoed in every response:
 //   * MotionMath's own class comment names three output spaces.  A spawn-local class
-//     (spin, flip, bob, sway, whack_a_mole, hop, wait_for_player, dragged_along) returns an
-//     offset and an euler in the spawn frame, so world = spawn * T(offset) * R(euler).  A
-//     world-axis class (sporadic_walk) returns a world-axis offset and a world yaw; clouds
-//     pass ignoreYaw, so they keep the spawn rotation.  The absolute-world classes
-//     (path_collision, sloping_path, back_and_forth) return a world position whose yaw and
-//     pitch are the path's own world angles.
+//     (spin, flip, sway, wait_for_player, dragged_along) returns an offset and angles
+//     in the spawn frame. bob, whack_a_mole and hop translate along world Y; clouds also
+//     translate in world axes and keep their spawn rotation. sporadic_walk adds a world
+//     offset and supplies its own yaw. Paths return an absolute position; back_and_forth
+//     keeps spawn rotation, while path_collision and sloping_path supply their own angles.
 //   * A parent's motion is carried by the child:
 //         world(child) = delta(parent) * inverse(spawn(parent)) * spawn(child) * local(child)
 //     where delta(parent) = world(parent) * inverse(spawn(parent)).  A static parent makes
@@ -650,7 +649,9 @@ namespace MotionSim
                 {
                     MotionSpec motion = prop.Motion;
                     prop.Space = SpaceOf(motion.Class);
-                    prop.KeepSpawnRotation = motion.Class == "clouds";
+                    prop.KeepSpawnRotation = motion.Class == "clouds" || motion.Class == "bob"
+                        || motion.Class == "whack_a_mole" || motion.Class == "hop"
+                        || motion.Class == "back_and_forth";
                     // The path is resolved before the speed: 6.7.4 makes a path record's own
                     // speed override the type speed, so the path has to be in hand first.
                     if (motion.PathId != null)
@@ -764,6 +765,9 @@ namespace MotionSim
             {
                 case "sporadic_walk":
                 case "clouds":
+                case "bob":
+                case "whack_a_mole":
+                case "hop":
                     return OutputSpace.WorldAxis;
                 case "path_collision":
                 case "sloping_path":
@@ -1050,6 +1054,11 @@ namespace MotionSim
             switch (prop.Space)
             {
                 case OutputSpace.AbsoluteWorld:
+                    if (prop.KeepSpawnRotation)
+                    {
+                        Pose spawn = prop.SpawnPose;
+                        return Pose.From(prop.MotionAbsolutePosition, spawn.Qx, spawn.Qy, spawn.Qz, spawn.Qw);
+                    }
                     PoseMath.EulerToQuaternion(euler, out qx, out qy, out qz, out qw);
                     return Pose.From(prop.MotionAbsolutePosition, qx, qy, qz, qw);
                 case OutputSpace.WorldAxis:

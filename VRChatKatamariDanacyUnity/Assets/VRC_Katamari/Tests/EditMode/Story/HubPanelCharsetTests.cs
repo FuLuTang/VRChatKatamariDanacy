@@ -44,9 +44,13 @@ namespace VRCKatamari.Tests
                 }
                 missing += Missing(charset, HubPanelTextMath.RecordLines(true, true, 1.5f, 135, 0.61f, 90, 3, lang), missing);
                 missing += Missing(charset, HubPanelTextMath.RecordLines(true, false, 0f, 0, 0f, 0, 0, lang), missing);
-                missing += Missing(charset, HubPanelTextMath.GoalLine((int)StoryGoalType.FreeRoam, 0f, 0, 0f, lang), missing);
-                missing += Missing(charset, HubPanelTextMath.GoalLine((int)StoryGoalType.CollectCategoryCount, 0f, 12, 120f, lang), missing);
-                missing += Missing(charset, HubPanelTextMath.GoalLine(0, 0.8f, 0, 420f, lang), missing);
+                missing += Missing(charset, HubPanelTextMath.GoalLine((int)StoryGoalType.F, 0f, 0, 0f, "", lang), missing);
+                missing += Missing(charset, HubPanelTextMath.GoalLine((int)StoryGoalType.B, 0f, 12, 120f, "", lang), missing);
+                missing += Missing(charset, HubPanelTextMath.GoalLine(0, 0.8f, 0, 420f, "", lang), missing);
+                missing += Missing(charset, HubPanelTextMath.GoalLine((int)StoryGoalType.B, 0f, 10, 420f, "crab", lang), missing);
+                missing += Missing(charset, HubPanelTextMath.CountProgress("crab", 9, 10, lang), missing);
+                missing += Missing(charset, HubPanelTextMath.ClearLabel(StoryRoundMath.ClearPassed, lang), missing);
+                missing += Missing(charset, HubPanelTextMath.ClearLabel(StoryRoundMath.ClearFailed, lang), missing);
             }
             missing += Missing(charset, "◀▶", missing);
             // The result card's two buttons use the same font asset (HUB_PANEL_PREFAB.md, 结算卡).
@@ -71,19 +75,21 @@ namespace VRCKatamari.Tests
 
         private static string FindRepoFile(string relative)
         {
-            string directory = AppDomain.CurrentDomain.BaseDirectory;
-            for (int i = 0; i < 12 && !string.IsNullOrEmpty(directory); i++)
-            {
-                string candidate = Path.Combine(directory, relative);
-                if (File.Exists(candidate)) return candidate;
-                directory = Path.GetDirectoryName(directory);
-            }
+            // The Windows gate runs from its snapshot; the cached runner executable can
+            // live elsewhere, under a different checkout with its own Tools directory.
             string current = Directory.GetCurrentDirectory();
             for (int i = 0; i < 12 && !string.IsNullOrEmpty(current); i++)
             {
                 string candidate = Path.Combine(current, relative);
                 if (File.Exists(candidate)) return candidate;
                 current = Path.GetDirectoryName(current);
+            }
+            string directory = AppDomain.CurrentDomain.BaseDirectory;
+            for (int i = 0; i < 12 && !string.IsNullOrEmpty(directory); i++)
+            {
+                string candidate = Path.Combine(directory, relative);
+                if (File.Exists(candidate)) return candidate;
+                directory = Path.GetDirectoryName(directory);
             }
             return null;
         }

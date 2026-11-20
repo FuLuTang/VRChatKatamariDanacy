@@ -97,7 +97,18 @@
       "round": {
         "killPlaneY": -4,
         "timeLimitSeconds": 420,
-        "targetDiameterM": 0.8
+        "clearType": "B",
+        "targetCount": 10,
+        "countKind": "crab",
+        "countDefinitions": [
+          "small_fiddler_crab",
+          "fiddler_crab",
+          "coconut_crab",
+          "horseshoe_crab",
+          "spider_crab",
+          "blue_crab"
+        ],
+        "recordDiameterAndTotal": true
       }
     },
     {

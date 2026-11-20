@@ -897,54 +897,15 @@ namespace VRCKatamari.Editor.Hub
             plan.LevelId = level.id;
             plan.PickupHost = d.Pickup;
             plan.AllowAbort = level.allowAbort;
-            plan.CountKind = string.IsNullOrEmpty(facts.RoundCountKind) ? "fruit" : facts.RoundCountKind;
-            plan.HasStars = level.stars && !level.IsFreeRoam;
-
-            if (level.IsFreeRoam)
-            {
-                plan.GoalType = StoryLevelMath.GoalFreeRoam;
-                return plan;
-            }
-
-            plan.GoalType = facts.HasRound ? facts.RoundGoalType : StoryLevelMath.GoalReachDiameter;
+            plan.CountKind = facts.RoundCountKind;
+            plan.HasStars = level.stars;
+            plan.GoalType = facts.HasRound ? facts.RoundGoalType : (int)StoryGoalType.A;
             plan.TargetDiameterM = facts.RoundTargetDiameterM;
             plan.TargetCount = facts.RoundTargetCount;
             plan.TimeLimitSeconds = facts.RoundTimeLimitSeconds;
             plan.KillEnabled = facts.RoundKillEnabled;
             plan.KillPlaneY = facts.RoundKillY;
-
-            if (level.roundFromPlacement)
-            {
-                HubAssembler.PlacementRoundData placement;
-                if (HubAssembler.TryReadPlacementRound(level.id, hc, out placement))
-                {
-                    if (placement.HasTimeLimit) plan.TimeLimitSeconds = placement.TimeLimitS;
-                    if (placement.HasTarget)
-                    {
-                        plan.GoalType = StoryLevelMath.GoalReachDiameter;
-                        plan.TargetDiameterM = placement.TargetDiameterM;
-                    }
-                    if (placement.HasKillPlane)
-                    {
-                        plan.KillEnabled = true;
-                        plan.KillPlaneY = placement.KillPlaneY;
-                    }
-                }
-            }
-            if (level.round != null)
-            {
-                if (level.round.hasTimeLimit) plan.TimeLimitSeconds = level.round.timeLimitSeconds;
-                if (level.round.hasTargetDiameter)
-                {
-                    plan.GoalType = StoryLevelMath.GoalReachDiameter;
-                    plan.TargetDiameterM = level.round.targetDiameterM;
-                }
-                if (level.round.hasKillPlaneY)
-                {
-                    plan.KillEnabled = true;
-                    plan.KillPlaneY = level.round.killPlaneY;
-                }
-            }
+            HubAssembler.ApplyRoundDefinition(level, plan, hc);
             return plan;
         }
 
@@ -1058,12 +1019,12 @@ namespace VRCKatamari.Editor.Hub
         {
             "levelIds", "levelGoalTypes", "levelTargetDiameters", "levelTargetCounts",
             "levelTimeLimits", "levelKillEnabled", "levelKillY", "levelCountKinds",
-            "levelPickupHosts", "levelAllowAbort",
+            "levelPickupHosts", "levelAllowAbort", "settings",
         };
 
         private static readonly string[] PresenterFields =
         {
-            "levelHasStars", "levelStar2Diameters", "levelStar3Diameters", "levelStar2Counts",
+            "levelHasStars", "levelStar1Diameters", "levelStar1Counts", "levelStar2Diameters", "levelStar3Diameters", "levelStar2Counts",
             "levelStar3Counts", "levelPartialBands",
         };
 
@@ -1412,9 +1373,11 @@ namespace VRCKatamari.Editor.Hub
                 + " kinds=" + d.Kinds.Length
                 + " terrain=" + (d.Terrain == null ? "none" : IslandImport.PathOf(d.Terrain.transform))
                 + " pickup=" + (d.Pickup == null ? "none" : IslandImport.PathOf(d.Pickup.transform))
-                + " goal=" + p.GoalType
+                + " type=" + (StoryGoalType)p.GoalType
                 + " time=" + IslandMath.Num(p.TimeLimitSeconds)
-                + " target=" + IslandMath.Num(p.TargetDiameterM)
+                + (p.GoalType == (int)StoryGoalType.B
+                    ? " targetCount=" + p.TargetCount + " countKind=" + p.CountKind
+                    : " targetDiameterM=" + IslandMath.Num(p.TargetDiameterM))
                 + " kill=" + (p.KillEnabled ? IslandMath.Num(p.KillPlaneY) : "off")
                 + " abort=" + p.AllowAbort
                 + " stars=" + p.HasStars;

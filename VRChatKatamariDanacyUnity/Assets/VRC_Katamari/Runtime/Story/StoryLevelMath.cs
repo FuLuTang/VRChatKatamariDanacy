@@ -24,11 +24,6 @@ namespace VRCKatamari.Story
         /// <summary>The level index before any level was selected (the scene's own single level).</summary>
         public const int NoLevel = -1;
 
-        /// <summary>Goal type ints as serialized in the per-level array; same values as <see cref="StoryGoalType"/>.</summary>
-        public const int GoalReachDiameter = 0;
-        public const int GoalCollectCount = 1;
-        public const int GoalFreeRoam = 2;
-
         /// <summary>True when <paramref name="index"/> is a valid slot of a table of <paramref name="length"/> entries.</summary>
         public static bool IsIndexValid(int index, int length)
         {
@@ -54,19 +49,6 @@ namespace VRCKatamari.Story
             if (allowAbort == null) return false;
             if (!IsIndexValid(levelIndex, allowAbort.Length)) return false;
             return allowAbort[levelIndex];
-        }
-
-        /// <summary>Whether this goal type runs a clock and settles by itself (everything but free roam).</summary>
-        public static bool IsTimedGoal(int goalType)
-        {
-            return goalType != GoalFreeRoam;
-        }
-
-        /// <summary>Whether a serialized goal type int is one of the three known goals.</summary>
-        public static bool IsKnownGoal(int goalType)
-        {
-            return goalType == GoalReachDiameter || goalType == GoalCollectCount
-                || goalType == GoalFreeRoam;
         }
 
         /// <summary>Per-level float, or <paramref name="fallback"/> when the table has no entry for the index.</summary>
@@ -98,9 +80,9 @@ namespace VRCKatamari.Story
         /// thresholds"; no table, or no entry, means yes (today's behaviour). A level
         /// flagged false (the crab level) shows its measurement only.
         /// </summary>
-        public static bool LevelUsesStars(bool[] hasStars, int levelIndex)
+        public static bool LevelUsesStars(bool[] hasStars, int levelIndex, bool singleLevelHasStars)
         {
-            return PickBool(hasStars, levelIndex, true);
+            return PickBool(hasStars, levelIndex, singleLevelHasStars);
         }
     }
 }

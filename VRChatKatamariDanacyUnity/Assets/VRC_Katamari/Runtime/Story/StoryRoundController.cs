@@ -1,3 +1,5 @@
+using VRCKatamari.Hub;
+using VRCKatamari.Story.Hub;
 using UdonSharp;
 using UnityEngine;
 using UnityEngine.UI;
@@ -160,24 +162,13 @@ namespace VRCKatamari.Story
         // the optional result presenter does not.
         [SerializeField] private GameObject retryButtonRoot;
 
-        // ---- Level data (one file under Docs/Design/GameModes/Levels/) ----
-        // story_01_bench_size.json: reach_target_diameter, 1.25 m, 120 s, bank off.
-        // story_02_fruit_ten.json: collect_category_count, fruit x 10, 120 s, bank off.
-        // The star tiers (1.45 / 1.60 m and 20 / 30 items) are scoring data and live on
-        // the optional result presenter, not here.
-        // A level sets exactly one goal type; the fields of the other one are left
-        // at their defaults and are never read.
+        // A/B/F 与过关参数在装配期写入，评分阈值由结果卡独立保存。
         [SerializeField] private string levelId = "story_01_bench_size";
-        [SerializeField] private StoryGoalType goalType = StoryGoalType.ReachTargetDiameter;
-
-        // quest.objective.target_diameter_m, which is also stars[0].requires.
+        [SerializeField] private StoryGoalType goalType = StoryGoalType.A;
         [SerializeField] private float targetDiameterM = 1.25f;
-
-        // quest.objective.count, which is also stars[0].requires.count.
         [SerializeField] private int targetCount = 10;
-
-        // time_limit_s.
         [SerializeField] private float timeLimitSeconds = 120f;
+        [SerializeField] private HubSettingsHost settings;
 
         // ---- Per-level kill plane (LEVEL_FORMAT_V2 5.2/5.3) ----
         // A ball whose CENTRE is below this world height is put back at the round's start
@@ -189,12 +180,8 @@ namespace VRCKatamari.Story
         [SerializeField] private bool killPlaneEnabled = false;
         [SerializeField] private float killPlaneY = 0f;
 
-        // quest.objective.category_id. The host counts by ordinal text match against
-        // each prop row's own kind label (PickupFieldHost.GetAttachedCountForKind), so
-        // the scene must label every prop of the category with this same string, and
-        // what that label has to cover is the level's categories.json entry (fruit is
-        // its seven explicit definition ids, GameModes README section 3.2). An empty
-        // key counts every confirmed attachment.
+        // B 型类别键。宿主若有装配的 objectiveKinds 列，读该列；否则读自身种类。
+        // 空键表示所有确认吸附，不接触马达的允许吸附种类。
         [SerializeField] private string countGoalKind = "fruit";
 
         [Header("Presentation")]
@@ -220,7 +207,7 @@ namespace VRCKatamari.Story
         // default, and what every scene serialized before these fields existed reads) means
         // today's single level: the fields above ARE the level and SelectLevel refuses.
         // A slot a shorter array does not reach leaves the matching field above unchanged.
-        // levelGoalTypes holds StoryGoalType values as ints (0 size, 1 count, 2 free roam).
+        // levelGoalTypes holds StoryGoalType values as ints (0 A, 1 B, 2 F).
         [Header("Per-level table (optional, parallel arrays)")]
         [SerializeField] private string[] levelIds;
         [SerializeField] private int[] levelGoalTypes;
@@ -250,6 +237,7 @@ namespace VRCKatamari.Story
         // reports; nothing recomputes them afterwards and nothing here grades them.
         private float resultDiameterM;
         private int resultCount;
+        private int clearResult;
 
         // What the HUD currently shows, so a per-frame refresh only writes Text when
         // the visible number changed. -1 means "nothing written yet", which is also
@@ -324,6 +312,7 @@ namespace VRCKatamari.Story
         {
             state = StateIdle;
             roundAborted = false;
+            clearResult = StoryRoundMath.ClearPending;
             lastCurrentShown = -1;
             lastRemainingShown = -1;
 
@@ -419,13 +408,14 @@ namespace VRCKatamari.Story
             resultDiameterM = 0f;
             resultCount = 0;
             roundAborted = false;
+            clearResult = StoryRoundMath.ClearPending;
 
             if (input != null) input.SetRoundGate(true);
             if (vrInput != null) vrInput.SetRoundGate(true);
             if (pickupHost != null) pickupHost.SetCollecting(true);
 
             WriteTargetText();
-            if (goalType == StoryGoalType.FreeRoam)
+            if (goalType == StoryGoalType.F)
             {
                 // No clock to start: the remaining line says so once and is never rewritten.
                 WriteCurrentHud();
@@ -501,27 +491,11 @@ namespace VRCKatamari.Story
             return goalType;
         }
 
-        /// <summary>
-        /// quest.objective.target_diameter_m, which is also star tier 1.
-        /// </summary>
-        /// <remarks>
-        /// Only meaningful for a size level: a count level leaves the field at its
-        /// serialized default and never reads it, so a caller asks <see cref="GetGoalType"/>
-        /// first instead of trusting this number.
-        /// </remarks>
-        public float GetTargetDiameterM()
-        {
-            return targetDiameterM;
-        }
+        public int GetClearResult() { return clearResult; }
+        public string GetCountGoalKind() { return countGoalKind; }
+        public int GetLanguage() { return settings != null ? settings.GetLanguage() : HubSettingsMath.LangZh; }
+        public float GetTargetDiameterM() { return targetDiameterM; }
 
-        /// <summary>
-        /// quest.objective.count, which is also star tier 1.
-        /// </summary>
-        /// <remarks>
-        /// Only meaningful for a count level, for the same reason as
-        /// <see cref="GetTargetDiameterM"/>: the other goal type leaves it at its
-        /// serialized default.
-        /// </remarks>
         public int GetTargetCount()
         {
             return targetCount;
@@ -533,7 +507,7 @@ namespace VRCKatamari.Story
             return killCount;
         }
 
-        /// <summary>The settled collision diameter in metres; 0 for a count level.</summary>
+        /// <summary>The settled collision diameter in metres.</summary>
         public float GetResultDiameterM()
         {
             return resultDiameterM;
@@ -555,7 +529,7 @@ namespace VRCKatamari.Story
         /// </remarks>
         public float GetRemainingSeconds()
         {
-            if (goalType == StoryGoalType.FreeRoam) return 0f; // no clock at all
+            if (goalType == StoryGoalType.F) return 0f; // no clock at all
             if (state == StateIdle) return timeLimitSeconds;
             if (state != StateRunning) return 0f;
             float remainingSeconds;
@@ -764,7 +738,7 @@ namespace VRCKatamari.Story
         private void UpdateRunning()
         {
             ApplyKillPlaneIfNeeded();
-            if (goalType == StoryGoalType.FreeRoam)
+            if (goalType == StoryGoalType.F)
             {
                 // Practice level: live progress only. No countdown, and nothing here ever
                 // settles it; the player leaves through AbortRound (the hub's return).
@@ -772,37 +746,29 @@ namespace VRCKatamari.Story
                 return;
             }
             float remainingSeconds;
-            if (!StoryRoundMath.TryRemainingSeconds(startTimeSeconds, Time.time,
-                timeLimitSeconds, out remainingSeconds))
+            bool validClock = StoryRoundMath.TryRemainingSeconds(startTimeSeconds, Time.time,
+                timeLimitSeconds, out remainingSeconds);
+            if (validClock && remainingSeconds > 0f && StoryRoundMath.IsSupportedGoal((int)goalType))
             {
-                // A level whose time_limit_s is non-finite or non-positive cannot
-                // produce a countdown. Fail closed and settle at once: a broken level
-                // must not create a round that never ends.
-                remainingSeconds = 0f;
+                WriteCurrentHud();
+                WriteRemainingHud(remainingSeconds);
+                return;
             }
-            WriteCurrentHud();
-            WriteRemainingHud(remainingSeconds);
-            if (remainingSeconds > 0f) return;
-            SettleRound();
+            SettleRound(validClock, remainingSeconds);
         }
 
-        /// <summary>
-        /// Freezes the round at the bell, records the settled facts and offers the ball.
-        /// </summary>
-        /// <remarks>
-        /// Order matters and is the plan's: input, then collection, then the candidate
-        /// queue. Reads the measurement only after the freeze, so the numbers reported
-        /// afterwards are the numbers at the bell. No stars, no comment and no card text:
-        /// this is where the round stops changing, not where it is judged.
-        /// </remarks>
-        private void SettleRound()
+        // 到时先冻结输入与收集，再用唯一一次的冻结读数判定过关。
+        private void SettleRound(bool validClock, float remainingSeconds)
         {
             state = StatePresenting;
             presentingStartTimeSeconds = Time.time;
             lastRemainingShown = 0;
             WriteRemainingText(0);
-
             FreezeRound();
+            clearResult = StoryRoundMath.EvaluateClear((int)goalType, validClock, remainingSeconds,
+                resultDiameterM, targetDiameterM, resultCount, targetCount);
+            Debug.Log("[StoryRoundController] settled level=" + levelId + " type=" + goalType
+                + " clear=" + clearResult + " diameterM=" + resultDiameterM + " count=" + resultCount);
             ApplyStateVisibility();
         }
 
@@ -898,15 +864,15 @@ namespace VRCKatamari.Story
             }
             if (!StoryLevelMath.CanSelectInState(state)) return false;
 
+            int goal = StoryLevelMath.PickInt(levelGoalTypes, index, (int)goalType);
+            if (!StoryRoundMath.IsSupportedGoal(goal)) return false;
+
             // The old level's host stops queuing before the field changes under it.
             if (pickupHost != null) pickupHost.SetCollecting(false);
 
             levelIndex = index;
             levelId = levelIds[index];
-            int goal = StoryLevelMath.PickInt(levelGoalTypes, index, (int)goalType);
-            if (goal == StoryLevelMath.GoalCollectCount) goalType = StoryGoalType.CollectCategoryCount;
-            else if (goal == StoryLevelMath.GoalFreeRoam) goalType = StoryGoalType.FreeRoam;
-            else goalType = StoryGoalType.ReachTargetDiameter;
+            goalType = (StoryGoalType)goal;
             targetDiameterM = StoryLevelMath.PickFloat(levelTargetDiameters, index, targetDiameterM);
             targetCount = StoryLevelMath.PickInt(levelTargetCounts, index, targetCount);
             timeLimitSeconds = StoryLevelMath.PickFloat(levelTimeLimits, index, timeLimitSeconds);
@@ -925,6 +891,7 @@ namespace VRCKatamari.Story
             killCount = 0;
             resultDiameterM = 0f;
             resultCount = 0;
+            clearResult = StoryRoundMath.ClearPending;
             retryStartPoseCaptured = false;
             CaptureRetryStartPoseIfReady();
             EnterIdle();
@@ -933,25 +900,10 @@ namespace VRCKatamari.Story
             return true;
         }
 
-        /// <summary>
-        /// Records the settled measurement as a fact: the collision diameter, or the
-        /// confirmed count for a count level.
-        /// </summary>
-        /// <remarks>
-        /// The two goal types measure different quantities, so the one this level does not
-        /// use stays at 0. Nothing is compared against a threshold here; the star table is
-        /// the optional presenter's.
-        /// </remarks>
         private void MeasureSettledRound()
         {
             resultDiameterM = 0f;
-            resultCount = 0;
-
-            if (goalType == StoryGoalType.CollectCategoryCount)
-            {
-                resultCount = MeasuredCount();
-                return;
-            }
+            resultCount = goalType == StoryGoalType.B ? MeasuredCount() : 0;
 
             if (motor == null) return;
             // Collision diameter: the evaluated quantity (GameModes README section 2.1)
@@ -1025,14 +977,14 @@ namespace VRCKatamari.Story
             if (targetText == null) return;
             string attemptSuffix = "";
             if (retryAttempt > 0) attemptSuffix = "（第 " + retryAttempt + " 次重试）";
-            if (goalType == StoryGoalType.FreeRoam)
+            if (goalType == StoryGoalType.F)
             {
                 targetText.text = "自由练习";
                 return;
             }
-            if (goalType == StoryGoalType.CollectCategoryCount)
+            if (goalType == StoryGoalType.B)
             {
-                targetText.text = "目标 " + targetCount + " 件（" + countGoalKind + "）" + attemptSuffix;
+                targetText.text = HubPanelTextMath.CountTarget(countGoalKind, targetCount, GetLanguage()) + attemptSuffix;
                 return;
             }
             targetText.text = "目标 " + targetDiameterM + " m" + attemptSuffix;
@@ -1049,13 +1001,13 @@ namespace VRCKatamari.Story
         /// </remarks>
         private void WriteCurrentHud()
         {
-            if (goalType == StoryGoalType.CollectCategoryCount)
+            if (goalType == StoryGoalType.B)
             {
                 int count = MeasuredCount();
                 if (count == lastCurrentShown) return;
                 lastCurrentShown = count;
                 if (currentText == null) return;
-                currentText.text = "当前 " + count + " / " + targetCount + " 件";
+                currentText.text = HubPanelTextMath.CountProgress(countGoalKind, count, targetCount, GetLanguage());
                 return;
             }
             if (motor == null) return;

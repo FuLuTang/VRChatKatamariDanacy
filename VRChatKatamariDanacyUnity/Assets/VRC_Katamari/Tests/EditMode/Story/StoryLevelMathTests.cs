@@ -14,10 +14,9 @@ namespace VRCKatamari.Tests
         [Test]
         public void GoalTypeValuesMatchTheSerializedInts()
         {
-            Assert.AreEqual(StoryLevelMath.GoalReachDiameter, (int)StoryGoalType.ReachTargetDiameter);
-            Assert.AreEqual(StoryLevelMath.GoalCollectCount, (int)StoryGoalType.CollectCategoryCount);
-            Assert.AreEqual(StoryLevelMath.GoalFreeRoam, (int)StoryGoalType.FreeRoam);
-            Assert.AreEqual(2, (int)StoryGoalType.FreeRoam);
+            Assert.AreEqual(0, (int)StoryGoalType.A);
+            Assert.AreEqual(1, (int)StoryGoalType.B);
+            Assert.AreEqual(2, (int)StoryGoalType.F);
         }
 
         [Test]
@@ -59,17 +58,6 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void OnlyFreeRoamIsUntimed()
-        {
-            Assert.IsTrue(StoryLevelMath.IsTimedGoal(StoryLevelMath.GoalReachDiameter));
-            Assert.IsTrue(StoryLevelMath.IsTimedGoal(StoryLevelMath.GoalCollectCount));
-            Assert.IsFalse(StoryLevelMath.IsTimedGoal(StoryLevelMath.GoalFreeRoam));
-            Assert.IsTrue(StoryLevelMath.IsKnownGoal(2));
-            Assert.IsFalse(StoryLevelMath.IsKnownGoal(3));
-            Assert.IsFalse(StoryLevelMath.IsKnownGoal(-1));
-        }
-
-        [Test]
         public void PickersFallBackWhenTheTableHasNoEntry()
         {
             Assert.AreEqual(1.45f, StoryLevelMath.PickFloat(null, 0, 1.45f));
@@ -87,14 +75,15 @@ namespace VRCKatamari.Tests
         public void StarsAreOnByDefaultAndOffOnlyWhenTheLevelSaysSo()
         {
             // No table (every scene before this field): stars, as today.
-            Assert.IsTrue(StoryLevelMath.LevelUsesStars(null, 0));
-            Assert.IsTrue(StoryLevelMath.LevelUsesStars(new bool[0], 0));
-            Assert.IsTrue(StoryLevelMath.LevelUsesStars(new bool[] { false }, StoryLevelMath.NoLevel));
+            Assert.IsTrue(StoryLevelMath.LevelUsesStars(null, 0, true));
+            Assert.IsTrue(StoryLevelMath.LevelUsesStars(new bool[0], 0, true));
+            Assert.IsTrue(StoryLevelMath.LevelUsesStars(new bool[] { false }, StoryLevelMath.NoLevel, true));
 
+            Assert.IsFalse(StoryLevelMath.LevelUsesStars(null, 0, false));
             bool[] has = new bool[] { true, false };
-            Assert.IsTrue(StoryLevelMath.LevelUsesStars(has, 0));
-            Assert.IsFalse(StoryLevelMath.LevelUsesStars(has, 1));
-            Assert.IsTrue(StoryLevelMath.LevelUsesStars(has, 2));
+            Assert.IsTrue(StoryLevelMath.LevelUsesStars(has, 0, true));
+            Assert.IsFalse(StoryLevelMath.LevelUsesStars(has, 1, true));
+            Assert.IsTrue(StoryLevelMath.LevelUsesStars(has, 2, true));
         }
     }
 }

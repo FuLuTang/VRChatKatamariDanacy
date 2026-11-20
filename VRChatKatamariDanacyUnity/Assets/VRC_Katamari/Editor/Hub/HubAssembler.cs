@@ -241,6 +241,8 @@ namespace VRCKatamari.Editor.Hub
 
             HubLevelLauncher launcher = AssembleLauncher(round, offered, spawn, seat, station, hub, c);
             AssembleVrStickInput(round, c);
+            if (hub) AssembleRoundTable(round, offered, options.Plans, c);
+            else AssembleRound(round, offered, c);
             RoomParts room = AssembleRoom(offered, hub ? options.Plans : null, round, center,
                 launcher, c);
             HubRoomHost host = AssembleRoomHost(launcher, round, center, room.LevelButtons,
@@ -253,13 +255,11 @@ namespace VRCKatamari.Editor.Hub
             {
                 AssembleReturnButton(launcher, offered[0].EntryTransform, c);
             }
-            if (hub)
+            var roundSo = new SerializedObject(round);
+            if (SetObject(roundSo, "settings", room.Settings, c))
             {
-                AssembleRoundTable(round, offered, options.Plans, c);
-            }
-            else
-            {
-                AssembleRound(round, offered, c);
+                roundSo.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(round);
             }
 
             outcome.Launcher = launcher;
@@ -695,9 +695,46 @@ namespace VRCKatamari.Editor.Hub
             }
 
             HubLevelCatalog.LevelEntry first = offered[0].Entry;
-            if (first.roundFromPlacement)
+            var plan = new HubLevelPlan
             {
-                changed |= ApplyPlacementRound(so, first.id, c);
+                LevelId = first.id,
+                GoalType = so.FindProperty("goalType").intValue,
+                TargetDiameterM = so.FindProperty("targetDiameterM").floatValue,
+                TargetCount = so.FindProperty("targetCount").intValue,
+                CountKind = so.FindProperty("countGoalKind").stringValue,
+                TimeLimitSeconds = so.FindProperty("timeLimitSeconds").floatValue,
+                KillEnabled = so.FindProperty("killPlaneEnabled").boolValue,
+                KillPlaneY = so.FindProperty("killPlaneY").floatValue,
+                PickupHost = ReadObject<PickupFieldHost>(round, "pickupHost")
+            };
+            if (first.round != null && first.round.countDefinitions != null)
+            {
+                // The source controller may still reference the base level's field.
+                Transform content = HubLevelCatalog.FindPath(round.gameObject.scene, first.content);
+                PickupFieldHost[] fields = content == null ? new PickupFieldHost[0]
+                    : content.GetComponentsInChildren<PickupFieldHost>(true);
+                plan.PickupHost = fields.Length == 1 ? fields[0] : null;
+            }
+            ApplyRoundDefinition(first, plan, c);
+            changed |= SetString(so, "levelId", plan.LevelId, c);
+            changed |= SetInt(so, "goalType", plan.GoalType, c);
+            changed |= SetFloat(so, "targetDiameterM", plan.TargetDiameterM, c);
+            changed |= SetInt(so, "targetCount", plan.TargetCount, c);
+            changed |= SetString(so, "countGoalKind", plan.CountKind ?? "", c);
+            changed |= SetFloat(so, "timeLimitSeconds", plan.TimeLimitSeconds, c);
+            changed |= SetBool(so, "killPlaneEnabled", plan.KillEnabled, c);
+            changed |= SetFloat(so, "killPlaneY", plan.KillPlaneY, c);
+            changed |= SetObject(so, "pickupHost", plan.PickupHost, c);
+
+            StoryResultPresenter presenter = FindOptional<StoryResultPresenter>();
+            if (presenter != null)
+            {
+                var pso = new SerializedObject(presenter);
+                if (SetBool(pso, "hasStars", first.stars && !first.IsFreeRoam, c))
+                {
+                    pso.ApplyModifiedPropertiesWithoutUndo();
+                    c.Proxies.Add(presenter);
+                }
             }
 
             if (changed)
@@ -758,6 +795,7 @@ namespace VRCKatamari.Editor.Hub
             public float TargetDiameterM;
             public bool HasKillPlane;
             public float KillPlaneY;
+            public PlacementV2Prop[] Props;
         }
 
         /// <summary>
@@ -804,6 +842,7 @@ namespace VRCKatamari.Editor.Hub
 
             PlacementV2Meta meta = read.Document.Meta;
             var result = new PlacementRoundData();
+            result.Props = read.Document.Props;
             result.HasTimeLimit = meta.HasTimeLimit && meta.TimeLimitS > 0f;
             result.TimeLimitS = meta.TimeLimitS;
             result.HasTarget = meta.Ball != null && meta.Ball.HasTargetDiameter
@@ -825,28 +864,106 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        internal static bool ApplyPlacementRound(SerializedObject so, string levelId, Counters c)
+        // 源场景 -> placement -> 清单覆盖；单关和多关共用这条路径。
+        internal static void ApplyRoundDefinition(HubLevelCatalog.LevelEntry level, HubLevelPlan plan, Counters c)
         {
-            PlacementRoundData data;
-            if (!TryReadPlacementRound(levelId, c, out data)) return false;
+            if (level.IsFreeRoam)
+            {
+                plan.GoalType = (int)StoryGoalType.F;
+                plan.HasStars = false;
+                return;
+            }
 
-            bool changed = false;
-            changed |= SetString(so, "levelId", levelId, c);
-            if (data.HasTimeLimit)
+            HubLevelCatalog.RoundBlock rule = level.round;
+            PlacementRoundData placement = null;
+            if (level.roundFromPlacement || (rule != null && rule.countDefinitions != null))
+                TryReadPlacementRound(level.id, c, out placement);
+            if (level.roundFromPlacement && placement != null)
             {
-                changed |= SetFloat(so, "timeLimitSeconds", data.TimeLimitS, c);
+                if (placement.HasTimeLimit) plan.TimeLimitSeconds = placement.TimeLimitS;
+                if (placement.HasTarget)
+                {
+                    plan.GoalType = (int)StoryGoalType.A;
+                    plan.TargetDiameterM = placement.TargetDiameterM;
+                }
+                if (placement.HasKillPlane)
+                {
+                    plan.KillEnabled = true;
+                    plan.KillPlaneY = placement.KillPlaneY;
+                }
             }
-            if (data.HasTarget)
+            if (rule != null)
             {
-                changed |= SetEnum(so, "goalType", (int)StoryGoalType.ReachTargetDiameter, c);
-                changed |= SetFloat(so, "targetDiameterM", data.TargetDiameterM, c);
+                if (rule.hasTimeLimit) plan.TimeLimitSeconds = rule.timeLimitSeconds;
+                if (rule.hasTargetDiameter) plan.TargetDiameterM = rule.targetDiameterM;
+                if (rule.clearType.HasValue) plan.GoalType = (int)rule.clearType.Value;
+                if (rule.clearType == StoryGoalType.B)
+                {
+                    plan.TargetCount = rule.targetCount;
+                    plan.CountKind = rule.countKind;
+                    if (rule.countDefinitions != null && placement != null)
+                        BakeObjectiveKinds(level.id, plan, placement.Props, rule.countDefinitions, c);
+                    else if (rule.countDefinitions != null)
+                        c.Problems.Add(level.id + ": no v2 placement data for the type B definition filter");
+                }
+                if (rule.hasKillPlaneY)
+                {
+                    plan.KillEnabled = true;
+                    plan.KillPlaneY = rule.killPlaneY;
+                }
             }
-            if (data.HasKillPlane)
+            if (!StoryRoundMath.IsSupportedGoal(plan.GoalType))
+                c.Problems.Add(level.id + ": unsupported clear type " + plan.GoalType);
+        }
+
+        private static void BakeObjectiveKinds(string levelId, HubLevelPlan plan, PlacementV2Prop[] props,
+            string[] definitions, Counters c)
+        {
+            if (plan.PickupHost == null)
             {
-                changed |= SetBool(so, "killPlaneEnabled", true, c);
-                changed |= SetFloat(so, "killPlaneY", data.KillPlaneY, c);
+                c.Problems.Add(levelId + ": no unique pickup host for the type B definition filter");
+                return;
             }
-            return changed;
+            var targets = new HashSet<string>(definitions, StringComparer.Ordinal);
+            var matchedDefs = new HashSet<string>(StringComparer.Ordinal);
+            var selectedIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < props.Length; i++)
+            {
+                PlacementV2Prop prop = props[i];
+                if (!prop.Absorbable || !targets.Contains(prop.Def)) continue;
+                matchedDefs.Add(prop.Def);
+                selectedIds.Add(prop.ItemId);
+            }
+            foreach (string def in definitions)
+                if (!matchedDefs.Contains(def)) c.Problems.Add(levelId + ": no absorbable prop for def " + def);
+
+            var so = new SerializedObject(plan.PickupHost);
+            SerializedProperty ids = so.FindProperty("itemIds");
+            if (ids == null || !ids.isArray)
+            {
+                c.Problems.Add(levelId + ": pickup host has no itemIds table");
+                return;
+            }
+            var labels = new string[ids.arraySize];
+            int matched = 0;
+            for (int row = 0; row < labels.Length; row++)
+            {
+                string id = ids.GetArrayElementAtIndex(row).stringValue;
+                if (selectedIds.Remove(id))
+                {
+                    labels[row] = plan.CountKind;
+                    matched++;
+                }
+                else labels[row] = "";
+            }
+            foreach (string id in selectedIds)
+                c.Problems.Add(levelId + ": objective itemId missing from pickup host: " + id);
+            if (matched < plan.TargetCount)
+                c.Problems.Add(levelId + ": type B has only " + matched + " matching pickup rows for target " + plan.TargetCount);
+            if (SetStringArray(so, "objectiveKinds", labels, c)) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(plan.PickupHost);
+            c.Notes.Add(levelId + ": objective kind=" + plan.CountKind + " rows=" + matched + "/" + labels.Length
+                + " defs=" + matchedDefs.Count + "/" + definitions.Length);
         }
 
         // A multi-level hub: the round controller's per-level table and the result card's
@@ -923,16 +1040,20 @@ namespace VRCKatamari.Editor.Hub
                 return;
             }
             var pso = new SerializedObject(presenter);
+            SerializedProperty star1D = pso.FindProperty("star1DiameterM");
+            SerializedProperty star1C = pso.FindProperty("star1Count");
             SerializedProperty star2D = pso.FindProperty("star2DiameterM");
             SerializedProperty star3D = pso.FindProperty("star3DiameterM");
             SerializedProperty star2C = pso.FindProperty("star2Count");
             SerializedProperty star3C = pso.FindProperty("star3Count");
             SerializedProperty band = pso.FindProperty("partialBand");
-            if (star2D == null || star3D == null || star2C == null || star3C == null || band == null)
+            if (star1D == null || star1C == null || star2D == null || star3D == null || star2C == null || star3C == null || band == null)
             {
                 c.Problems.Add("StoryResultPresenter lacks one of its single-level star fields");
                 return;
             }
+            var s1d = new float[n];
+            var s1c = new int[n];
             var s2d = new float[n];
             var s3d = new float[n];
             var s2c = new int[n];
@@ -940,6 +1061,8 @@ namespace VRCKatamari.Editor.Hub
             var bands = new float[n];
             for (int i = 0; i < n; i++)
             {
+                s1d[i] = star1D.floatValue;
+                s1c[i] = star1C.intValue;
                 s2d[i] = star2D.floatValue;
                 s3d[i] = star3D.floatValue;
                 s2c[i] = star2C.intValue;
@@ -947,6 +1070,8 @@ namespace VRCKatamari.Editor.Hub
                 bands[i] = band.floatValue;
             }
             bool pchanged = SetBoolArray(pso, "levelHasStars", hasStars, c);
+            pchanged |= SetFloatArray(pso, "levelStar1Diameters", s1d, c);
+            pchanged |= SetIntArray(pso, "levelStar1Counts", s1c, c);
             pchanged |= SetFloatArray(pso, "levelStar2Diameters", s2d, c);
             pchanged |= SetFloatArray(pso, "levelStar3Diameters", s3d, c);
             pchanged |= SetIntArray(pso, "levelStar2Counts", s2c, c);
@@ -1223,7 +1348,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        internal static bool SetEnum(SerializedObject so, string field, int value, Counters c)
+        internal static bool SetInt(SerializedObject so, string field, int value, Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
             if (property == null) return Missing(so, field, c);

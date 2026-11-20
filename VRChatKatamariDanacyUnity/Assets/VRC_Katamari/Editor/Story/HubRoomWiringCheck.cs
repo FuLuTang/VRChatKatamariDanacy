@@ -238,7 +238,7 @@ namespace VRCKatamari.Editor.Story
                     ? ids.GetArrayElementAtIndex(i).stringValue : ("#" + i);
                 Transform entry = Element<Transform>(launcher, "levelEntries", i);
                 bool freeRoam = goals != null && goals.isArray && i < goals.arraySize
-                    && goals.GetArrayElementAtIndex(i).intValue == StoryLevelMath.GoalFreeRoam;
+                    && goals.GetArrayElementAtIndex(i).intValue == (int)StoryGoalType.F;
                 if (entry == null)
                 {
                     if (!freeRoam)

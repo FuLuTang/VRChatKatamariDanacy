@@ -182,6 +182,9 @@ namespace VRCKatamari.Pickup
         [SerializeField] private string[] areaCollisionOffItemIds;
         private bool[] areaCollisionOffRows;
         [SerializeField] private string[] kinds;
+        // Optional count-goal labels in itemIds order. An empty row is not counted;
+        // when the entire column is absent, the original kind tally is used.
+        [SerializeField] private string[] objectiveKinds;
         // Optional per-prop scream id (the original's object voice), indexed exactly like
         // itemIds; 0 = no scream. The serialized name predates the meaning and is kept.
         [SerializeField] private int[] propAbsorbSoundClasses;
@@ -1839,7 +1842,8 @@ namespace VRCKatamari.Pickup
             // the frame the event is consumed instead of up to one scan later.
             nextBlockingScanTime = 0f;
             attachedCount = attachedCount + 1;
-            TallyKind(kinds[index]);
+            if (objectiveKinds == null || objectiveKinds.Length == 0) TallyKind(kinds[index]);
+            else if (index < objectiveKinds.Length) TallyKind(objectiveKinds[index]);
             Vector3 ballCenter = motor.GetCenterWorld();
             CheckAttachmentRootOnce(ballCenter);
             Debug.Log("[PickupFieldHost] attached id=" + itemIds[index]
@@ -1910,7 +1914,7 @@ namespace VRCKatamari.Pickup
 
         private void TallyKind(string kind)
         {
-            if (kind == null) return;
+            if (string.IsNullOrEmpty(kind)) return;
             for (int i = 0; i < kindTallyCount; i++)
             {
                 if (kindTallyNames[i] == kind)

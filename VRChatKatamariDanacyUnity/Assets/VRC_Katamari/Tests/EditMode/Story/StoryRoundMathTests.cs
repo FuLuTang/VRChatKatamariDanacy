@@ -26,6 +26,60 @@ namespace VRCKatamari.Tests
     /// </remarks>
     public class StoryRoundMathTests
     {
+        [TestCase(0.001f, 1.25f, StoryRoundMath.ClearPending)]
+        [TestCase(0f, 1.2499f, StoryRoundMath.ClearFailed)]
+        [TestCase(0f, 1.25f, StoryRoundMath.ClearPassed)]
+        [TestCase(-0.1f, 1.3f, StoryRoundMath.ClearPassed)]
+        public void TypeAUsesOnlyDiameterAtTheBell(float timeLeft, float diameter, int expected)
+        {
+            Assert.AreEqual(expected, StoryRoundMath.EvaluateClear((int)StoryGoalType.A,
+                true, timeLeft, diameter, 1.25f, 100, 10));
+        }
+
+        [TestCase(0.001f, 10, StoryRoundMath.ClearPending)]
+        [TestCase(0f, 9, StoryRoundMath.ClearFailed)]
+        [TestCase(0f, 10, StoryRoundMath.ClearPassed)]
+        [TestCase(-0.1f, 11, StoryRoundMath.ClearPassed)]
+        public void TypeBUsesOnlyCountAtTheBell(float timeLeft, int count, int expected)
+        {
+            // 九只即使超过 80 cm 也失败；十只即使低于 80 cm 也过关。
+            float diameter = count < 10 ? 0.81f : 0.5f;
+            Assert.AreEqual(expected, StoryRoundMath.EvaluateClear((int)StoryGoalType.B,
+                true, timeLeft, diameter, 0.8f, count, 10));
+        }
+
+        [TestCase(true, 120f)]
+        [TestCase(true, 0f)]
+        [TestCase(false, 0f)]
+        public void TypeFDoesNotSettle(bool validClock, float timeLeft)
+        {
+            Assert.AreEqual(StoryRoundMath.ClearPending, StoryRoundMath.EvaluateClear((int)StoryGoalType.F,
+                validClock, timeLeft, 2f, 1f, 10, 10));
+        }
+
+        [TestCase(StoryGoalType.N)]
+        [TestCase(StoryGoalType.C)]
+        [TestCase(StoryGoalType.D)]
+        [TestCase(StoryGoalType.E)]
+        [TestCase(StoryGoalType.X)]
+        public void UnimplementedTypesCannotClear(StoryGoalType type)
+        {
+            Assert.IsFalse(StoryRoundMath.IsSupportedGoal((int)type));
+            Assert.AreEqual(StoryRoundMath.ClearFailed, StoryRoundMath.EvaluateClear((int)type,
+                true, 0f, 2f, 1f, 10, 10));
+        }
+
+        [Test]
+        public void InvalidClockOrThresholdCannotClear()
+        {
+            Assert.AreEqual(StoryRoundMath.ClearFailed, StoryRoundMath.EvaluateClear((int)StoryGoalType.B,
+                false, 0f, 2f, 1f, 10, 10));
+            Assert.AreEqual(StoryRoundMath.ClearFailed, StoryRoundMath.EvaluateClear((int)StoryGoalType.B,
+                true, 0f, 2f, 1f, 10, 0));
+            Assert.AreEqual(StoryRoundMath.ClearFailed, StoryRoundMath.EvaluateClear((int)StoryGoalType.A,
+                true, 0f, float.PositiveInfinity, 1f, 10, 10));
+        }
+
         [Test]
         public void RemainingTimeCountsDownAndClampsAtZero()
         {

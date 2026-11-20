@@ -17,7 +17,7 @@
 3. **登记宿主**：每关至少一个 `LevelArenaHost`（地面高度在它的 `groundOffset`）；多宿主关由清单 `arenaFirst` 指定“外框宿主”先登记（清表+外墙+地面），其余追加。合集里所有宿主的自注册被挂起，由切关逻辑统一登记。地形用 `TerrainFieldHost`，一关最多一个。
 4. **道具**：每关的 `PickupFieldHost` 的 `itemIds` 跨清单所有被搬的关唯一；位姿/尺寸走局部数据。
 5. **起点**：清单 `start`（中心、朝向、可选球径 `diameterM`）；缺省读源场景电机。入口标记（若有）在地面上且离球座 ≤12 m，自由练习图可省略入口（启动器退回座位落点）。
-6. **回合**：`kind: "round"` 的关写 `roundFromPlacement`（读自己的 placement 文档）或在 `round` 块给限时/目标径/kill plane；`kind: "freeRoam"` 不需要回合数据。出口：装配器给每关放 `HubReturnButton`，作者不用做。
+6. **回合**：`kind: "round"` 的关写 `roundFromPlacement`（读自己的 placement 文档）或在 `round` 块给过关类型、参数和 kill plane；`kind: "freeRoam"` 不需要回合数据。出口：装配器给每关放 `HubReturnButton`，作者不用做。
 7. **命名**：关卡 id = 数据目录名（参考关 `_ref_*`）；外壳固定 `Island_<id>`。
 8. **许可**：见 §0-2。
 
@@ -36,7 +36,7 @@
 | level | `source.scene` / `source.takeRoots` / `source.leaveBehind` | 源场景；被搬的根或子树路径；`leaveBehind` = 不搬的子路径（留在底板） |
 | level | `island.offset` | `[x, 0, z]`，Y 必须 0 |
 | level | `start` | `center`、`headingDeg`、可选 `diameterM`（已是作者坐标，装配器加偏移） |
-| level | `round` | 缺省值覆盖：`killPlaneY`、`timeLimitSeconds`、`targetDiameterM` |
+| level | `round` | 覆盖源值：`killPlaneY`、`timeLimitSeconds`、`clearType`（A/B/F）、`targetDiameterM`（A）；B 可配 `targetCount`、`countKind`、`countDefinitions`；`recordDiameterAndTotal` 可独立指定沿用球径和总吸附件数 |
 | level | `arenaFirst` | 先登记的外框宿主路径（源层级路径）；缺省取物理场驱动的 `sandboxFrame`，其后是驱动 `cells` 的顺序，再后是岛下其余 `LevelArenaHost` 按层级顺序 |
 | level | `content` / `entry` | 源场景里的层级路径；有 `island` 且场景里有 `Island_<id>` 外壳时相对外壳解析（见 2.2）；`kind: freeRoam` 可省 `entry` |
 
@@ -44,8 +44,8 @@
 
 | 关 | 偏移 | takeRoots | 起点 / 球径 | 备注 |
 |---|---|---|---|---|
-| 蟹座 `_ref_cancer` | (0,0,0) | `LevelContent/_ref_cancer` | (-5,-1,2.5)，0.222 m | 限时 420 s、目标 0.8 m、killPlaneY -4；`stars:false` |
-| 野餐第一关 `story_01_bench_size` | (0,0,-1200) | `LevelContent`、`LevelArena`、`LevelEntry`；`leaveBehind: LevelContent/hub` | (-12.5,0.15,-12.5)，默认径 | 大厅子树 `LevelContent/hub`（1200 m 岛）留在底板 |
+| 蟹座 `_ref_cancer` | (0,0,0) | `LevelContent/_ref_cancer` | (-5,-1,2.5)，0.222 m | B 型、到时确认吸附 ≥10 只螃蟹、420 s、killPlaneY -4；不评星；记录球径和总吸附件数 |
+| 野餐第一关 `story_01_bench_size` | (0,0,-1200) | `LevelContent`、`LevelArena`、`LevelEntry`；`leaveBehind: LevelContent/hub` | (-12.5,0.15,-12.5)，默认径 | A 型、到时球径 ≥1.25 m、120 s；大厅子树 `LevelContent/hub`（1200 m 岛）留在底板 |
 | 地图 0 `physics_test_field` | (-1200,0,0) | `LevelContent` | (0,0.15,-39.5) 朝 +Z | 14 个 `LevelArenaHost`，`SANDBOX` 外框先登记；驱动/设定器不搬 |
 | 地形实验室 `terrain_contact_lab` | (0,0,1200) | `LevelContent`、`Ground` | (0,0.15,0) | 只有 C23 一块地形；Ground 80×80、y=-1.5 |
 
@@ -128,7 +128,7 @@
    - 分析：解析 takeRoots/leaveBehind（根名或子树路径）；搬运集合里出现基础设施单例（电机、输入、座位、视图、回合/结果/启动器/房间宿主、切关宿主、驱动、设定器、场景描述符、PipelineManager）或“世界坐标不搬”的类型 → PROBLEM；读源场景电机起点/地面、回合控制器设置、物理场驱动的竞技场顺序/白名单/出生点；列出所有指向搬运集合之外（同一源场景）的序列化引用。
    - 执行：建 `Island_<id>`（先在原点）；离开的子树先摘下；每个 takeRoot 在外壳下重建祖先占位对象，`MoveGameObjectToScene`（源≠输出时）+ `SetParent(worldPositionStays:true)`；`leaveBehind` 子树留在原处（底板情形下放回重建的 `LevelContent` 占位根下）；外壳移到偏移；**引用按源层级路径重映射到输出场景同路径同类型对象**（同类型多个按序号），找不到 → PROBLEM（属性路径 + 目标路径），不做“按类型猜”；补世界坐标数据（`TerrainFieldHost.vertices` 每个顶点、`MotionHost.pathPoints` 每 3 个数加偏移，偏移全 0 则跳过）；所有 `TerrainFieldHost.deferRegistration = true`；被改的代理 `CopyProxyToUdon`；复查没有引用仍指向源场景；关闭源场景（不保存）。
 7. 每关数据：竞技场顺序 = `arenaFirst`（缺省取驱动的 `sandboxFrame`）→ 驱动 `cells` 的竞技场顺序 → 其余按层级顺序；地面高度 = 第一个竞技场的 `groundOffset`（无竞技场取源电机的 `groundPlaneOffset`）；白名单 = 驱动的 `kindWhitelist`；地形宿主一关至多一个；道具宿主 = 源回合控制器的 `pickupHost`（否则岛下第一个）；起点 = `start.center`（缺省：驱动出生点，再缺省：源电机 `startCenterWorld`）+ 偏移；朝向 `start.headingDeg`；**起始体积 = `SizeModelMath.TrySphereVolumeMm3(diameterM, 底板电机的 semanticDiameterPerCoreDiameter)`**，`diameterM` 缺省取源电机的 `startDiameterWorldM`，仍无则用底板电机自己的起始体积；从不读源电机的 `startVolumeMm3`（有 `startDiameterWorldM` 时它在运行时被覆盖，存的值不是起点）。
-8. 回合计划：自由练习关 `goal=FreeRoam`；计时关先取源回合控制器的值，`roundFromPlacement` 再用 placement 文档覆盖，最后是清单 `round` 块覆盖。`allowAbort` 取清单；`stars` 取清单（自由练习关恒无星）；星级阈值数组全部填成结果卡自己的单关值。
+8. 回合计划：自由练习关用 F 型；计时关先取源回合控制器的值，`roundFromPlacement` 再用 placement 文档覆盖，最后是清单 `round` 块覆盖。`allowAbort` 取清单；`stars` 取清单（自由练习关恒无星）；星级阈值数组（含第一档）从结果卡读取，不从过关门槛推导。B 型的 definition 白名单与 placement 实例按 `itemId` 匹配，将计数标签写到 `PickupFieldHost.objectiveKinds`；找不到对应 id 会报 PROBLEM，不改物理类别或候选白名单。
 9. 写 `LevelSwitch`（`LevelSwitchHost`，根物体）的并行数组；跑 `HubAssembler.Run`（多关模式）：N 张墙面关卡卡片（顺序 = `hubs[].levels`）、启动器（含 `levelSwitch`）、房间宿主、**每关一颗返回按钮 `HubReturnButton_<id>`**（站在入口标记旁，没有入口则站在该关起点旁；底板里原来的根 `HubReturnButton` 改名成第一关的）、控制器按关数组与结果卡按关数组。结算卡不在 `HubAssembler.Run` 里：随后的骑乘装配（`RideUxAssembler`）在 `FollowRigRoot/RidePanels` 下实例化 `RideResultCard.prefab`，写两颗卡按钮与 presenter/回合控制器的引用，并删掉旧的 `HubResultBoard`、`HubReturnCardButton` 与卡外 `StoryRetryButton`。
 10. **GPU instancing**（`Editor/LevelBuild/MaterialInstancing.cs`，装配器自动做）：遍历场景里启用中的 `MeshRenderer`，给每个「不透明（renderQueue < 2450、shader 名不含 `Transparent`/`Cutout`）+ shader 有 instancing 变体（`Standard`、`Standard (Specular setup)`）」的材质打开 `enableInstancing`。同一材质 + 同一网格的 n 个渲染器从 n 次 draw 变 1 次；摸底里非骨骼道具的 mesh+material 分组是 372 次 draw → 130 组。参考岛的**道具材质是 FBX 的只读内嵌材质**（Unity「Use Embedded Materials」下不能改），所以先把每份去重材质复制成 `Assets/_RefUnlicensed/Materials/Instanced/<模型名>_<材质名>.mat`（等同 Unity 的 Extract Materials，保留 shader/keywords/属性/renderQueue），再把渲染器的材质槽换成副本；`Assets/VRC_Katamari/` 下已入 git 的材质不在装配里改（由创建它的代码负责，见 6.1.2）。`Legacy Shaders/*`（地形 visual）没有 instancing 变体，跳过。报告行：`[allmaps] instancing: enabled=N duplicated=M already=K renderers=R skipped committed=… unsupported=… non-opaque=…`（都是**去重后的材质数**，不是槽位/渲染器次数）；命名不出来的内嵌材质是 `warn:` 行，不阻止保存。同一输入重跑不新建资产、不重写渲染器。
 11. **静态遮挡标记**（`Editor/Hub/OccluderRule.cs`，装配器自动做，不手摆）：按「是什么」判定场景里的固定结构几何，只写 `StaticEditorFlags`，**不烘焙**（烘焙是操作员的下一步，见 6.1.1）：

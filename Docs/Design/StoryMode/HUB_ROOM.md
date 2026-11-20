@@ -28,7 +28,7 @@
 | 板 / 区 | 内容 | 状态 |
 |---|---|---|
 | 选关板 | 四张关卡卡片（2×2，清单顺序）：编号色块、关名、目标行（限时 + 目标球径/件数，自由练习写「不计时」）、记录行、「开始 →」 | 本轮 |
-| 选关板 · 记录 | 计时关：最好（球径 · 件数）、上次、已玩次数；不评星（蟹座先不评星，评分是可拆卸模块）；自由练习不记 | 本轮（HubRecordBook，PlayerData） |
+| 选关板 · 记录 | 蟹座和野餐：最好／上次（球径 · 总吸附件数，最好先比球径）、已玩局数；地图 0 和地形实验室不记。星级与大厅记录无关 | 本轮（HubRecordBook，PlayerData） |
 | 选关板 · 预览 | 卡片左侧的预览位（现为编号色块） | 后续：各关缩略图需要截图资产；位置与节点已留 |
 | 选关板 · 提示行 / 制作信息 | 怎么开始（桌面左键 / VR 扳机）；底部一行「粉丝制作、与官方无关」 | 本轮 |
 | 怎么玩板 | 五条规则：滚动吸附、比球小才能吸、越滚越大、限时与自动结算、8 秒后回大厅、菜单 Respawn = 放弃回大厅 | 本轮 |
@@ -91,7 +91,7 @@ Unity 侧（HubAssembler.Room）：
 6. Inspector 回读：`LevelCard_0..3` 的 HubStartButton.levelIndex = 0/1/2/3（蟹座、野餐、地图0、地形实验室），Button On Click 一条：目标 = 同物体 UdonBehaviour、函数 SendCustomEvent、参数 `Press`；`SettingRow_NN/Less` delta=-1、`/More` delta=+1、settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput，VrStickMoveInput.settings = HubSettings；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings。
 7. EditMode：HubSettingsMathTests、HubRecordMathTests、HubPanelTextMathTests、HubPanelCharsetTests、HubRoomMathTests 及现有 Hub/Story 测试；报告发现/通过/失败数。
 8. Play（ClientSim）：桌面视角对准面板应出现 UI 指针；鼠标左键点各按钮，日志：点蟹座卡片 `[hub-panel] level card 0 pressed`，随后是 launcher 的开始日志；点设置板语言行 ▶ 两次，三块板与提示行依次变英文、日文，日志 `[hub-settings] vrck.set.language=1/2`；点 VR 操作方式 ▶，日志 `[input] stick mode=simple`，操作表 VR 栏的移动行变成简单模式文案。音乐/提示音等待接项值能改、能保存（行上不显示待接标记）。面板上中日文无方块字。
-9. 跑一局蟹座到 Result：日志 `[hub-record] level=_ref_cancer d=… n=… best=True plays=1`，回大厅后蟹座卡片显示「最好 / 上次 / 已玩 1」；在 Running 中 Respawn 放弃的一局不记录。重进世界（Build & Test 或上传后）记录与设置仍在。
+9. 跑一局蟹座到 Result：过关只看到时的螃蟹数；下列 `n` 仍是总吸附件数（沿用 `vrck.rec._ref_cancer.*` 存档键和量纲，不将螃蟹数写进旧键）。日志 `[hub-record] level=_ref_cancer d=… n=… best=True plays=1`，回大厅后蟹座卡片显示「最好 / 上次 / 已玩 1」；在 Running 中 Respawn 放弃的一局不记录。重进世界（Build & Test 或上传后）记录与设置仍在。
 10. 原有返回/重试/Respawn 验收（下文与 HUB_LOOP_PLAN）照旧，结果卡两颗按钮用鼠标左键点（不再是 Interact 提示）：「再来一次」日志 `[hub]` 重试链、「回大厅」日志 return 链。
 
 ### 截图与读数

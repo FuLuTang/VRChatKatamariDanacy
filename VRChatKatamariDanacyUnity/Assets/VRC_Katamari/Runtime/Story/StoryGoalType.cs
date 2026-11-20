@@ -1,35 +1,15 @@
 namespace VRCKatamari.Story
 {
-    /// <summary>
-    /// Which quest a story level sets: a size goal or a category count goal.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// One value per story quest type that has a level:
-    /// reach_target_diameter is <see cref="ReachTargetDiameter"/>,
-    /// collect_category_count is <see cref="CollectCategoryCount"/>
-    /// (Docs/Design/GameModes/README.md sections 2.1 and 4.3). The third quest type
-    /// the design lists, absorb_specific_target, is deliberately absent: no level
-    /// uses it, and the map has no unique target instance to name
-    /// (README section 6-B6). A level sets exactly one quest type.
-    /// </para>
-    /// <para>
-    /// Why it is its own file. The round (StoryRoundController) reads it to pick which
-    /// HUD line and which measurement it reports, and the optional result presenter
-    /// reads it through the round to pick which finished measurement to judge. It is
-    /// level vocabulary both sides name, not arithmetic, so it belongs to neither the
-    /// clock nor the star table and moving either one must not move it.
-    /// </para>
-    /// </remarks>
+    /// <summary>对应初代 CLEAR_TYPE；数值是场景序列化 ID，并非原作编号。</summary>
     public enum StoryGoalType
     {
-        ReachTargetDiameter = 0,
-        CollectCategoryCount = 1,
-
-        /// <summary>
-        /// No goal, no clock, no settle: a practice level the player leaves by choice
-        /// (the hub's return button). The round runs but never ends by itself and no card is drawn.
-        /// </summary>
-        FreeRoam = 2
+        A = 0, // 到时比较球径。
+        B = 1, // 到时比较指定物件的确认吸附件数。
+        F = 2, // 自由练习，不自动结算。
+        N = 3, // 未实现。
+        C = 4, // 未实现。
+        D = 5, // 未实现。
+        E = 6, // 未实现。
+        X = 7  // 未实现。
     }
 }

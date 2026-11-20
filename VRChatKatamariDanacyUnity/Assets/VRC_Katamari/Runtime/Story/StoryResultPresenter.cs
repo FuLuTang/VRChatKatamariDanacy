@@ -1,6 +1,7 @@
 using UdonSharp;
 using UnityEngine;
 using TMPro;
+using VRCKatamari.Story.Hub;
 
 namespace VRCKatamari.Story
 {
@@ -70,13 +71,14 @@ namespace VRCKatamari.Story
         // lines (target/current/remaining), which stay on the round.
         [SerializeField] private TextMeshProUGUI resultText;
 
-        // ---- Star table (level data; tier 1 is the round's goal) ----
-        // stars[1].requires.target_diameter_m / stars[2].requires.target_diameter_m.
-        // Level 1: 1.45 / 1.60 m.
+        // 星级阈值独立于过关阈值。野餐关三档：1.25 / 1.45 / 1.60 m。
+        [SerializeField] private bool hasStars = true;
+        [SerializeField] private float star1DiameterM = 1.25f;
         [SerializeField] private float star2DiameterM = 1.45f;
         [SerializeField] private float star3DiameterM = 1.6f;
 
         // stars[1].requires.count / stars[2].requires.count. Level 2: 20 / 30.
+        [SerializeField] private int star1Count = 10;
         [SerializeField] private int star2Count = 20;
         [SerializeField] private int star3Count = 30;
 
@@ -90,6 +92,8 @@ namespace VRCKatamari.Story
         // thresholds, so the card shows its measurement only and draws no stars or comment.
         [Header("Per-level star table (optional, parallel arrays)")]
         [SerializeField] private bool[] levelHasStars;
+        [SerializeField] private float[] levelStar1Diameters;
+        [SerializeField] private int[] levelStar1Counts;
         [SerializeField] private float[] levelStar2Diameters;
         [SerializeField] private float[] levelStar3Diameters;
         [SerializeField] private int[] levelStar2Counts;
@@ -194,7 +198,7 @@ namespace VRCKatamari.Story
             {
                 // A practice level has nothing to grade, and an abandoned round has nobody
                 // to show it to: no card. Hidden and cleared like Idle/Running below.
-                if (controller.GetGoalType() == StoryGoalType.FreeRoam || controller.WasAborted())
+                if (controller.GetGoalType() == StoryGoalType.F || controller.WasAborted())
                 {
                     SetCardVisible(false);
                     if (resultText != null) resultText.text = "";
@@ -239,7 +243,7 @@ namespace VRCKatamari.Story
         /// </remarks>
         private void CaptureFacts()
         {
-            settledDiameterM = 0f;
+            settledDiameterM = controller.GetResultDiameterM();
             settledCount = 0;
             stars = StoryStarMath.StarsNone;
             insidePartialBand = false;
@@ -249,15 +253,15 @@ namespace VRCKatamari.Story
             bool evaluatedInsidePartialBand;
 
             int levelIndex = controller.GetLevelIndex();
-            usesStars = StoryLevelMath.LevelUsesStars(levelHasStars, levelIndex);
+            usesStars = StoryLevelMath.LevelUsesStars(levelHasStars, levelIndex, hasStars);
             float band = StoryLevelMath.PickFloat(levelPartialBands, levelIndex, partialBand);
 
-            if (controller.GetGoalType() == StoryGoalType.CollectCategoryCount)
+            if (controller.GetGoalType() == StoryGoalType.B)
             {
                 settledCount = controller.GetResultCount();
                 if (!usesStars) return;
                 if (!StoryStarMath.TryEvaluateCountStars(settledCount,
-                    controller.GetTargetCount(),
+                    StoryLevelMath.PickInt(levelStar1Counts, levelIndex, star1Count),
                     StoryLevelMath.PickInt(levelStar2Counts, levelIndex, star2Count),
                     StoryLevelMath.PickInt(levelStar3Counts, levelIndex, star3Count), band,
                     out evaluatedStars, out evaluatedInsidePartialBand))
@@ -269,10 +273,9 @@ namespace VRCKatamari.Story
                 return;
             }
 
-            settledDiameterM = controller.GetResultDiameterM();
             if (!usesStars) return;
             if (!StoryStarMath.TryEvaluateSizeStars(settledDiameterM,
-                controller.GetTargetDiameterM(),
+                StoryLevelMath.PickFloat(levelStar1Diameters, levelIndex, star1DiameterM),
                 StoryLevelMath.PickFloat(levelStar2Diameters, levelIndex, star2DiameterM),
                 StoryLevelMath.PickFloat(levelStar3Diameters, levelIndex, star3DiameterM), band,
                 out evaluatedStars, out evaluatedInsidePartialBand))
@@ -292,10 +295,14 @@ namespace VRCKatamari.Story
                 + " attempt=" + controller.GetAttemptNumber());
 
             if (resultText == null) return;
+            int lang = controller.GetLanguage();
+            string clearLabel = HubPanelTextMath.ClearLabel(controller.GetClearResult(), lang);
             string measuredLabel;
-            if (controller.GetGoalType() == StoryGoalType.CollectCategoryCount)
+            if (controller.GetGoalType() == StoryGoalType.B)
             {
-                measuredLabel = "件数 " + settledCount + " / " + controller.GetTargetCount();
+                measuredLabel = HubPanelTextMath.CountProgress(controller.GetCountGoalKind(),
+                    settledCount, controller.GetTargetCount(), lang)
+                    + " · " + HubPanelTextMath.Diameter(settledDiameterM);
             }
             else
             {
@@ -303,12 +310,11 @@ namespace VRCKatamari.Story
             }
             if (!usesStars)
             {
-                // No thresholds for this level: no stars and no grading comment, only what was measured.
-                resultBody = presenterLine + "\n" + measuredLabel;
+                resultBody = clearLabel + "\n" + measuredLabel;
                 RenderResultBody();
                 return;
             }
-            resultBody = presenterLine + "\n" + StarGlyphs(stars) + "  "
+            resultBody = clearLabel + "\n" + StarGlyphs(stars) + "  "
                 + measuredLabel + "\n" + CommentLine(stars, insidePartialBand);
             RenderResultBody();
         }

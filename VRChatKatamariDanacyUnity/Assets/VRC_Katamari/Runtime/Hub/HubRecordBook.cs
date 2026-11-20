@@ -2,7 +2,6 @@ using UdonSharp;
 using UnityEngine;
 using VRC.SDK3.Persistence;
 using VRC.SDKBase;
-using VRCKatamari.BallMotor;
 using VRCKatamari.Pickup;
 using VRCKatamari.Story;
 
@@ -36,10 +35,10 @@ namespace VRCKatamari.Hub
     public class HubRecordBook : UdonSharpBehaviour
     {
         [SerializeField] private StoryRoundController controller;
-        [SerializeField] private KatamariBallMotor motor;
 
         [Tooltip("Level ids in launcher order (the record keys).")]
         [SerializeField] private string[] levelIds;
+        [SerializeField] private int[] levelRecordModes;
 
         [Tooltip("Each level's pickup host, launcher order (piece count of a size level).")]
         [SerializeField] private PickupFieldHost[] levelPickupHosts;
@@ -82,7 +81,7 @@ namespace VRCKatamari.Hub
             EnsureArrays();
             for (int i = 0; i < hasRecord.Length; i++)
             {
-                if (playedThisSession[i]) continue;
+                if (playedThisSession[i] || !IsLevelRecorded(i)) continue;
                 string id = levelIds[i];
                 int storedPlays;
                 if (!PlayerData.TryGetInt(player, HubRecordMath.StorageKey(id,
@@ -111,23 +110,19 @@ namespace VRCKatamari.Hub
             EnsureArrays();
             int index = controller.GetLevelIndex();
             if (index < 0 || index >= hasRecord.Length) return;
-            int goal = (int)controller.GetGoalType();
-            if (!HubRecordMath.IsRecorded(goal, false)) return;
+            int mode = StoryLevelMath.PickInt(levelRecordModes, index, HubRecordMath.None);
+            if (!HubRecordMath.IsRecorded(mode, false)) return;
 
             float diameter = controller.GetResultDiameterM();
             int count = controller.GetResultCount();
-            if (goal == (int)StoryGoalType.CollectCategoryCount)
-            {
-                if (motor != null) diameter = motor.GetCollisionRadiusWorldM() * 2f;
-            }
-            else
+            if (mode == HubRecordMath.DiameterAndTotal)
             {
                 PickupFieldHost host = null;
                 if (levelPickupHosts != null && index < levelPickupHosts.Length) host = levelPickupHosts[index];
                 count = host != null ? host.GetAttachedCount() : 0;
             }
 
-            bool better = HubRecordMath.IsBetter(goal, diameter, count, hasRecord[index],
+            bool better = HubRecordMath.IsBetter(mode, diameter, count, hasRecord[index],
                 bestDiameters[index], bestCounts[index]);
             if (better)
             {
@@ -152,6 +147,12 @@ namespace VRCKatamari.Hub
                 PlayerData.SetInt(HubRecordMath.StorageKey(id, HubRecordMath.FieldPlays), plays[index]);
             }
             Announce();
+        }
+
+        public bool IsLevelRecorded(int index)
+        {
+            return HubRecordMath.IsRecorded(StoryLevelMath.PickInt(levelRecordModes, index,
+                HubRecordMath.None), false);
         }
 
         public int GetLevelCount() { EnsureArrays(); return hasRecord.Length; }

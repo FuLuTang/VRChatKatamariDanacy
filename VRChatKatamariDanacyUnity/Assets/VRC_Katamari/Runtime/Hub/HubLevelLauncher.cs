@@ -793,7 +793,7 @@ namespace VRCKatamari.Hub
                 bool alreadyHome = local != null && roomSpawn != null
                     && HubLoopMath.IsWithin(local.GetPosition(), roomSpawn.position, 2f);
                 automaticReturnArmed = !alreadyHome && !controller.WasAborted()
-                    && controller.GetGoalType() != StoryGoalType.FreeRoam;
+                    && controller.GetGoalType() != StoryGoalType.F;
                 Debug.Log("[hub] result return delay=" + resultReturnSeconds);
             }
             else automaticReturnArmed = false;

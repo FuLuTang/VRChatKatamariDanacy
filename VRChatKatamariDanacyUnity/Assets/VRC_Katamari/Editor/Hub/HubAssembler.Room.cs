@@ -213,6 +213,7 @@ namespace VRCKatamari.Editor.Hub
                 var goals = new int[n];
                 var diameters = new float[n];
                 var counts = new int[n];
+                var kinds = new string[n];
                 var limits = new float[n];
                 for (int i = 0; i < n; i++)
                 {
@@ -223,12 +224,14 @@ namespace VRCKatamari.Editor.Hub
                         goals[i] = plan.GoalType;
                         diameters[i] = plan.TargetDiameterM;
                         counts[i] = plan.TargetCount;
+                        kinds[i] = plan.CountKind ?? "";
                         limits[i] = plan.TimeLimitSeconds;
                     }
                     else
                     {
                         ReadSingleLevelGoal(round, out goals[i], out diameters[i], out counts[i],
                             out limits[i]);
+                        kinds[i] = round.GetCountGoalKind() ?? "";
                     }
                 }
                 var so = new SerializedObject(parts.Display);
@@ -238,6 +241,7 @@ namespace VRCKatamari.Editor.Hub
                 SetIntArray(so, "levelGoalTypes", goals, c);
                 SetFloatArray(so, "levelTargetDiameters", diameters, c);
                 SetIntArray(so, "levelTargetCounts", counts, c);
+                SetStringArray(so, "levelCountKinds", kinds, c);
                 SetFloatArray(so, "levelTimeLimits", limits, c);
                 SetObjectArray(so, "levelNameTexts", nameTexts, c);
                 SetObjectArray(so, "levelGoalTexts", goalTexts, c);
@@ -644,17 +648,31 @@ namespace VRCKatamari.Editor.Hub
             }
             var ids = new string[offered.Count];
             var hosts = new UnityEngine.Object[offered.Count];
+            var modes = new int[offered.Count];
             for (int i = 0; i < offered.Count; i++)
             {
                 ids[i] = offered[i].Entry.id;
                 HubLevelPlan plan;
-                if (plans != null && plans.TryGetValue(ids[i], out plan)) hosts[i] = plan.PickupHost;
-                else hosts[i] = ReadObject<PickupFieldHost>(round, "pickupHost");
+                int goal;
+                if (plans != null && plans.TryGetValue(ids[i], out plan))
+                {
+                    hosts[i] = plan.PickupHost;
+                    goal = plan.GoalType;
+                }
+                else
+                {
+                    hosts[i] = ReadObject<PickupFieldHost>(round, "pickupHost");
+                    goal = (int)round.GetGoalType();
+                }
+                HubLevelCatalog.RoundBlock rule = offered[i].Entry.round;
+                modes[i] = goal == (int)StoryGoalType.F ? HubRecordMath.None
+                    : goal == (int)StoryGoalType.B && (rule == null || !rule.recordDiameterAndTotal)
+                        ? HubRecordMath.CategoryAndDiameter : HubRecordMath.DiameterAndTotal;
             }
             var so = new SerializedObject(book);
             SetObject(so, "controller", round, c);
-            SetObject(so, "motor", FindOptional<KatamariBallMotor>(), c);
             SetStringArray(so, "levelIds", ids, c);
+            SetIntArray(so, "levelRecordModes", modes, c);
             SetObjectArray(so, "levelPickupHosts", hosts, c);
             so.ApplyModifiedPropertiesWithoutUndo();
             c.Proxies.Add(book);
@@ -706,8 +724,8 @@ namespace VRCKatamari.Editor.Hub
                 return;
             }
             VerifyTable(settings, new[] { "vrInput", "listeners" }, c);
-            VerifyTable(records, new[] { "controller", "motor", "levelIds", "levelPickupHosts", "listeners" }, c);
-            VerifyTable(display, new[] { "settings", "records", "levelNames", "levelGoalTypes",
+            VerifyTable(records, new[] { "controller", "levelIds", "levelRecordModes", "levelPickupHosts", "listeners" }, c);
+            VerifyTable(display, new[] { "settings", "records", "levelNames", "levelGoalTypes", "levelCountKinds",
                 "levelNameTexts", "levelRecordTexts", "settingLabelTexts", "settingValueTexts",
                 "howToText", "controlsVrText", "controlsDesktopText" }, c);
             HubSettingButton[] arrows = UnityEngine.Object.FindObjectsOfType<HubSettingButton>(true);

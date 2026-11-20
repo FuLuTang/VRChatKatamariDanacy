@@ -30,6 +30,30 @@ namespace VRCKatamari.Story
     /// </remarks>
     public static class StoryRoundMath
     {
+        public const int ClearPending = 0;
+        public const int ClearPassed = 1;
+        public const int ClearFailed = 2;
+
+        public static bool IsSupportedGoal(int goalType)
+        {
+            return goalType == (int)StoryGoalType.A || goalType == (int)StoryGoalType.B
+                || goalType == (int)StoryGoalType.F;
+        }
+
+        /// <summary>只读冻结后的确认事实；F 不判定，A/B 只在到时后判定。</summary>
+        public static int EvaluateClear(int goalType, bool validClock, float remainingSeconds,
+            float diameterM, float targetDiameterM, int count, int targetCount)
+        {
+            if (goalType == (int)StoryGoalType.F) return ClearPending;
+            if (!IsSupportedGoal(goalType) || !validClock || !KatamariMath.IsFiniteFloat(remainingSeconds))
+                return ClearFailed;
+            if (remainingSeconds > 0f) return ClearPending;
+            if (goalType == (int)StoryGoalType.A)
+                return KatamariMath.IsFiniteFloat(diameterM) && KatamariMath.IsFiniteFloat(targetDiameterM)
+                    && targetDiameterM > 0f && diameterM >= targetDiameterM ? ClearPassed : ClearFailed;
+            return targetCount > 0 && count >= targetCount ? ClearPassed : ClearFailed;
+        }
+
         /// <summary>
         /// Remaining round time in seconds, clamped to [0, timeLimitSeconds].
         /// </summary>

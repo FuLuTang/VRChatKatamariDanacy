@@ -206,9 +206,9 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 | 文件 | 职责 | 明确不做 |
 |---|---|---|
-| `Runtime/Story/StoryRoundController.cs` | 一局剧情的状态机与 HUD：`Idle → Running → Presenting → Result`；到点冻结输入/收集/候选，并冻结结算瞬间的碰撞直径或确认件数（星与评语由 `StoryResultPresenter` 写进结算卡） | 不交分、不写账本（`bank` / `score_channel` / `ledger_write` 都不碰）、不改球径、不评过程、不重试（重试走 `RequestRetry()`，见「再试一次」） |
+| `Runtime/Story/StoryRoundController.cs` | 一局剧情的状态机与 HUD：`Idle → Running → Presenting → Result`；到点冻结输入/收集/候选，冻结结算瞬间的碰撞直径与目标确认件数，独立判定过关；星与评语由 `StoryResultPresenter` 写进结算卡 | 不交分、不写账本（`bank` / `score_channel` / `ledger_write` 都不碰）、不改球径、不评过程、不重试（重试走 `RequestRetry()`，见「再试一次」） |
 
-同一目录的 `StoryRoundMath.cs` 是纯规则（星级查表、倒计时、partial band 判据与 `StoryGoalType`），不读时钟/场景/motor，便于 EditMode 测试。
+`StoryRoundMath` 只管倒计时和过关判定；`StoryStarMath` 独立管星级与 partial band。两者只读调用方传入的值，不读场景。
 
 ### 状态与冻结顺序
 
@@ -216,7 +216,9 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 ### 关卡数据与评语
 
-第一关的数字是场景实例上的序列化字段（运行时**不读磁盘 JSON**）：`levelId`、目标直径/件数、两档星、限时、`partialBand`、`countGoalKind`，每个字段的注释写着它对应 `Docs/Design/GameModes/Levels/story_01_bench_size.json` 的哪个键。五句评语（3★ / 2★ / 1★ /“就差一点点”/ 失败）也是序列化字符串字段，默认值是第一关的文案；出处是 GameModes README §3.1「评语（结算）」与 §2.4 的 partial band 分支。换关只换场景实例上的值，不改代码。
+关卡只选一种过关类型，并携带限时、球径目标、件数阈值和类别筛选等所需参数。依据《Katamari Damacy REROLL》PC（2019.01.31）的 `GameManager.sCheck1P` 分派：A 型到时比较未加 HUD 偏置的碰撞球径（野餐第一关 1.25 m、120 s）；B 型到时只比较指定物件的确认吸附件数（蟹座收 10 只、420 s）；F 型自由练习没有计时和自动结算。提前达到阈值不会结束本项目的 A/B 型回合。原作 A 型的 `isGetClearMono` 特定物件早通道本项目未接入。N/C/D/E/X 只在枚举中预留，未实现，不可配置为可玩关卡。中途回大厅仍是放弃，不亮结果卡、不记成绩。
+
+源场景及 `hub_levels.json` 的参数由装配器写入序列化字段；定义筛选按 placement 的 `def → itemId` 烘入道具宿主的独立 `objectiveKinds` 列，不改吸附类别。运行时不读磁盘 JSON。结果卡读取冻结的过关结论；星级阈值（含第一档）和五句评语另存于卡上。蟹座不评星；HUD 和结果卡显示三语蟹数，结果卡也显示结算球径，但 80 cm 不是过关门槛。
 
 ### 场景怎么接（Unity 操作者）
 
@@ -366,7 +368,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 ### 两个写者，各写各的对象
 
-`StoryResultPresenter.Update()` 是卡根 active 状态的唯一写者：Idle / Running 隐藏卡根并清空 `resultText`；Presenting 写「呈给国王」并打开卡根；Result 写星/测量值/评语并保持打开；自由练习关（`FreeRoam`）与 `AbortRound()` 放弃的局不显示卡。
+`StoryResultPresenter.Update()` 是卡根 active 状态的唯一写者：Idle / Running 隐藏卡根并清空 `resultText`；Presenting 写「呈给国王」并打开卡根；Result 写过关结论、测量值与可选星级/评语并保持打开；自由练习关（F 型）与 `AbortRound()` 放弃的局不显示卡。
 
 `StoryRoundController.ApplyStateVisibility()`（`StoryRoundController.cs:1010`）只写 `retryButtonRoot`（`Buttons` 行，两颗按钮一起）与 `startPromptText`：
 
@@ -388,7 +390,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 ### 场景怎么接（Unity 操作者）
 
 1. `retryButtonRoot` 指向结算卡的 `Buttons` 空行（两颗按钮的父物体；不是按钮本身，也不是卡根），装配器写这个字段，手工接线的场景照此指向。两颗按钮的 `Button.onClick` 一条 `SendCustomEvent("Press")` 属于 Prefab，装配器与 `ReadResultCard` 回读。
-2. `resultCardRoot` 与 `resultText` 在 `StoryResultPresenter` 上（装配器写）：卡根从 Presenting 起显示，Result 沿用；presenter 在 Presenting 写「呈给国王」、Result 写星/测量值/评语，牌面本身由 Prefab 决定。
+2. `resultCardRoot` 与 `resultText` 在 `StoryResultPresenter` 上（装配器写）：卡根从 Presenting 起显示，Result 沿用；presenter 在 Presenting 写「呈给国王」、Result 写过关结论、测量值与可选星级/评语，牌面本身由 Prefab 决定。
 3. **结果文字 `resultText` 就在卡根子树里**（`RideResultCard/ResultText`，TMP）：它从 Presenting 起才有内容，卡面也正好在这两个状态开着，两者同显同隐最省事。开始提示不占结果文字：它有自己的一条 Text（`startPromptText`），由回合控制器在 Idle 打开、其余状态关掉。所以 **`startPromptText` 必须放在卡片外面**：放进 `resultCardRoot` 的提示会在 Idle 跟着卡面一起消失。
 4. **不要把这些对象拖成对应行为自己的 GameObject**：卡根与 `Buttons` 行在 Idle 会被 `SetActive(false)`，提示行在非 Idle 被关；只要行为自己的对象被关掉，它随后就不再运行，回合永远停在 Idle。卡根、`Buttons` 行与提示行都必须是独立对象（通常和卡面一起放在同一个 Canvas 下）；提示行还要是只有这一个 `Text` 的专属对象，别拖一个共用的父物体，否则关它会连带关掉别的 HUD 行。
 5. `RequestRetry()` 是 `public bool`；上面的显隐字段默认 null，不接时行为与无显隐逻辑相同。

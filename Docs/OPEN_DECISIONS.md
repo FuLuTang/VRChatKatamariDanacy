@@ -200,6 +200,7 @@
 - **未入座时可正常跳跃，滚球时短按 Jump 不下车（owner 2026-11-19）** — 座位已能禁止默认退座，无需禁用玩家的跳跃；仍可按住 Jump 1.5 秒主动下车，见[防退座与退出](01_GAME_DESIGN.md#防退座与退出)。
 - **VR 冲刺只用左扳机，不支持双摇杆交替摇（owner 2026-11-19）** — 原作的 gacha 计数折算成按住时长。
 - **体积回收曲线按新版做（owner 2026-11-19）** — 采用 WLK REROLL+ 数据里的回收比曲线；拿到数据前维持全局 0.8。
+- **过关按原作类型与参数判定（owner 2026-11-20）** — 过关独立于评分；蟹座按初代 REROLL 的 B 型，420 秒到时以确认捕获数 ≥10 判定，80 cm 不参与过关。B 类具体对象仍待查证，暂按六种本关蟹类定义筛选。见[剧情模式](Design/StoryMode/README.md)与[合集关卡清单](Design/StoryMode/ALL_MAPS_HUB.md#21-当前四关偏移与源数据来自-r47-盘点)。
 - **蟹座异区物件不与球碰撞（owner 2026-11-20）** — 照初代 `hitOnAreaNo`，晒衣夹虽有模型却不是本关障碍，不再用静态盒挡球；见[区域碰撞格式](Design/Levels/LEVEL_FORMAT_V2.md#物件的活动区域号)。
 - **骑手随球放大、眼点抬高（2026-11-19）** — 吸附物挡前路，推球角定为 52°，即居中腿中轴离球面至少 0.03r 的最大整数候选；不改球径，见 [骑球几何 §1.1](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md#11-ψ-的候选每单位-rpitch-0-时的视角)。
 
@@ -234,7 +235,7 @@
 ### 2026-11-17 合集场景 AllMapsHub
 
 - **计时关允许中途回大厅 = 放弃本局；自由练习图随时可回** — 否则主人在沙盒里出不来，也没法中途换关；改掉了“`Running` 中回房一律拒绝”的旧规则。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
-- **蟹座先不评星** — 蟹座的星级阈值没有数据来源，先只显示球径、吸收件数。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
+- **蟹座先不评星** — 蟹座的星级阈值没有数据来源，结果卡显示过关结论、螃蟹数与球径；大厅仍显示球径和总吸附件数。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
 - **合集里的地形实验室用现有 C23 场景** — 不补 C21/C22/C24 的数据。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
 - **合集场景放 `Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`** — 含原作素材（蟹座），不进 git、不上传。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
 

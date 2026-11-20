@@ -138,6 +138,32 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void TypeBParsesAnIndependentCountDefinition()
+        {
+            string level = "{'id':'crab','name':'Crab','scenes':['H'],'content':'C','entry':'E',"
+                + "'round':{'clearType':'B','targetCount':10,'countKind':'crab',"
+                + "'countDefinitions':['small_fiddler_crab','blue_crab'],'recordDiameterAndTotal':true}}";
+            object round = Field(Level(ParseOk(Wrap("'levels':[" + level + "]")), 0), "round");
+            Assert.AreEqual("B", Field(round, "clearType").ToString());
+            Assert.AreEqual(10, Field(round, "targetCount"));
+            Assert.AreEqual("crab", Field(round, "countKind"));
+            CollectionAssert.AreEqual(new[] { "small_fiddler_crab", "blue_crab" },
+                (string[])Field(round, "countDefinitions"));
+            Assert.AreEqual(true, Field(round, "recordDiameterAndTotal"));
+            Assert.AreEqual(false, Field(round, "hasTargetDiameter"));
+        }
+
+        [TestCase("'clearType':'N'", "clearType")]
+        [TestCase("'clearType':'B','targetCount':9.5", "targetCount")]
+        [TestCase("'clearType':'B','targetCount':10,'countDefinitions':['crab']", "countKind")]
+        [TestCase("'clearType':'B','targetCount':10,'countKind':'crab','countDefinitions':['x','x']", "duplicate def")]
+        public void InvalidClearDefinitionsAreRejected(string rule, string error)
+        {
+            string level = "{'id':'lab','name':'Lab','scenes':['H'],'content':'C','entry':'E','round':{" + rule + "}}";
+            AssertAnyContains(ParseFail(Wrap("'levels':[" + level + "]")), error);
+        }
+
+        [Test]
         public void AStartBlockWithOnlyACenterHasNoHeadingNoDiameterNoRound()
         {
             object catalog = ParseOk(MultiLevelJson().Replace("'headingDeg':0,", ""));

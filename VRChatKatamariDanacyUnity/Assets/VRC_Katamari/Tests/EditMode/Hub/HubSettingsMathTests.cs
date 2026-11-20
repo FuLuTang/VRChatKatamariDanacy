@@ -104,9 +104,9 @@ namespace VRCKatamari.Tests
 
     public class HubRecordMathTests
     {
-        private const int Size = (int)StoryGoalType.ReachTargetDiameter;
-        private const int Count = (int)StoryGoalType.CollectCategoryCount;
-        private const int Free = (int)StoryGoalType.FreeRoam;
+        private const int Size = HubRecordMath.DiameterAndTotal;
+        private const int Count = HubRecordMath.CategoryAndDiameter;
+        private const int Free = HubRecordMath.None;
 
         [Test]
         public void FreeRoamAndAbortedRoundsAreNotRecorded()

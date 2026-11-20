@@ -33,6 +33,7 @@ namespace VRCKatamari.Story.Hub
         [SerializeField] private int[] levelGoalTypes;
         [SerializeField] private float[] levelTargetDiameters;
         [SerializeField] private int[] levelTargetCounts;
+        [SerializeField] private string[] levelCountKinds;
         [SerializeField] private float[] levelTimeLimits;
         [SerializeField] private TextMeshProUGUI[] levelNameTexts;
         [SerializeField] private TextMeshProUGUI[] levelGoalTexts;
@@ -94,9 +95,10 @@ namespace VRCKatamari.Story.Hub
                 int goal = PickInt(levelGoalTypes, i);
                 SetAt(levelNameTexts, i, levelNames[i]);
                 SetAt(levelGoalTexts, i, HubPanelTextMath.GoalLine(goal, PickFloat(levelTargetDiameters, i),
-                    PickInt(levelTargetCounts, i), PickFloat(levelTimeLimits, i), lang));
+                    PickInt(levelTargetCounts, i), PickFloat(levelTimeLimits, i),
+                    levelCountKinds != null && i < levelCountKinds.Length ? levelCountKinds[i] : "", lang));
                 SetAt(levelStartTexts, i, HubPanelTextMath.Text(HubPanelTextMath.StartTag, lang));
-                bool recorded = HubRecordMath.IsRecorded(goal, false);
+                bool recorded = records != null && records.IsLevelRecorded(i);
                 bool has = records != null && records.HasRecord(i);
                 SetAt(levelRecordTexts, i, HubPanelTextMath.RecordLines(recorded, has,
                     has ? records.GetBestDiameterM(i) : 0f, has ? records.GetBestCount(i) : 0,

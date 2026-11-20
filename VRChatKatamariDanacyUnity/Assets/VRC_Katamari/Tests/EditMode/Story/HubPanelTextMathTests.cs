@@ -81,13 +81,27 @@ namespace VRCKatamari.Tests
         public void GoalLineDependsOnTheLevelKind()
         {
             StringAssert.Contains("80 cm", HubPanelTextMath.GoalLine(
-                (int)StoryGoalType.ReachTargetDiameter, 0.8f, 0, 420f, HubSettingsMath.LangEn));
+                (int)StoryGoalType.A, 0.8f, 0, 420f, "", HubSettingsMath.LangEn));
             StringAssert.Contains("7:00", HubPanelTextMath.GoalLine(
-                (int)StoryGoalType.ReachTargetDiameter, 0.8f, 0, 420f, HubSettingsMath.LangEn));
+                (int)StoryGoalType.A, 0.8f, 0, 420f, "", HubSettingsMath.LangEn));
             StringAssert.Contains("30", HubPanelTextMath.GoalLine(
-                (int)StoryGoalType.CollectCategoryCount, 0f, 30, 120f, HubSettingsMath.LangZh));
+                (int)StoryGoalType.B, 0f, 30, 120f, "", HubSettingsMath.LangZh));
             Assert.AreEqual(HubPanelTextMath.Text(HubPanelTextMath.FreeRoamGoal, HubSettingsMath.LangJa),
-                HubPanelTextMath.GoalLine((int)StoryGoalType.FreeRoam, 0f, 0, 0f, HubSettingsMath.LangJa));
+                HubPanelTextMath.GoalLine((int)StoryGoalType.F, 0f, 0, 0f, "", HubSettingsMath.LangJa));
+        }
+
+        [TestCase(HubSettingsMath.LangZh, "螃蟹", "通关", "未通关")]
+        [TestCase(HubSettingsMath.LangEn, "Crabs", "Clear", "Not cleared")]
+        [TestCase(HubSettingsMath.LangJa, "カニ", "クリア", "失敗")]
+        public void CrabProgressAndClearAreLocalized(int lang, string crab, string passed, string failed)
+        {
+            string goal = HubPanelTextMath.GoalLine((int)StoryGoalType.B, 0.8f, 10, 420f, "crab", lang);
+            StringAssert.Contains("7:00", goal);
+            StringAssert.Contains(crab + " 10", goal);
+            StringAssert.DoesNotContain("80 cm", goal);
+            Assert.AreEqual(crab + " 9/10", HubPanelTextMath.CountProgress("crab", 9, 10, lang));
+            Assert.AreEqual(passed, HubPanelTextMath.ClearLabel(StoryRoundMath.ClearPassed, lang));
+            Assert.AreEqual(failed, HubPanelTextMath.ClearLabel(StoryRoundMath.ClearFailed, lang));
         }
 
         [Test]

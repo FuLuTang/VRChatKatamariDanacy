@@ -243,13 +243,37 @@ namespace VRCKatamari.Story.Hub
             return (total / 60) + ":" + (s < 10 ? "0" : "") + s;
         }
 
+        private static string CountLabel(string kind, int lang)
+        {
+            if (kind == "crab") return Pick(lang, "螃蟹", "Crabs", "カニ");
+            return Text(Pieces, lang);
+        }
+
+        public static string CountTarget(string kind, int target, int lang)
+        {
+            return kind == "crab" ? CountLabel(kind, lang) + " " + target
+                : Text(GoalCount, lang) + " " + target + " " + CountLabel(kind, lang);
+        }
+
+        public static string CountProgress(string kind, int count, int target, int lang)
+        {
+            return CountLabel(kind, lang) + " " + count + "/" + target;
+        }
+
+        public static string ClearLabel(int clearResult, int lang)
+        {
+            if (clearResult == StoryRoundMath.ClearPassed) return Pick(lang, "通关", "Clear", "クリア");
+            if (clearResult == StoryRoundMath.ClearFailed) return Pick(lang, "未通关", "Not cleared", "失敗");
+            return "";
+        }
+
         /// <summary>The goal line of a level card.</summary>
         public static string GoalLine(int goalType, float targetDiameterM, int targetCount,
-            float timeLimitSeconds, int lang)
+            float timeLimitSeconds, string countKind, int lang)
         {
-            if (goalType == (int)StoryGoalType.FreeRoam) return Text(FreeRoamGoal, lang);
-            string goal = goalType == (int)StoryGoalType.CollectCategoryCount
-                ? Text(GoalCount, lang) + " " + targetCount + " " + Text(Pieces, lang)
+            if (goalType == (int)StoryGoalType.F) return Text(FreeRoamGoal, lang);
+            string goal = goalType == (int)StoryGoalType.B
+                ? CountTarget(countKind, targetCount, lang)
                 : Text(GoalSize, lang) + " " + Diameter(targetDiameterM);
             return Text(TimeLimit, lang) + " " + Clock(timeLimitSeconds) + " · " + goal;
         }

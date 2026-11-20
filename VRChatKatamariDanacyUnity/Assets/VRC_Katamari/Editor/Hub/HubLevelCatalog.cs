@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using VRCKatamari.Editor.LevelBuild;
 using VRCKatamari.Hub;
+using VRCKatamari.Story;
 
 namespace VRCKatamari.Editor.Hub
 {
@@ -99,6 +100,12 @@ namespace VRCKatamari.Editor.Hub
             public float timeLimitSeconds;
             public bool hasTargetDiameter;
             public float targetDiameterM;
+            public StoryGoalType? clearType;
+            public int targetCount;
+            public string countKind;
+            public string[] countDefinitions;
+            // Optional override of the historical record metric, independent of clearType.
+            public bool recordDiameterAndTotal;
         }
 
         public sealed class LevelEntry
@@ -485,6 +492,47 @@ namespace VRCKatamari.Editor.Hub
                     errors.Add(where + ".round.targetDiameterM must be positive");
                 }
             }
+            if (node.Has("clearType"))
+            {
+                string type = node.GetString("clearType");
+                if (type == "A") round.clearType = StoryGoalType.A;
+                else if (type == "B") round.clearType = StoryGoalType.B;
+                else if (type == "F") round.clearType = StoryGoalType.F;
+                else errors.Add(where + ".round.clearType must be a supported type: A, B or F");
+            }
+            if (round.clearType.HasValue && (round.clearType == StoryGoalType.F) != level.IsFreeRoam)
+                errors.Add(where + ".round.clearType and level kind disagree about free roam");
+            round.recordDiameterAndTotal = node.GetBool("recordDiameterAndTotal", false);
+            if (round.clearType == StoryGoalType.B)
+            {
+                LevelJsonNode target = node.Get("targetCount");
+                double count = target != null && target.Kind == LevelJsonKind.Number ? target.AsDouble() : 0;
+                if (!(count >= 1 && count <= int.MaxValue && count == Math.Floor(count)))
+                    errors.Add(where + ".round.targetCount must be a positive integer for type B");
+                else round.targetCount = (int)count;
+                round.countKind = node.GetString("countKind", "");
+                LevelJsonNode defs = node.Get("countDefinitions");
+                if (defs != null)
+                {
+                    if (!defs.IsArray || defs.Count == 0 || string.IsNullOrWhiteSpace(round.countKind))
+                        errors.Add(where + ".round.countDefinitions needs a non-empty list and countKind");
+                    else
+                    {
+                        var names = new HashSet<string>(StringComparer.Ordinal);
+                        round.countDefinitions = new string[defs.Count];
+                        for (int i = 0; i < defs.Count; i++)
+                        {
+                            LevelJsonNode entry = defs.At(i);
+                            string name = entry.Kind == LevelJsonKind.String ? entry.AsString() : null;
+                            if (string.IsNullOrWhiteSpace(name) || !names.Add(name))
+                                errors.Add(where + ".round.countDefinitions has a blank or duplicate def at " + i);
+                            round.countDefinitions[i] = name;
+                        }
+                    }
+                }
+            }
+            else if (node.Has("targetCount") || node.Has("countKind") || node.Has("countDefinitions"))
+                errors.Add(where + ".round count parameters require clearType B");
             level.round = round;
         }
 

@@ -77,11 +77,21 @@ namespace VRCKatamari.Editor.LevelBuild
             public int Updated;
             public int Removed;
             public int Skipped;
-            public int Problems;
+            public int RemovedStructureSkins;
+            private readonly List<string> problemLines = new List<string>();
+            public int Problems => problemLines.Count;
+            public IReadOnlyList<string> ProblemLines => problemLines;
             public readonly List<string> Lines = new List<string>();
+
+            public void Problem(string itemId, string reason)
+            {
+                problemLines.Add("[anim_problem] " + itemId + ": " + reason);
+            }
+
             public string Headline()
             {
-                return "[anim] +" + Created + " ~" + Updated + " -" + Removed + " skip=" + Skipped + " problems=" + Problems;
+                return "[anim] +" + Created + " ~" + Updated + " -" + Removed + " skip=" + Skipped + " problems=" + Problems +
+                    " structureSkinsRemoved=" + RemovedStructureSkins;
             }
         }
 
@@ -100,9 +110,12 @@ namespace VRCKatamari.Editor.LevelBuild
         public static void Run()
         {
             Result result = Assemble();
-            string text = result.Headline() + "\n  " + string.Join("\n  ", result.Lines.ToArray());
-            if (result.Problems > 0) Debug.LogError(text);
-            else Debug.Log(text);
+            foreach (string problem in result.ProblemLines) Debug.LogError(problem);
+            Debug.Log(result.Headline());
+            // Keep successful reads available without burying the problems in a truncated entry.
+            const int linesPerEntry = 25;
+            for (int i = 0; i < result.Lines.Count; i += linesPerEntry)
+                Debug.Log(string.Join("\n", result.Lines.GetRange(i, Math.Min(linesPerEntry, result.Lines.Count - i))));
         }
 
         public static Result Assemble()
@@ -111,8 +124,7 @@ namespace VRCKatamari.Editor.LevelBuild
             string defsPath = AnimationRoot + "/skinned_defs.json";
             if (!File.Exists(defsPath))
             {
-                result.Problems++;
-                result.Lines.Add("missing " + defsPath + " (copy ~/KatamariRef/props/skinned_fbx there; see the class remarks)");
+                result.Problem(defsPath, "missing skeletal manifest");
                 return result;
             }
 
@@ -125,8 +137,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 string fbx = AnimationRoot + "/" + type + "/" + type + ".fbx";
                 if (!File.Exists(fbx))
                 {
-                    result.Problems++;
-                    result.Lines.Add("missing " + fbx);
+                    result.Problem(type, "missing FBX: " + fbx);
                     continue;
                 }
                 var source = new TypeSource();
@@ -143,22 +154,17 @@ namespace VRCKatamari.Editor.LevelBuild
             GameObject content = GameObject.Find("LevelContent");
             if (content == null)
             {
-                result.Problems++;
-                result.Lines.Add("no LevelContent in the open scene; controllers were prepared, no props were touched");
+                result.Problem("LevelContent", "not found in the open scene; controllers were prepared, no props were touched");
                 return result;
             }
 
-            Transform[] all = content.GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < all.Length; i++)
+            foreach (Transform prop in FindSkeletalProps(content.transform, typeOfDef))
             {
-                Transform t = all[i];
-                if (t == null || t.name == SkinChildName || t.GetComponent<Renderer>() == null) continue;
-                string def = DefOfItem(t.name);
-                string type;
-                TypeSource source;
-                if (!typeOfDef.TryGetValue(def, out type) || !sources.TryGetValue(type, out source)) continue;
-                AssemblePropSkin(t, source, result);
+                string type = typeOfDef[DefOfItem(prop.name)];
+                if (sources.TryGetValue(type, out TypeSource source)) AssemblePropSkin(prop, source, result);
+                else result.Problem(HierarchyPath(prop), "no usable skeletal source " + type);
             }
+            RemoveMisplacedStructureSkins(content.transform, typeOfDef, sources, result);
             foreach (TypeSource source in sources.Values)
             {
                 if (source.RebuildBlocked) ForgetStamp(source, result);
@@ -166,6 +172,58 @@ namespace VRCKatamari.Editor.LevelBuild
             if (result.Created > 0 || result.Removed > 0 || result.Updated > 0) EditorUtility.SetDirty(content);
             result.Lines.Add("next: re-run the level import so MotionHost's rowAnimators column picks the new Animators up");
             return result;
+        }
+
+        private static IEnumerable<Transform> ManagedRoots(Transform content, string folderName)
+        {
+            for (int i = 0; i < content.childCount; i++)
+            {
+                Transform folder = content.GetChild(i).Find(folderName);
+                if (folder != null) yield return folder;
+            }
+        }
+
+        public static IEnumerable<Transform> FindSkeletalProps(Transform content, IReadOnlyDictionary<string, string> typeOfDef)
+        {
+            foreach (Transform props in ManagedRoots(content, PlacementImporter.PropsFolderName))
+            foreach (Transform candidate in props.GetComponentsInChildren<Transform>(true))
+            {
+                if (candidate != null && candidate != props && candidate.name != SkinChildName && candidate.GetComponent<Renderer>() != null &&
+                    typeOfDef.ContainsKey(DefOfItem(candidate.name))) yield return candidate;
+            }
+        }
+
+        private static void RemoveMisplacedStructureSkins(Transform content, Dictionary<string, string> typeOfDef,
+            Dictionary<string, TypeSource> sources, Result result)
+        {
+            foreach (Transform structures in ManagedRoots(content, PlacementImporter.StructuresFolderName))
+            foreach (Transform proxy in structures.GetComponentsInChildren<Transform>(true))
+            {
+                if (proxy == null || proxy == structures || proxy.GetComponent<Renderer>() == null ||
+                    !typeOfDef.TryGetValue(DefOfItem(proxy.name), out string type)) continue;
+                Transform skin = proxy.Find(SkinChildName);
+                if (skin == null) continue;
+                string path = HierarchyPath(skin);
+                var animator = skin.GetComponent<Animator>();
+                GameObject model = PrefabUtility.GetCorrespondingObjectFromSource(skin.gameObject);
+                if (!sources.TryGetValue(type, out TypeSource source) || model == null ||
+                    AssetDatabase.GetAssetPath(model) != source.Fbx || animator == null ||
+                    animator.runtimeAnimatorController != source.Controller)
+                {
+                    result.Problem(path, "structure Skin does not match the manifest FBX and generated controller; left intact");
+                    continue;
+                }
+                string blocker = FindScriptComponent(skin);
+                if (blocker != null)
+                {
+                    result.Problem(path, "structure Skin contains " + blocker + "; left intact");
+                    continue;
+                }
+                Undo.DestroyObjectImmediate(skin.gameObject);
+                result.Removed++;
+                result.RemovedStructureSkins++;
+                result.Lines.Add("[anim_structure_cleanup] removed " + path);
+            }
         }
 
         /// <summary>The def id of an item name: the item id without its <c>_NNN</c> suffix and any <c>@size=</c> tag.</summary>
@@ -241,8 +299,7 @@ namespace VRCKatamari.Editor.LevelBuild
             LevelJsonNode defs = root == null ? null : root.Get("defs");
             if (defs == null)
             {
-                result.Problems++;
-                result.Lines.Add(path + " has no defs object");
+                result.Problem(path, "missing defs object");
                 return map;
             }
             string[] keys = defs.KeyArray();
@@ -280,8 +337,7 @@ namespace VRCKatamari.Editor.LevelBuild
             var importer = AssetImporter.GetAtPath(fbx) as ModelImporter;
             if (importer == null)
             {
-                result.Problems++;
-                result.Lines.Add(fbx + " is not importable as a model");
+                result.Problem(fbx, "not importable as a model");
                 return false;
             }
 
@@ -339,12 +395,12 @@ namespace VRCKatamari.Editor.LevelBuild
                 AnimationClip clip = FindClip(fbx, expected.Key);
                 if (clip == null)
                 {
-                    result.Problems++;
-                    line.Append(" " + expected.Key + " MISSING");
+                    result.Problem(type, "missing take " + expected.Key + " in " + fbx);
                     continue;
                 }
                 bool ok = ClipLengthMatches(clip.length, expected.Value);
-                if (!ok) result.Problems++;
+                if (!ok) result.Problem(type, "take " + expected.Key + " is " + clip.length.ToString("0.0000") +
+                    "s; expected " + expected.Value.ToString("0.0000") + "s from skinned_defs.json");
                 line.Append(" " + expected.Key + " " + clip.length.ToString("0.0000") + "s/" +
                             expected.Value.ToString("0.0000") + "s" + (ok ? "" : " LENGTH DIFFERS FROM skinned_defs.json"));
             }
@@ -359,8 +415,7 @@ namespace VRCKatamari.Editor.LevelBuild
             AnimationClip panic = FindClip(fbx, PanicState);
             if (idle == null || walk == null || panic == null)
             {
-                result.Problems++;
-                result.Lines.Add(fbx + " lacks a take named " + IdleState + "/" + WalkState + "/" + PanicState +
+                result.Problem(type, fbx + " lacks a take named " + IdleState + "/" + WalkState + "/" + PanicState +
                                  " (takes found: " + ListClips(fbx) + ")");
                 return null;
             }
@@ -455,8 +510,7 @@ namespace VRCKatamari.Editor.LevelBuild
             List<Transform> strays = FindStrays(prop, skin);
             for (int i = 0; i < strays.Count; i++)
             {
-                result.Problems++;
-                result.Lines.Add("[anim_stray] " + HierarchyPath(strays[i]) + ": a skeletal FBX instance outside " +
+                result.Problem(HierarchyPath(prop), "stray skeletal FBX " + HierarchyPath(strays[i]) + " outside " +
                                  SkinChildName + " (renderers " + CountEnabled(strays[i]) + "); its bounds widen the " +
                                  "prop's measured size; delete it by hand, it is not removed automatically");
             }
@@ -469,8 +523,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     string blocker = FindScriptComponent(skin);
                     if (blocker != null)
                     {
-                        result.Problems++;
-                        result.Lines.Add(prop.name + ": " + SkinChildName + " needs a rebuild (" + reason + ") but " +
+                        result.Problem(HierarchyPath(prop), SkinChildName + " needs a rebuild (" + reason + ") but " +
                                          blocker + " is attached under it; nothing was destroyed");
                         source.RebuildBlocked = true;
                         return;
@@ -489,8 +542,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(source.Fbx);
                 if (prefab == null)
                 {
-                    result.Problems++;
-                    result.Lines.Add(prop.name + ": " + source.Fbx + " did not load as a model");
+                    result.Problem(HierarchyPath(prop), source.Fbx + " did not load as a model");
                     return;
                 }
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, prop);
@@ -571,8 +623,7 @@ namespace VRCKatamari.Editor.LevelBuild
             int index = SkeletalMaterialMath.SingleSourceIndex(materials, m => m != null && m.mainTexture != null);
             if (index < 0)
             {
-                result.Problems++;
-                result.Lines.Add("[anim_material] " + prop.name + ": expected one distinct textured static material; left skin materials unchanged");
+                result.Problem(HierarchyPath(prop), "expected one distinct textured static material; left skin materials unchanged");
                 return;
             }
             foreach (SkinnedMeshRenderer renderer in skins)
@@ -580,8 +631,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 Material[] slots = renderer.sharedMaterials;
                 if (slots.Length == 0 || renderer.sharedMesh == null || renderer.sharedMesh.subMeshCount != slots.Length)
                 {
-                    result.Problems++;
-                    result.Lines.Add("[anim_material] " + prop.name + "/" + renderer.name + ": material slots do not match skin submeshes");
+                    result.Problem(HierarchyPath(prop), renderer.name + " material slots do not match skin submeshes");
                     continue;
                 }
                 Material source = materials[index];
@@ -710,15 +760,15 @@ namespace VRCKatamari.Editor.LevelBuild
             Bounds staticBounds, skinBounds;
             if (!TryFitBounds(prop, skin, strays, out staticBounds, out skinBounds))
             {
-                result.Problems++;
-                result.Lines.Add("[anim_fit] " + prop.name + ": no bounds to compare");
+                result.Problem(HierarchyPath(prop), "no static/skin bounds to compare");
                 return;
             }
             Vector3 ratio = SizeRatio(staticBounds.size, skinBounds.size);
             bool fits = FitsTolerance(ratio);
-            if (!fits) result.Problems++;
-            result.Lines.Add("[anim_fit] " + prop.name + ": skin/static size ratio (" + ratio.x.ToString("0.00") + ", " +
-                             ratio.y.ToString("0.00") + ", " + ratio.z.ToString("0.00") + ")" + (fits ? "" : " OUT OF TOLERANCE: check FBX axes"));
+            string detail = "skin/static size ratio (" + ratio.x.ToString("0.00") + ", " +
+                            ratio.y.ToString("0.00") + ", " + ratio.z.ToString("0.00") + ")";
+            if (!fits) result.Problem(HierarchyPath(prop), detail + " outside tolerance; check FBX axes and units");
+            else result.Lines.Add("[anim_fit] " + prop.name + ": " + detail);
         }
 
         private static bool TryFitBounds(Transform prop, Transform skin, List<Transform> strays,

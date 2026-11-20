@@ -1,3 +1,4 @@
+using VRCKatamari.BallPresentation;
 using VRCKatamari.Hub;
 using VRCKatamari.Story;
 
@@ -158,6 +159,8 @@ namespace VRCKatamari.Story.Hub
             if (id == HubSettingsMath.CatchName) return Pick(lang, "显示吸到的东西", "Show caught item", "吸った物を表示");
             if (id == HubSettingsMath.CollisionWireframe)
                 return Pick(lang, "显示物理", "Show colliders", "あたり表示");
+            // 「球样式」: the panel font has no 皮/肤 yet (Tools/hubart/hub_panel_charset.txt).
+            if (id == HubSettingsMath.BallSkin) return Pick(lang, "球样式", "Ball skin", "塊のスキン");
             return "";
         }
 
@@ -194,6 +197,7 @@ namespace VRCKatamari.Story.Hub
                 if (v == HubSettingsMath.LangJa) return "日本語";
                 return "简体中文";
             }
+            if (id == HubSettingsMath.BallSkin) return BallSkinMath.Label(v);
             return "";
         }
 

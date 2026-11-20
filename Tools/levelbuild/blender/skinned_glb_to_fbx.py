@@ -20,7 +20,75 @@ assembler aligns the skin to the static model by bounds instead and logs ``[anim
 import argparse
 import json
 import os
+import struct
 import sys
+import tempfile
+from pathlib import Path
+
+
+def attach_detached_joints(document):
+    """将旧参考 GLB 漏挂的根骨放回已有坐标根，不改骨骼、矩阵或曲线。"""
+    nodes = document["nodes"]
+    scene_roots = document["scenes"][document.get("scene", 0)]["nodes"]
+    if len(scene_roots) != 1 or len(document["skins"]) != 1:
+        raise ValueError("expected one reference coordinate root and one skin")
+    root = scene_roots[0]
+    skin = document["skins"][0]
+    parents = {}
+    for parent, node in enumerate(nodes):
+        for child in node.get("children", []):
+            if child in parents:
+                raise ValueError(f"joint hierarchy contains more than one parent for node {child}")
+            parents[child] = parent
+    joints = set(skin["joints"])
+    detached = set()
+    for node in joints:
+        visited = set()
+        while node != root and node in parents:
+            if node in visited:
+                raise ValueError("joint hierarchy contains a cycle")
+            visited.add(node)
+            node = parents[node]
+        if node == root:
+            continue
+        # Only the known orphan-joint case is repairable. Never move another asset root.
+        if node not in joints:
+            raise ValueError(f"joint hierarchy uses unexpected disconnected root {node}")
+        detached.add(node)
+    if not detached:
+        return False
+    if root in joints or "matrix" not in nodes[root]:
+        raise ValueError("cannot identify the existing reference coordinate root")
+    nodes[root].setdefault("children", []).extend(sorted(detached))
+    skin["skeleton"] = root
+    return True
+
+
+def normalized_glb(raw):
+    """只替换需要修正的 GLB JSON 块；BIN 及后续块原样保留。"""
+    magic, version, length, json_length, tag = struct.unpack_from("<4sIII4s", raw)
+    if (magic, version, length, tag) != (b"glTF", 2, len(raw), b"JSON") or json_length > len(raw) - 20:
+        raise ValueError("expected a glTF 2.0 binary with a JSON first chunk")
+    doc = json.loads(raw[20:20 + json_length])
+    if not attach_detached_joints(doc):
+        return raw
+    payload = json.dumps(doc, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    payload += b" " * (-len(payload) % 4)
+    rest = raw[20 + json_length:]
+    return struct.pack("<4sIII4s", magic, version, 20 + len(payload) + len(rest), len(payload), tag) + payload + rest
+
+
+def import_reference_glb(glb, scratch_parent):
+    import bpy
+    source = Path(glb).read_bytes()
+    fixed = normalized_glb(source)
+    if fixed is source:
+        bpy.ops.import_scene.gltf(filepath=glb)
+        return
+    with tempfile.TemporaryDirectory(dir=scratch_parent) as directory:
+        normalized = Path(directory) / Path(glb).name
+        normalized.write_bytes(fixed)
+        bpy.ops.import_scene.gltf(filepath=str(normalized))
 
 def skeletal_defs(instances, definitions):
     """按原作 nameIdx/摆放 mono 对接，不从英文重名推断 def。"""
@@ -182,7 +250,8 @@ def convert(glb, out_dir, clips):
     fps = scene_fps(clips)
     bpy.context.scene.render.fps = fps
     bpy.context.scene.render.fps_base = 1.0
-    bpy.ops.import_scene.gltf(filepath=glb)
+    os.makedirs(out_dir, exist_ok=True)
+    import_reference_glb(glb, out_dir)
     armatures = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     if not armatures:
         raise RuntimeError("no armature in " + glb)

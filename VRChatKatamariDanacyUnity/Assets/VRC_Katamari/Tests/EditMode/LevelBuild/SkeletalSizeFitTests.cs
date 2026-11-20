@@ -175,6 +175,37 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void StructuresProxySharingAPropIdIsNotAnAssemblyCandidate()
+        {
+            var content = new GameObject("LevelContent");
+            try
+            {
+                Transform level = Child(content.transform, "cancer");
+                Transform props = Child(level, "Props");
+                Transform structures = Child(level, "Structures");
+                Transform prop = Child(Child(props, "other"), "snoozing_momma_001");
+                Transform proxy = Child(structures, prop.name);
+                prop.gameObject.AddComponent<MeshRenderer>();
+                proxy.gameObject.AddComponent<MeshRenderer>();
+                var defs = new System.Collections.Generic.Dictionary<string, string> { { "snoozing_momma", "type_529" } };
+                var candidates = (System.Collections.Generic.IEnumerable<Transform>)Call("FindSkeletalProps", content.transform, defs);
+                CollectionAssert.AreEqual(new[] { prop }, candidates);
+                Assert.IsNull(proxy.Find("Skin"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(content);
+            }
+        }
+
+        private static Transform Child(Transform parent, string name)
+        {
+            Transform child = new GameObject(name).transform;
+            child.SetParent(parent, false);
+            return child;
+        }
+
+        [Test]
         public void StrayInstancesAreRecognisedByNameOrAssetFolder()
         {
             Assert.IsTrue((bool)Call("IsSkeletalInstanceName", "type_480"));

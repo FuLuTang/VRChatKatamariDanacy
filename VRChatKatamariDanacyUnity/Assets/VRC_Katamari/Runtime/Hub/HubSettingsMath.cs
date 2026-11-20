@@ -1,3 +1,4 @@
+using VRCKatamari.BallPresentation;
 using VRCKatamari.Input;
 
 namespace VRCKatamari.Hub
@@ -36,8 +37,14 @@ namespace VRCKatamari.Hub
         public const int CatchName = 12;
         public const int CollisionWireframe = 13;
 
+        /// <summary>
+        /// The ball's original core skin, stored as the core number itself (1..29, no 26/27;
+        /// <see cref="BallSkinMath"/>). The host steps it over the skins actually assembled.
+        /// </summary>
+        public const int BallSkin = 14;
+
         /// <summary>Number of settings; ids are 0..Count-1.</summary>
-        public const int Count = 14;
+        public const int Count = 15;
 
         public const int LangZh = 0;
         public const int LangEn = 1;
@@ -55,6 +62,7 @@ namespace VRCKatamari.Hub
         {
             if (id == Deadzone) return 1;
             if (id == TurnSensitivity) return 5;
+            if (id == BallSkin) return BallSkinMath.FirstNumber;
             return 0;
         }
 
@@ -67,6 +75,7 @@ namespace VRCKatamari.Hub
             if (id == MusicVolume || id == EffectsVolume || id == VoiceVolume) return 10;
             if (id == Haptics) return 2;
             if (id == Language) return 2;
+            if (id == BallSkin) return BallSkinMath.LastNumber;
             return 0;
         }
 
@@ -81,6 +90,7 @@ namespace VRCKatamari.Hub
             if (id == Language) return LangZh;
             if (id == PushCue) return 1;
             if (id == CatchName) return 1;
+            if (id == BallSkin) return BallSkinMath.DefaultNumber;
             return 0;
         }
 
@@ -91,12 +101,15 @@ namespace VRCKatamari.Hub
         public static bool Wraps(int id)
         {
             return id == ControlMode || id == SwapHands || id == LowEffects
-                || id == ReduceAutoRotate || id == Language || id == PushCue || id == CatchName || id == CollisionWireframe;
+                || id == ReduceAutoRotate || id == Language || id == PushCue || id == CatchName || id == CollisionWireframe
+                || id == BallSkin;
         }
 
         public static int Clamp(int id, int value)
         {
             if (!IsValidId(id)) return 0;
+            // A number the original never had (26, 27, out of range) is the default skin.
+            if (id == BallSkin) return BallSkinMath.Normalize(null, value);
             int min = Min(id);
             int max = Max(id);
             if (value < min) return min;
@@ -109,6 +122,8 @@ namespace VRCKatamari.Hub
         {
             if (!IsValidId(id)) return 0;
             int current = Clamp(id, value);
+            // Without the assembled skin list, step over the original's core numbers.
+            if (id == BallSkin) return BallSkinMath.Stepped(null, current, delta);
             if (!Wraps(id)) return Clamp(id, current + delta);
             int min = Min(id);
             int span = Max(id) - min + 1;
@@ -134,6 +149,7 @@ namespace VRCKatamari.Hub
             if (id == PushCue) return "vrck.set.pushCue";
             if (id == CatchName) return "vrck.set.catchName";
             if (id == CollisionWireframe) return "vrck.set.collisionWireframe";
+            if (id == BallSkin) return "vrck.set.ballSkin";
             return "";
         }
 
@@ -147,7 +163,7 @@ namespace VRCKatamari.Hub
             return id == ControlMode || id == SwapHands || id == Deadzone
                 || id == TurnSensitivity || id == Language || id == EffectsVolume || id == Haptics
                 || id == PushCue || id == CatchName || id == CollisionWireframe
-                || id == LowEffects || id == ReduceAutoRotate;
+                || id == LowEffects || id == ReduceAutoRotate || id == BallSkin;
         }
 
         /// <summary>The nearest deadzone step for a deadzone value (0.2 = step 4).</summary>

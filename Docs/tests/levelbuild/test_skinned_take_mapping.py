@@ -155,5 +155,22 @@ class SkeletalManifest(unittest.TestCase):
             self.assertLessEqual(abs(conv.take_frames(seconds, fps) / fps - seconds), 0.001)
 
 
+class ReferenceJointRoots(unittest.TestCase):
+    def test_detached_root_joins_existing_coordinate_root_without_reparenting_its_children(self):
+        doc = {"nodes": [{"children": [2]}, {}, {}, {"children": [0, 4], "matrix": [1]}, {}],
+               "scenes": [{"nodes": [3]}], "skins": [{"joints": [0, 1, 2], "skeleton": 0}]}
+        self.assertTrue(conv.attach_detached_joints(doc))
+        self.assertEqual(doc["nodes"][3]["children"], [0, 4, 1])
+        self.assertEqual(doc["nodes"][0]["children"], [2])
+        self.assertEqual(doc["skins"][0]["skeleton"], 3)
+        self.assertFalse(conv.attach_detached_joints(doc))
+
+    def test_detached_non_joint_ancestor_is_not_moved(self):
+        doc = {"nodes": [{"children": [1]}, {}, {"matrix": [1]}],
+               "scenes": [{"nodes": [2]}], "skins": [{"joints": [1], "skeleton": 1}]}
+        with self.assertRaisesRegex(ValueError, "unexpected disconnected root 0"):
+            conv.attach_detached_joints(doc)
+
+
 if __name__ == "__main__":
     unittest.main()

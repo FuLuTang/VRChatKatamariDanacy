@@ -2,6 +2,7 @@ using UdonSharp;
 using UnityEngine;
 using VRC.SDK3.Persistence;
 using VRC.SDKBase;
+using VRCKatamari.BallPresentation;
 using VRCKatamari.Input;
 
 namespace VRCKatamari.Hub
@@ -21,8 +22,10 @@ namespace VRCKatamari.Hub
     /// (<c>VRCPlayerApi.GetCurrentLanguage</c>).
     /// </para>
     /// <para>
-    /// Consumers. Applied directly: the VR stick scheme (<c>VrStickMoveInput.SetControlMode</c>)
-    /// and the panel language (<see cref="listeners"/> redraw). Every other setting is stored
+    /// Consumers. Applied directly: the VR stick scheme (<c>VrStickMoveInput.SetControlMode</c>),
+    /// the local ball's core skin (<see cref="BallView.SetSkin"/>; the arrows step over the
+    /// skins that view actually has, see <see cref="BallSkinMath"/>) and the panel language
+    /// (<see cref="listeners"/> redraw). Every other setting is stored
     /// and readable through the getters below and <see cref="GetRevision"/>; a consumer either
     /// polls the revision or is added to <see cref="listeners"/>, which receive the custom event
     /// <c>OnHubSettingsChanged</c>. Which consumer is still missing is listed in
@@ -35,6 +38,9 @@ namespace VRCKatamari.Hub
     {
         [Tooltip("VR stick adapter whose scheme the ControlMode setting switches.")]
         [SerializeField] private VrStickMoveInput vrInput;
+
+        [Tooltip("The local ball's view whose core skin the BallSkin setting switches. Null = the setting is only stored.")]
+        [SerializeField] private BallView ballView;
 
         [Tooltip("Behaviours that get SendCustomEvent(\"OnHubSettingsChanged\") after any change or restore.")]
         [SerializeField] private UdonSharpBehaviour[] listeners;
@@ -65,9 +71,14 @@ namespace VRCKatamari.Hub
                     values[id] = HubSettingsMath.LanguageFromCode(VRCPlayerApi.GetCurrentLanguage());
                 }
             }
+            // A saved skin this build did not assemble shows the default; the save is kept
+            // until the player picks another skin.
+            values[HubSettingsMath.BallSkin] = BallSkinMath.Normalize(AvailableSkins(),
+                values[HubSettingsMath.BallSkin]);
             restored = true;
             Debug.Log("[hub-settings] restored language=" + values[HubSettingsMath.Language]
-                + " controlMode=" + values[HubSettingsMath.ControlMode]);
+                + " controlMode=" + values[HubSettingsMath.ControlMode]
+                + " ballSkin=" + values[HubSettingsMath.BallSkin]);
             Announce();
         }
 
@@ -76,7 +87,9 @@ namespace VRCKatamari.Hub
         {
             if (!HubSettingsMath.IsValidId(id)) return;
             EnsureValues();
-            int next = HubSettingsMath.Stepped(id, values[id], delta);
+            int next = id == HubSettingsMath.BallSkin
+                ? BallSkinMath.Stepped(AvailableSkins(), values[id], delta)
+                : HubSettingsMath.Stepped(id, values[id], delta);
             if (next == values[id]) return;
             values[id] = next;
             if (restored) PlayerData.SetInt(HubSettingsMath.StorageKey(id), next);
@@ -146,17 +159,30 @@ namespace VRCKatamari.Hub
 
         public bool IsCollisionWireframeEnabled() { return GetSetting(HubSettingsMath.CollisionWireframe) == 1; }
 
+        /// <summary>Original core number of the chosen ball skin.</summary>
+        public int GetBallSkin() { return GetSetting(HubSettingsMath.BallSkin); }
+
+        // The skins the local ball has; null when no view is wired (then every original number).
+        private int[] AvailableSkins()
+        {
+            if (ballView == null) return null;
+            return ballView.GetSkinNumbers();
+        }
+
         private void EnsureValues()
         {
             if (values != null) return;
             values = new int[HubSettingsMath.Count];
             for (int id = 0; id < HubSettingsMath.Count; id++) values[id] = HubSettingsMath.Default(id);
+            values[HubSettingsMath.BallSkin] = BallSkinMath.Normalize(AvailableSkins(),
+                values[HubSettingsMath.BallSkin]);
         }
 
         private void Announce()
         {
             revision++;
             if (vrInput != null) vrInput.SetControlMode(values[HubSettingsMath.ControlMode]);
+            if (ballView != null) ballView.SetSkin(values[HubSettingsMath.BallSkin]);
             if (listeners == null) return;
             for (int i = 0; i < listeners.Length; i++)
             {

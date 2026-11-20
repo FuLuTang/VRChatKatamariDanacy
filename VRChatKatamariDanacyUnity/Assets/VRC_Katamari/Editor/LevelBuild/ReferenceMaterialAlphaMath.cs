@@ -7,9 +7,10 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <summary>
     /// How a reference prop's material should render, decided from its source glTF material:
     /// <c>alphaMode</c> OPAQUE/MASK/BLEND becomes the built-in Standard shader's Opaque/Cutout/Fade
-    /// mode, and <c>alphaCutoff</c> becomes <c>_Cutoff</c>. Pure: no asset, file or importer access,
-    /// so the rules are pinned by EditMode tests; <see cref="ReferenceModelMaterialPostprocessor"/>
-    /// applies them during the model import.
+    /// mode; a MASK material cuts at <see cref="CutoutThreshold"/> and its texture has no
+    /// mipmaps. Pure: no asset, file or importer access, so the rules are pinned by EditMode
+    /// tests; <see cref="ReferenceModelMaterialPostprocessor"/> applies them during the import
+    /// and <c>ReferenceParityAudit</c> checks the scene against the same rules.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -21,13 +22,22 @@ namespace VRCKatamari.Editor.LevelBuild
     /// GLB still has the original's answer, so the importer reads it there.
     /// </para>
     /// <para>
-    /// The mapping. MASK is the PS2 alpha test (the extraction's
-    /// <c>sourceAlphaTestRegister</c> 0x5000F: test on, NOTEQUAL, reference 0, written as
-    /// <c>alphaCutoff</c> 1/255), i.e. Standard Cutout with the same threshold. BLEND is the PS2
-    /// straight-alpha blend (<c>sourceAlphaRegister</c> 0x44, (Cs-Cd)*As+Cd), which is Standard
-    /// Fade; Standard "Transparent" is premultiplied and keeps specular on transparent texels,
-    /// which the original does not have. glTF's own default cutoff (0.5) applies when a MASK
-    /// material has no <c>alphaCutoff</c>.
+    /// The mapping. MASK (the PS2 alpha test, <c>sourceAlphaTestRegister</c> 0x5000F) is
+    /// Standard Cutout. BLEND is the PS2 straight-alpha blend (<c>sourceAlphaRegister</c> 0x44,
+    /// (Cs-Cd)*As+Cd), which is Standard Fade; Standard "Transparent" is premultiplied and keeps
+    /// specular on transparent texels, which the original does not have.
+    /// </para>
+    /// <para>
+    /// Leaves follow Katamari Damacy REROLL (PC, 2019-01-31), not the GLB's <c>alphaCutoff</c>
+    /// (1/255, the PS2 "alpha != 0" test). REROLL draws these props with its <c>CustomStandard</c>
+    /// shader; the disassembled pixel shader discards when <c>tex.a * _Color.a &lt; _Cutoff</c>
+    /// with <c>_Cutoff</c> = 0.5 on the material, and samples the texture with
+    /// <c>sample_l ... l(0)</c>, i.e. mip 0 only (the atlas has 11 mips that are never read).
+    /// The textures' alpha is only 0 or 255. So a MASK material here cuts at 0.5 and its texture
+    /// is imported without mipmaps: with mipmaps a distant leaf's alpha averaged below the
+    /// threshold and the leaf vanished, which REROLL cannot do. Source: the REROLL asset survey
+    /// (<c>.work/notes/research/reroll_assets_survey.md</c>, "shader and texture alpha"). Texture
+    /// filtering is left as imported.
     /// </para>
     /// <para>
     /// The Standard values are the ones Unity's <c>StandardShaderGUI.SetupMaterialWithBlendMode</c>
@@ -47,8 +57,11 @@ namespace VRCKatamari.Editor.LevelBuild
             Fade = 2,
         }
 
-        /// <summary>glTF 2.0's <c>alphaCutoff</c> default for MASK materials.</summary>
-        public const float GltfDefaultCutoff = 0.5f;
+        /// <summary>
+        /// <c>_Cutoff</c> of every Cutout material: REROLL <c>CustomStandard</c>'s material value
+        /// (see the remarks). The source GLB's <c>alphaCutoff</c> is not used.
+        /// </summary>
+        public const float CutoutThreshold = 0.5f;
 
         /// <summary>Standard shader <c>_Mode</c> values (StandardShaderGUI.BlendMode).</summary>
         public const float StandardModeOpaque = 0f;
@@ -92,19 +105,58 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
-        /// The <c>_Cutoff</c> for a material: its <c>alphaCutoff</c> clamped to [0, 1], or glTF's
-        /// 0.5 when it has none or the value is not a finite number.
+        /// Import settings for the texture of a reference model whose source materials are
+        /// <paramref name="materials"/> (each reference GLB has one image, shared by its
+        /// textured materials). "Alpha Is Transparency" when any material is Cutout or Fade;
+        /// mipmaps off when a textured Cutout material samples it (REROLL reads mip 0 only).
+        /// Fade and Opaque textures keep their mipmaps.
         /// </summary>
-        public static float Cutoff(bool hasAlphaCutoff, double alphaCutoff)
+        public static void TextureSettings(SourceMaterial[] materials, out bool alphaIsTransparency,
+            out bool disableMipmaps)
         {
-            if (!hasAlphaCutoff || double.IsNaN(alphaCutoff) || double.IsInfinity(alphaCutoff))
+            alphaIsTransparency = false;
+            disableMipmaps = false;
+            if (materials == null) return;
+            for (int i = 0; i < materials.Length; i++)
             {
-                return GltfDefaultCutoff;
+                if (materials[i] == null) continue;
+                RenderMode mode = materials[i].Mode;
+                if (mode == RenderMode.Cutout || mode == RenderMode.Fade) alphaIsTransparency = true;
+                if (mode == RenderMode.Cutout && materials[i].HasTexture) disableMipmaps = true;
+            }
+        }
+
+        /// <summary>
+        /// True when an imported material does not render the way its source mode requires:
+        /// a Cutout or Fade source whose material is not in that mode's queue, or a Cutout whose
+        /// <c>_Cutoff</c> is not <see cref="CutoutThreshold"/>. Opaque and Unknown sources are
+        /// never a mismatch (the importer leaves them alone).
+        /// </summary>
+        public static bool MissesSourceAlpha(RenderMode source, int renderQueue, bool hasCutoff, float cutoff)
+        {
+            if (source != RenderMode.Cutout && source != RenderMode.Fade) return false;
+            if (renderQueue != RenderQueue(source)) return true;
+            return source == RenderMode.Cutout && (!hasCutoff || Math.Abs(cutoff - CutoutThreshold) > 1e-4f);
+        }
+
+        /// <summary>
+        /// The glTF material name an imported material stands for. The model's own embedded
+        /// material keeps it; a copy made by <c>MaterialInstancing</c> is named
+        /// <c>&lt;model stem&gt;_&lt;material&gt;</c>, so the prefix is removed. Null when a
+        /// copy's name does not carry the prefix (it cannot be traced to the source).
+        /// </summary>
+        public static string SourceMaterialName(string modelStem, string materialName, bool embedded)
+        {
+            if (string.IsNullOrEmpty(materialName)) return null;
+            if (embedded) return materialName;
+            string prefix = (modelStem ?? "") + "_";
+            if (prefix.Length < 2 || materialName.Length <= prefix.Length ||
+                !materialName.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return null;
             }
 
-            if (alphaCutoff < 0.0) return 0f;
-            if (alphaCutoff > 1.0) return 1f;
-            return (float)alphaCutoff;
+            return materialName.Substring(prefix.Length);
         }
 
         /// <summary>Standard's <c>_Mode</c> for a render mode.</summary>
@@ -174,18 +226,13 @@ namespace VRCKatamari.Editor.LevelBuild
             public string Name;
             /// <summary>The written alphaMode, or null when the key is absent (OPAQUE).</summary>
             public string AlphaMode;
-            public bool HasAlphaCutoff;
-            public double AlphaCutoff;
+            /// <summary>True when the material samples a base colour texture.</summary>
+            public bool HasTexture;
             public bool DoubleSided;
 
             public RenderMode Mode
             {
                 get { return ForAlphaMode(AlphaMode); }
-            }
-
-            public float CutoffValue
-            {
-                get { return Cutoff(HasAlphaCutoff, AlphaCutoff); }
             }
         }
 
@@ -292,13 +339,13 @@ namespace VRCKatamari.Editor.LevelBuild
                     return false;
                 }
 
-                LevelJsonNode cutoff = item.Get("alphaCutoff");
+                LevelJsonNode pbr = item.Get("pbrMetallicRoughness");
+                LevelJsonNode baseColor = pbr == null || !pbr.IsObject ? null : pbr.Get("baseColorTexture");
                 result[i] = new SourceMaterial
                 {
                     Name = name,
                     AlphaMode = item.GetString("alphaMode"),
-                    HasAlphaCutoff = cutoff != null && cutoff.Kind == LevelJsonKind.Number,
-                    AlphaCutoff = cutoff == null ? 0.0 : cutoff.AsDouble(),
+                    HasTexture = baseColor != null && baseColor.IsObject,
                     DoubleSided = item.GetBool("doubleSided", false),
                 };
             }

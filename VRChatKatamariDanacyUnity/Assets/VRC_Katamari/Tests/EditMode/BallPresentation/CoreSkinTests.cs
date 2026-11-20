@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
@@ -89,6 +90,38 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0f, scale);
         }
 
+        // A List<CoreSkinAssembler.SkinSource> built through reflection (editor assembly).
+        private static IList Skins(params object[][] rows)
+        {
+            Type source = Assembler.GetNestedType("SkinSource");
+            Assert.IsNotNull(source);
+            var list = (IList)Activator.CreateInstance(typeof(System.Collections.Generic.List<>).MakeGenericType(source));
+            foreach (object[] row in rows)
+            {
+                object skin = Activator.CreateInstance(source);
+                source.GetField("Number").SetValue(skin, row[0]);
+                source.GetField("Mesh").SetValue(skin, row[1]);
+                source.GetField("Material").SetValue(skin, row[2]);
+                source.GetField("Scale").SetValue(skin, row[3]);
+                list.Add(skin);
+            }
+            return list;
+        }
+
+        [TestCase("core_01", 1)]
+        [TestCase("core_29", 29)]
+        [TestCase("core_26", -1)]
+        [TestCase("core_1", -1)]
+        [TestCase("core_30", -1)]
+        [TestCase("OriginalCoreSkin", -1)]
+        public void OnlyOriginalCoreNamesAreSkinChildren(string name, int expected)
+        {
+            object[] args = { name, 0 };
+            bool ok = (bool)Assembler.GetMethod("TryParseSkinChild").Invoke(null, args);
+            Assert.AreEqual(expected > 0, ok);
+            if (ok) Assert.AreEqual(expected, args[1]);
+        }
+
         [Test]
         public void AssemblyIsIdempotentAndNeverWritesRuntimeScaleOrRoll()
         {
@@ -113,24 +146,42 @@ namespace VRCKatamari.Tests
                 float scale;
                 Assert.IsTrue(Normalize(mesh.vertices, mesh.triangles, out diameter, out scale));
                 MethodInfo apply = Assembler.GetMethod("ApplyToCore");
-                object[] first = { core.transform, mesh, material, scale, 0, 0 };
-                apply.Invoke(null, first);
-                Assert.AreEqual(1, first[4]);
-                Assert.Greater((int)first[5], 0);
-                object[] second = { core.transform, mesh, material, scale, 0, 0 };
+                // Two skins sharing one mesh: core_01 (default, shown) and core_02 (hidden).
+                IList skins = Skins(new object[] { 1, mesh, material, scale },
+                    new object[] { 2, mesh, material, scale });
+                object[] first = { core.transform, skins, 0, 0 };
+                var renderers = (MeshRenderer[])apply.Invoke(null, first);
+                Assert.AreEqual(3, first[2], "container + two skins");
+                Assert.Greater((int)first[3], 0);
+                object[] second = { core.transform, skins, 0, 0 };
                 apply.Invoke(null, second);
-                Assert.AreEqual(0, second[4]);
-                Assert.AreEqual(0, second[5]);
+                Assert.AreEqual(0, second[2]);
+                Assert.AreEqual(0, second[3]);
                 Assert.AreEqual(Vector3.one * 0.222f, core.transform.localScale);
                 Assert.AreEqual(rotation, core.transform.localRotation);
                 Assert.AreEqual(1, core.transform.childCount);
-                Transform skin = core.transform.GetChild(0);
+                Transform container = core.transform.GetChild(0);
+                Assert.AreEqual("OriginalCoreSkin", container.name);
+                Assert.AreEqual(Vector3.one, container.localScale);
+                Assert.IsNull(container.GetComponent<MeshRenderer>());
+                Assert.AreEqual(2, container.childCount);
+                Transform skin = container.Find("core_01");
                 Assert.AreEqual(mesh, skin.GetComponent<MeshFilter>().sharedMesh);
                 Assert.AreEqual(material, skin.GetComponent<MeshRenderer>().sharedMaterial);
+                Assert.AreEqual(2, renderers.Length);
+                Assert.IsTrue(renderers[0].enabled, "default skin shown");
+                Assert.IsFalse(renderers[1].enabled, "other skins hidden");
+                Assert.AreSame(renderers[1], container.Find("core_02").GetComponent<MeshRenderer>());
                 Assert.IsFalse(core.GetComponent<MeshRenderer>().enabled);
                 Assert.AreEqual(-mesh.bounds.center * scale, skin.localPosition);
                 Assert.AreEqual(0.222d, diameter * skin.localScale.x * core.transform.localScale.x, 1e-7);
                 Assert.AreEqual(0, skin.GetComponents<Collider>().Length);
+
+                // core_02's files gone: its child is removed, core_01 stays.
+                object[] third = { core.transform, Skins(new object[] { 1, mesh, material, scale }), 0, 0 };
+                apply.Invoke(null, third);
+                Assert.AreEqual(1, container.childCount);
+                Assert.IsNotNull(container.Find("core_01"));
             }
             finally
             {

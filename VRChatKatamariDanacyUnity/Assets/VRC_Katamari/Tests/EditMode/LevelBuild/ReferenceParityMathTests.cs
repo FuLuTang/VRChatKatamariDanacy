@@ -72,13 +72,6 @@ namespace VRCKatamari.Tests
             return solid;
         }
 
-        [TestCase(true, 2449, "Standard", true)]
-        [TestCase(true, 2450, "Standard", false)]
-        [TestCase(true, 2000, "Legacy Shaders/Transparent/CUTOUT/Diffuse", false)]
-        [TestCase(false, 2000, "Standard", false)]
-        public void CutoutRequiresSourceAlphaAndOpaqueMode(bool alpha, int queue, string shader, bool expected) =>
-            Assert.That(Call("SuspectCutout", alpha, queue, shader), Is.EqualTo(expected));
-
         [TestCase("motion", true)]
         [TestCase("attached", true)]
         [TestCase("ambient", true)]

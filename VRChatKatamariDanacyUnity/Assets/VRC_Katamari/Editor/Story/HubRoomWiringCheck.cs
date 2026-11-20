@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using VRCKatamari.BallMotor;
+using VRCKatamari.BallPresentation;
 using VRCKatamari.Editor.Hub;
 using VRCKatamari.Hub;
 using VRCKatamari.Input;
@@ -331,6 +332,16 @@ namespace VRCKatamari.Editor.Story
                 Report("host.settings is not the scene's HubSettingsHost", ref problems);
             ObjectReference<VrStickMoveInput>(settings[0], "vrInput",
                 "settings.vrInput (VR controls setting -> stick scheme)", ref problems);
+            // Ball skin: optional (a ball without assembled skins has nothing to switch), but
+            // when wired it must be the scene's one ball view.
+            BallView skinView = OptionalReference<BallView>(settings[0], "ballView");
+            if (skinView != null)
+            {
+                BallView[] views = Object.FindObjectsOfType<BallView>(true);
+                if (views.Length != 1 || views[0] != skinView)
+                    Report("settings.ballView is not the scene's single BallView (" + views.Length
+                        + " found)", ref problems);
+            }
             if (ObjectReference<HubSettingsHost>(displays[0], "settings", "display.settings",
                 ref problems) != settings[0]) Report("display.settings is another store", ref problems);
             if (ObjectReference<HubRecordBook>(displays[0], "records", "display.records",

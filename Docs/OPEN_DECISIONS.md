@@ -135,7 +135,7 @@
 - **全局球径上限 400 m（owner 2026-11-18），所有地图适用。** 详见 (n) 与 [PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)。
 - **冲刺以《We Love Katamari REROLL+ Royal Reverie》为准；VR 不做双摇杆交替手势**（owner 2026-11-19）——用左扳机／桌面 Shift 长按替代交替输入：每次等效 `s16DashInputDuration=14` 帧，按 `s32DashWheelSpinData` 分档（3/4/5 次空转，+4 次自动出射）。空转后提前松手以 `f32DashHelpSpeedCoef=0.67` 弱冲，空转前松开不冲。蓄力复用普通滑行；出射倍率按球径来自 `s32SpeedD/s32SpeedF`，方向沿驾驶朝向；冲刺继续走普通推进，放大速度上限和前推加速；反推／撞墙退出，不按低速终止。寿命 `s16DashLife=90` 帧，耗尽喘气 `s16DashForbidTime=240` 帧，非冲刺非喘气每 `s16DashRecoverTime=10` 帧回 1。骑乘面板仍用 `RideDashInteractMath` 避免冲刺途中误触。见 [接触模型 §3.8](Design/BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
 - **吸附物冻结、不随球长大外移** — 与原作一致，外移会破坏「吸附瞬间定姿」的契约。见 [PARITY_AUDIT 的「吸附物位姿」行](Design/Parity/PARITY_AUDIT.md)。
-- **球芯显示等体积直径跟随当前碰撞直径（owner 2026-11-17）** — 为消除粘附件与核之间的空腔，核随吸收/缩小直接更新，不用平滑弹簧。REROLL 玩家观察核会变大并吞入旧件，开发者确认镜头随球变大拉远；证据强度为“玩家观察 + 开发者镜头说法”，不是原作核/碰撞比例实测。`core_XX` 仍是按关卡命名的皮肤，不是尺寸档；先用 `core_01`，关卡对应未知。见 [核皮肤与证据](Design/BallPresentation/CORE_SKIN.md)、[视觉核心差异行](Design/Parity/PARITY_AUDIT.md)。
+- **球芯显示等体积直径跟随当前碰撞直径（owner 2026-11-17）** — 为消除粘附件与核之间的空腔，核随吸收/缩小直接更新，不用平滑弹簧。REROLL 玩家观察核会变大并吞入旧件，开发者确认镜头随球变大拉远；证据强度为“玩家观察 + 开发者镜头说法”，不是原作核/碰撞比例实测。`core_XX` 仍是按关卡命名的皮肤，不是尺寸档；玩家可切换，默认 `core_01`，关卡对应未知。见 [核皮肤与证据](Design/BallPresentation/CORE_SKIN.md)、[视觉核心差异行](Design/Parity/PARITY_AUDIT.md)。
 - **道具行为按原作的分列结构：`kind` 与 `behaviour` 两列、纯重力坠落、落定不倾斜、v1 不做 `carry`、单父指针、父件被吃子件坠落** — 原作本来就是「内容分类」和「怎么动」两轴；「掉」比「带」少一轮体积门与重复计收益的工作量。见 [PROP_BEHAVIOURS §10.1–§10.3、§10.9](Design/PickupAbsorb/PROP_BEHAVIOURS.md)；其中坠落传播见上方 (s) 条，不在此重复。
 - **碰撞体必须跟视觉形状，按型给代理，不用 AABB** — AABB 的角部比西瓜/玩具球多出几厘米，玩家会看到「没碰到就被挡」。见 [COLLIDER_PROXY](Design/PickupAbsorb/COLLIDER_PROXY.md)、[COLLIDER_LAYER](Design/PickupAbsorb/COLLIDER_LAYER.md)。
 - **贴图：法线不得来自噪声，UV 必须有效** — fbm 噪声法线会把釉面/金属打成「湿报纸」；重叠或零面积 UV 不进 Unity。见 [TEXTURE_PBR_SPEC §10、§10.1](Art/OriginalModels/props/TEXTURE_PBR_SPEC.md)。
@@ -202,6 +202,8 @@
 - **体积回收曲线按新版做（owner 2026-11-19）** — 采用 WLK REROLL+ 数据里的回收比曲线；拿到数据前维持全局 0.8。
 - **过关按原作类型与参数判定（owner 2026-11-20）** — 过关独立于评分；蟹座按初代 REROLL 的 B 型，420 秒到时以确认捕获数 ≥10 判定，80 cm 不参与过关。B 类具体对象仍待查证，暂按六种本关蟹类定义筛选。见[剧情模式](Design/StoryMode/README.md)与[合集关卡清单](Design/StoryMode/ALL_MAPS_HUB.md#21-当前四关偏移与源数据来自-r47-盘点)。
 - **蟹座异区物件不与球碰撞（owner 2026-11-20）** — 照初代 `hitOnAreaNo`，晒衣夹虽有模型却不是本关障碍，不再用静态盒挡球；见[区域碰撞格式](Design/Levels/LEVEL_FORMAT_V2.md#物件的活动区域号)。
+- **球皮肤可切换（owner 2026-11-20）** — 原作 27 个球芯全部装上，玩家在设置板「球样式」行切换，默认 core_01，选择存 PlayerData `vrck.set.ballSkin`（存原作编号）；本批只换本地球，远端球的皮肤同步留待后续。见 [核皮肤](Design/BallPresentation/CORE_SKIN.md)。
+- **透明叶子照初代 REROLL（owner 2026-11-20）** — 参考道具的 MASK 材质按 REROLL `CustomStandard` 做：硬裁切阈值 0.5、贴图关闭 mipmap（REROLL 只采 mip0），远处叶子不再被 mip 平均掉；远处像素闪烁与 REROLL 相同。见 [参考道具材质的透明模式](Design/StoryMode/ALL_MAPS_HUB.md#614-参考道具材质的透明模式)。
 - **骑手随球放大、眼点抬高（2026-11-19）** — 吸附物挡前路，推球角定为 52°，即居中腿中轴离球面至少 0.03r 的最大整数候选；不改球径，见 [骑球几何 §1.1](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md#11-ψ-的候选每单位-rpitch-0-时的视角)。
 
 ### Still open

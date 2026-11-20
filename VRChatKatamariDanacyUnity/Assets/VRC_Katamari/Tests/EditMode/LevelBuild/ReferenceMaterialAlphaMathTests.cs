@@ -8,20 +8,20 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// Pins how a reference prop's source glTF material decides its Unity render mode:
-    /// alphaMode -> Standard Opaque/Cutout/Fade, alphaCutoff -> _Cutoff, the GLB JSON chunk,
-    /// the materials list, and which manifest names the source GLB.
+    /// alphaMode -> Standard Opaque/Cutout/Fade, the REROLL cutoff 0.5, which textures lose
+    /// their mipmaps, the audit's mismatch rule, the GLB JSON chunk, the materials list, and
+    /// which manifest names the source GLB.
     /// </summary>
     /// <remarks>
     /// Reflection, like the other LevelBuild tests: the rules live in the default Editor
     /// assembly, which this test assembly cannot reference by name. The GLB and material cases
     /// are shaped like the extracted Cancer data (tomato: one MASK material with
-    /// alphaCutoff 1/255; color_tv: two MASK and one BLEND; eggplant: two manifests that name
-    /// different GLBs).
+    /// alphaCutoff 1/255; color_tv: two MASK and one BLEND; minivan: OPAQUE only; eggplant: two
+    /// manifests that name different GLBs).
     /// </remarks>
     public class ReferenceMaterialAlphaMathTests
     {
         private const string MathTypeName = "VRCKatamari.Editor.LevelBuild.ReferenceMaterialAlphaMath";
-        private const float TomatoCutoff = 0.00392156862745098f;
 
         private static Type MathType => AppDomain.CurrentDomain.GetAssemblies()
             .Select(assembly => assembly.GetType(MathTypeName))
@@ -54,15 +54,74 @@ namespace VRCKatamari.Tests
             Assert.That(Call("ForAlphaMode", alphaMode), Is.EqualTo(Mode(expected)));
         }
 
-        [TestCase(true, 0.00392156862745098, 0.00392156862745098)]
-        [TestCase(true, 0.2, 0.2)]
-        [TestCase(false, 0.0, 0.5)]
-        [TestCase(true, double.NaN, 0.5)]
-        [TestCase(true, -1.0, 0.0)]
-        [TestCase(true, 2.0, 1.0)]
-        public void CutoffIsTheSourceValueOrTheGltfDefault(bool has, double value, double expected)
+        [Test]
+        public void CutoutThresholdIsRerollsHalfNotTheGlbValue()
         {
-            Assert.That((float)Call("Cutoff", has, value), Is.EqualTo((float)expected).Within(1e-7f));
+            // REROLL CustomStandard: discard when alpha < _Cutoff, _Cutoff = 0.5 on the material.
+            Assert.That(MathType.GetField("CutoutThreshold").GetValue(null), Is.EqualTo(0.5f));
+        }
+
+        [TestCase("MASK", true, true, true)]
+        [TestCase("MASK", false, true, false)]
+        [TestCase("BLEND", true, true, false)]
+        [TestCase("OPAQUE", true, false, false)]
+        [TestCase(null, true, false, false)]
+        [TestCase("ADDITIVE", true, false, false)]
+        public void OnlyTexturedMaskTexturesLoseMipmaps(string alphaMode, bool textured,
+            bool expectedAlpha, bool expectedNoMips)
+        {
+            Array materials = ReadMaterials(MaterialJson(alphaMode, textured));
+            object[] args = { materials, null, null };
+            MathType.GetMethod("TextureSettings").Invoke(null, args);
+            Assert.That(args[1], Is.EqualTo(expectedAlpha), "alphaIsTransparency");
+            Assert.That(args[2], Is.EqualTo(expectedNoMips), "disableMipmaps");
+        }
+
+        [Test]
+        public void MixedMaskAndBlendTextureLosesMipmaps()
+        {
+            // color_tv-like: the one image serves MASK and BLEND parts; the MASK part samples it.
+            Array materials = ReadMaterials("{\"materials\":[" + Part("a", "MASK", true) + "," +
+                                            Part("b", "BLEND", true) + "]}");
+            object[] args = { materials, null, null };
+            MathType.GetMethod("TextureSettings").Invoke(null, args);
+            Assert.That(args[1], Is.True);
+            Assert.That(args[2], Is.True);
+
+            object[] none = { null, null, null };
+            MathType.GetMethod("TextureSettings").Invoke(null, none);
+            Assert.That(none[1], Is.False);
+            Assert.That(none[2], Is.False);
+        }
+
+        [TestCase("Cutout", 2450, true, 0.5f, false)]
+        [TestCase("Cutout", 2450, true, 0.00392f, true)]
+        [TestCase("Cutout", 2450, false, 0f, true)]
+        [TestCase("Cutout", 2000, true, 0.5f, true)]
+        [TestCase("Cutout", -1, true, 0.5f, true)]
+        [TestCase("Fade", 3000, true, 0.5f, false)]
+        [TestCase("Fade", 3000, true, 0.1f, false)]
+        [TestCase("Fade", 2450, true, 0.5f, true)]
+        [TestCase("Opaque", 2000, true, 0.5f, false)]
+        [TestCase("Opaque", 3000, false, 0f, false)]
+        [TestCase("Unknown", 2000, false, 0f, false)]
+        public void MismatchFollowsTheSourceModeNotTheTexture(string source, int queue, bool hasCutoff,
+            float cutoff, bool expected)
+        {
+            // A minivan-like OPAQUE source never counts, whatever alpha its texture carries.
+            Assert.That(Call("MissesSourceAlpha", Mode(source), queue, hasCutoff, cutoff), Is.EqualTo(expected));
+        }
+
+        [TestCase("minivan", "part_0_0", true, "part_0_0")]
+        [TestCase("tomato", "tomato_part_0_0", false, "part_0_0")]
+        [TestCase("color_tv", "color_tv_part_1_0", false, "part_1_0")]
+        [TestCase("tomato", "part_0_0", false, null)]
+        [TestCase("tomato", "tomato_", false, null)]
+        [TestCase("", "part_0_0", false, null)]
+        [TestCase("tomato", "", true, null)]
+        public void SceneMaterialNameTracesToTheSource(string stem, string name, bool embedded, string expected)
+        {
+            Assert.That(Call("SourceMaterialName", stem, name, embedded), Is.EqualTo(expected));
         }
 
         [Test]
@@ -140,10 +199,11 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void MaterialsKeepModeCutoffAndSides()
+        public void MaterialsKeepModeTextureAndSides()
         {
             string json = "{\"materials\":[" +
-                          "{\"name\":\"part_0_0\",\"alphaMode\":\"MASK\",\"alphaCutoff\":0.00392156862745098}," +
+                          "{\"name\":\"part_0_0\",\"alphaMode\":\"MASK\",\"alphaCutoff\":0.00392156862745098," +
+                          "\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}}}," +
                           "{\"name\":\"part_0_1\",\"alphaMode\":\"MASK\"}," +
                           "{\"name\":\"part_0_2\",\"alphaMode\":\"BLEND\",\"doubleSided\":true}," +
                           "{\"name\":\"part_1_0\"}]}";
@@ -152,10 +212,10 @@ namespace VRCKatamari.Tests
 
             object tomatoLike = Call("Find", materials, "part_0_0");
             Assert.That(Read(tomatoLike, "Mode"), Is.EqualTo(Mode("Cutout")));
-            Assert.That((float)Read(tomatoLike, "CutoffValue"), Is.EqualTo(TomatoCutoff).Within(1e-7f));
+            Assert.That(Read(tomatoLike, "HasTexture"), Is.EqualTo(true));
 
-            object noCutoff = Call("Find", materials, "part_0_1");
-            Assert.That((float)Read(noCutoff, "CutoffValue"), Is.EqualTo(0.5f));
+            object untextured = Call("Find", materials, "part_0_1");
+            Assert.That(Read(untextured, "HasTexture"), Is.EqualTo(false));
 
             object blend = Call("Find", materials, "part_0_2");
             Assert.That(Read(blend, "Mode"), Is.EqualTo(Mode("Fade")));
@@ -222,6 +282,18 @@ namespace VRCKatamari.Tests
             bool ok = (bool)MathType.GetMethod("TryResolveSourceGlb").Invoke(null, args);
             if (!ok) Assert.That(args[4], Is.Not.Null.And.Not.Empty);
             return ok ? (string)args[3] : null;
+        }
+
+        private static string Part(string name, string alphaMode, bool textured)
+        {
+            return "{\"name\":\"" + name + "\"" +
+                   (alphaMode == null ? "" : ",\"alphaMode\":\"" + alphaMode + "\"") +
+                   (textured ? ",\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}}" : "") + "}";
+        }
+
+        private static string MaterialJson(string alphaMode, bool textured)
+        {
+            return "{\"materials\":[" + Part("part_0_0", alphaMode, textured) + "]}";
         }
 
         private static Array ReadMaterials(string json)

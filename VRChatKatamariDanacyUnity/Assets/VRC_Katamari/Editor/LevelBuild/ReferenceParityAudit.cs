@@ -128,25 +128,9 @@ namespace VRCKatamari.Editor.LevelBuild
             issue(false, "motionClass 不符", classGaps.Count, classGaps);
             issue(false, "whackLoop 未循环", badLoops.Count, badLoops);
 
-            int alpha = 0;
-            var cutout = new List<string>();
-            var textureAlpha = new Dictionary<Texture, bool>();
-            foreach (Material material in scene.Materials)
-            {
-                Texture texture = material.mainTexture;
-                if (texture == null) continue;
-                if (!textureAlpha.TryGetValue(texture, out bool hasAlpha))
-                {
-                    var importer = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture)) as TextureImporter;
-                    hasAlpha = importer != null && (importer.DoesSourceTextureHaveAlpha() ||
-                        importer.alphaSource == TextureImporterAlphaSource.FromGrayScale);
-                    textureAlpha.Add(texture, hasAlpha);
-                }
-                if (hasAlpha) alpha++;
-                if (ReferenceParityMath.SuspectCutout(hasAlpha, material.renderQueue,
-                    material.shader == null ? null : material.shader.name)) cutout.Add(material.name);
-            }
-            issue(false, "cutout 疑似未启用透明", cutout.Count, cutout);
+            AuditAlpha(scene.Materials, out int alpha, out List<string> cutout, out List<string> untraced);
+            issue(true, "cutout 与源 GLB 透明模式不符", cutout.Count, cutout);
+            issue(false, "cutout 未能对到源 GLB 材质", untraced.Count, untraced);
 
             lines.Add(tag + $"instances={scene.Ids.Count}/{expected.Length} " +
                 $"visible={scene.Visible.Count}/{visualIds.Count} skins={scene.Skins - scene.BrokenSkins.Count}/{scene.Skins} " +
@@ -164,6 +148,57 @@ namespace VRCKatamari.Editor.LevelBuild
             }
             void issue(bool blocking, string metric, int count, IEnumerable<string> names) =>
                 AddIssue(blocking ? problems : details, blocking ? tag : tag + "warning ", metric, count, names);
+        }
+
+        // The source GLB's alphaMode decides, by the importer's own rules: the denominator is the
+        // scene materials whose source is MASK or BLEND, the numerator those not set up as that
+        // mode (ReferenceMaterialAlphaMath.MissesSourceAlpha). A texture's own alpha does not
+        // count: OPAQUE sources such as the minivan carry stray translucent texels.
+        private static void AuditAlpha(Dictionary<Material, string> materials, out int alpha,
+            out List<string> cutout, out List<string> untraced)
+        {
+            alpha = 0;
+            cutout = new List<string>();
+            untraced = new List<string>();
+            var sources = new Dictionary<string, ReferenceMaterialAlphaMath.SourceMaterial[]>(StringComparer.Ordinal);
+            foreach (KeyValuePair<Material, string> pair in materials)
+            {
+                Material material = pair.Key;
+                string model = pair.Value;
+                if (model == null) continue;
+                if (!sources.TryGetValue(model, out ReferenceMaterialAlphaMath.SourceMaterial[] list))
+                {
+                    ReferenceModelMaterialPostprocessor.TryReadSourceMaterials(model, out list, out _);
+                    sources.Add(model, list);
+                }
+                bool embedded = string.Equals(AssetDatabase.GetAssetPath(material), model, StringComparison.Ordinal);
+                string name = ReferenceMaterialAlphaMath.SourceMaterialName(
+                    Path.GetFileNameWithoutExtension(model), material.name, embedded);
+                ReferenceMaterialAlphaMath.SourceMaterial source = ReferenceMaterialAlphaMath.Find(list, name);
+                if (source == null)
+                {
+                    untraced.Add(material.name);
+                    continue;
+                }
+                ReferenceMaterialAlphaMath.RenderMode mode = source.Mode;
+                if (mode != ReferenceMaterialAlphaMath.RenderMode.Cutout &&
+                    mode != ReferenceMaterialAlphaMath.RenderMode.Fade) continue;
+                alpha++;
+                bool hasCutoff = material.HasProperty("_Cutoff");
+                if (ReferenceMaterialAlphaMath.MissesSourceAlpha(mode, material.renderQueue, hasCutoff,
+                    hasCutoff ? material.GetFloat("_Cutoff") : 0f)) cutout.Add(material.name);
+            }
+        }
+
+        // The reference model a scene material came from: the model that embeds it, else the
+        // model whose mesh the renderer draws (a MaterialInstancing copy). Null when neither is
+        // a reference model.
+        private static string ReferenceModelOf(Material material, Mesh mesh)
+        {
+            string path = AssetDatabase.GetAssetPath(material);
+            if (ReferenceModelMaterialPostprocessor.IsReferenceModelPath(path)) return path;
+            path = mesh == null ? null : AssetDatabase.GetAssetPath(mesh);
+            return ReferenceModelMaterialPostprocessor.IsReferenceModelPath(path) ? path : null;
         }
 
         private static void AddIssue(List<string> destination, string prefix, string metric,
@@ -225,7 +260,8 @@ namespace VRCKatamari.Editor.LevelBuild
             public readonly List<string> Animated = new List<string>();
             public readonly List<string> BrokenSkins = new List<string>();
             public readonly HashSet<string> SkinnedItems = new HashSet<string>(StringComparer.Ordinal);
-            public readonly HashSet<Material> Materials = new HashSet<Material>();
+            /// <summary>Each visible material and the reference model it came from (or null).</summary>
+            public readonly Dictionary<Material, string> Materials = new Dictionary<Material, string>();
             public readonly Dictionary<string, Transform> Roots = new Dictionary<string, Transform>(StringComparer.Ordinal);
             public int Skins;
         }
@@ -273,7 +309,8 @@ namespace VRCKatamari.Editor.LevelBuild
                     foreach (Material material in materials)
                     {
                         if (material == null || material.mainTexture == null) textured = false;
-                        if (material != null) scene.Materials.Add(material);
+                        if (material != null && !scene.Materials.ContainsKey(material))
+                            scene.Materials.Add(material, ReferenceModelOf(material, mesh));
                     }
                 }
                 if (visible) scene.Visible.Add(id);

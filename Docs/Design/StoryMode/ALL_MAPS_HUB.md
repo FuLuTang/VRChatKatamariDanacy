@@ -194,7 +194,7 @@
 | `animators` | 有 Animator 的道具 / 原作 `animated` 道具；可选的 `motion_table.json` 放在 placement 同目录，按 `instanceIndex` 逐件匹配，和参考素材一样不入库。旁表缺失或不匹配时分母为 `?`，不用场景现存的 Animator 反推。 | `warning`，原作骨骼尚未全部导出 |
 | `motionRows` / `motionDeclared` / `motionRowsAll` | 实际有效行 / placement 标为 `motion`、`attached` 或 `ambient` 的件数；`motionDeclared` 限于声明件的实际覆盖；`motionRowsAll` 的分母另纳入随动链与只播动画的道具，要求原作旁表。`whackLoop` 另计原作应循环的行。 | `warning`，已有动画缺行或程序配置缺口 |
 | `staticBoxes` | 本关 `LevelArenaHost.staticBoxes` 表项 / 本区域应进入静态表的 `box`；拆分代理按 `parts` 展开，异区、坡块和边界平面不计。也检查拾取宿主的异区禁碰撞 ID 能否解析。 | `PROBLEM` |
-| `cutout` | 参考道具的可见材质按材质对象去重；分母是主贴图源有 alpha 通道或从灰度生成 alpha 的材质。分子是其中队列低于 2450 且 shader 名不含 `Cutout` / `Transparent` 的材质。没有 `TextureImporter` 的贴图不纳入；这只是白底问题的筛查，不是像素验证。 | `warning`，列出材质名 |
+| `cutout` | 参考道具的可见材质按材质对象去重，按源 GLB 的 `alphaMode` 判（与导入后处理器同一套规则 `ReferenceMaterialAlphaMath`，见 §6.1.4）：分母是源为 MASK/BLEND 的材质，分子是其中没按该模式设好的（renderQueue 不是 2450/3000，或 Cutout 的 `_Cutoff` 不是 0.5）。贴图自带的 alpha 不算数（小货车源是 OPAQUE，贴图有零星半透明像素）。材质先按所属模型（内嵌材质取模型路径，instancing 副本取网格所在模型、去掉 `<模型名>_` 前缀）对上源 GLB 材质；对不上的另列 warning `cutout 未能对到源 GLB 材质`。不是像素验证。 | `PROBLEM`，列出材质名 |
 
 操作员重跑 **Assemble All-Maps Hub** 后抄录 `[ref-parity]` 汇总及缺口行。若要对比缺失的原作 Animator 或完整运动行，应先放好对应关卡的原作旁表。运动方向、材质像素透明和动画实播仍需单独验证。
 
@@ -203,8 +203,9 @@
 参考道具 FBX（`Assets/_RefUnlicensed/Models/<def>/<def>.fbx`）是抽取 GLB 经 Blender 转出来的，转换没有保留 glTF 的 `alphaMode`/`alphaCutoff`；FBX 里剩下的「贴图连 TransparencyFactor」Unity 的 FBX 材质导入不当透明处理，所以不补的话全部是 Standard Opaque，叶子、纸门等贴图的透明区画成实色方块。现行做法：
 
 - `Editor/LevelBuild/ReferenceModelMaterialPostprocessor.cs` 在模型导入时（`OnPreprocessMaterialDescription`，只管 `Assets/_RefUnlicensed/Models/` 下的 FBX，导入模式须为 `ImportViaMaterialDescription`）读同目录 manifest 的 `source_glb`，从本机 `%USERPROFILE%\KatamariRef\models\glb-pack\<源>.glb` 取 `materials[]`，按材质名对上 FBX 材质。manifest 取法：`<def>.manifest.json` 优先，没有时同目录所有 manifest 必须指向同一个 GLB（`eggplant` 目录两份 manifest 指向不同 GLB，以自名那份为准）。
-- 规则在 `ReferenceMaterialAlphaMath`：`OPAQUE`→不改；`MASK`→Standard Cutout，`_Cutoff`=`alphaCutoff`（缺省 0.5；抽取数据是 1/255，即原作的 alpha≠0 测试）；`BLEND`→Standard Fade（直通 alpha，对应原作的 (Cs−Cd)·As+Cd；不用预乘的 Transparent）。写入的 `_Mode`、RenderType、混合因子、ZWrite、关键字、renderQueue 与 Standard 检视器切换模式时一致。
-- 同一后处理器给源 GLB 含 MASK/BLEND 材质的模型目录里的 PNG 打开 `Alpha Is Transparency`：抽取贴图 alpha=0 处的 RGB 是杂色（番茄是粉色），打开后 Unity 用邻近不透明像素填它，切边过滤不会泛出底色。每个参考模型目录只有一个 FBX，源 GLB 也都只有一张图，所以按目录判断。
+- 规则在 `ReferenceMaterialAlphaMath`：`OPAQUE`→不改；`MASK`→Standard Cutout，`_Cutoff` 固定 0.5；`BLEND`→Standard Fade（直通 alpha，对应原作的 (Cs−Cd)·As+Cd；不用预乘的 Transparent）。写入的 `_Mode`、RenderType、混合因子、ZWrite、关键字、renderQueue 与 Standard 检视器切换模式时一致。
+- 叶子照初代 REROLL（PC 版 2019.01.31，owner 2026-11-20）：REROLL 道具 shader `CustomStandard` 反汇编为「alpha < `_Cutoff`(材质值 0.5) 就丢弃像素」的硬裁切，单面、写深度、贴图只采 mip0（`sample_l … l(0)`，图集的 11 级 mip 不用），贴图 alpha 只有 0/255。所以 `_Cutoff` 不再取源 GLB 的 `alphaCutoff`（1/255，PS2 的 alpha≠0 测试），而且 MASK 材质用到的贴图关闭 mipmap——开 mip 时远处叶子的 alpha 被平均到 0.5 以下，整片叶子消失。过滤方式不改（Unity 导入默认）；不透明道具与只有 BLEND 的贴图保留 mipmap。依据：`.work/notes/research/reroll_assets_survey.md`「shader 与贴图透明」「叶子透明与 mipmap」两节。
+- 同一后处理器处理模型目录里的 PNG：源 GLB 含 MASK/BLEND 材质时打开 `Alpha Is Transparency`（抽取贴图 alpha=0 处的 RGB 是杂色，番茄是粉色；打开后 Unity 用邻近不透明像素填它，切边过滤不会泛出底色）；含带贴图的 MASK 材质时再设 `mipmapEnabled=false`。每个参考模型目录只有一个 FBX，源 GLB 也都只有一张图（本机 glb-pack 1703 个全是 1 张），所以按目录判断。
 - 源 GLB 缺失、不可读或材质名对不上时只出导入警告 `[ref-material] …`，材质保持 Opaque，不让导入失败。源材质 `doubleSided` 时也只警告：Standard 只画正面；目前参考道具 238 个材质槽里双面为 0。
 - GLB 在工程外，Unity 不跟踪它的变动：放好或更新 GLB 后对 `Assets/_RefUnlicensed/Models` 右键 Reimport。改了映射规则就提高后处理器的 `Version`，Unity 会自动重导全部模型。
 - 透明材质 renderQueue ≥ 2450：不做 GPU instancing（§6.1 第 10 步），也不当遮挡体（`OccluderRule`）。
@@ -217,7 +218,7 @@
 
 1. 工作区里所有场景无未保存修改；编译通过；`LevelSwitchHost` 与（若有改动的）程序资产 `.asset`/`.meta` 就位（见 `Labs/README.md` 必做序列第 1 步）。
 2. **参考关重建骨骼动画**（本轮新增）：打开 `Assets/_RefUnlicensed/Scenes/RefCancer.unity`，跑 `VRC Katamari/Level/Assemble Skeletal Animation (reference)`。应 `problems=0`；这版代码第一次跑是 `[anim] +0 ~120 -0 …`（120 个 `Skin` 都要改 Animator `cullingMode` 与 SMR `skinnedMotionVectors`），之后再跑应 `+0 ~0 -0`；保存 RefCancer。蟹座素材不在就不做这步（合集跳过该关）。
-3. **参考道具透明模式**（§6.1.4）：确认 `%USERPROFILE%\KatamariRef\models\glb-pack\` 有源 GLB；首次编译新后处理器后 Unity 会因 `Version` 自动重导 `_RefUnlicensed/Models` 下的 FBX，没有自动重导就对该文件夹右键 Reimport。Console 不应有 `[ref-material]` 警告。
+3. **参考道具透明模式**（§6.1.4）：确认 `%USERPROFILE%\KatamariRef\models\glb-pack\` 有源 GLB；后处理器 `Version` 变化后 Unity 会自动重导 `_RefUnlicensed/Models` 下的 FBX，但 PNG 的导入设置只在贴图重导时生效，所以对该文件夹右键 Reimport 一次。Console 不应有 `[ref-material]` 警告；番茄材质 `_Cutoff`=0.5，其贴图 `mipmapCount`=1。
 4. **材质同步**（可选但建议）：`VRC Katamari/Prop Art/Resync All Prop Materials`。首次会把已入 git 的 prop `.mat` 写成 `enableInstancing=true`（报告 `MaterialsUpdated>0`），这些是 git 里的资产，要单独提交；不跑也能装配，只是合集里这些道具材质仍沿用旧标志（装配报告 `skipped committed=` 不为 0）。
 5. `Inspect All-Maps Sources`：应 `problems=0`；确认每关 `take`、宿主、“leaves the taken set”里只有指向底板基础设施的路径（`PlayerBall/MotorHost`、`PlayerBall/BallPhysicsRoot/BallVisualRollRoot/AttachmentRoot` 之类）。
 6. `Assemble All-Maps Hub`：应 `problems=0`、有 `[allmaps] instancing: …`、`[allmaps] static: occluders=26 occludees=44 batching=6 …`、末行 `saved Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`；再跑一次，报告应与第一次逐字相同（保存到文本比对）。装配后按 6.1.2 核对渲染读数。

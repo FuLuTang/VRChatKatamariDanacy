@@ -63,6 +63,20 @@ namespace VRCKatamari.Tests
             Assert.AreEqual("", HubSettingsMath.StorageKey(HubSettingsMath.Count));
         }
 
+        [Test]
+        public void BallSkinIsStoredAsTheOriginalCoreNumber()
+        {
+            Assert.AreEqual("vrck.set.ballSkin", HubSettingsMath.StorageKey(HubSettingsMath.BallSkin));
+            Assert.AreEqual(1, HubSettingsMath.Default(HubSettingsMath.BallSkin));
+            Assert.AreEqual(25, HubSettingsMath.Clamp(HubSettingsMath.BallSkin, 25));
+            // Numbers the original never had read back as the default skin.
+            Assert.AreEqual(1, HubSettingsMath.Clamp(HubSettingsMath.BallSkin, 26));
+            Assert.AreEqual(1, HubSettingsMath.Clamp(HubSettingsMath.BallSkin, 0));
+            Assert.AreEqual(1, HubSettingsMath.Clamp(HubSettingsMath.BallSkin, 99));
+            Assert.AreEqual(28, HubSettingsMath.Stepped(HubSettingsMath.BallSkin, 25, 1));
+            Assert.AreEqual(29, HubSettingsMath.Stepped(HubSettingsMath.BallSkin, 1, -1));
+        }
+
         [TestCase("ja", HubSettingsMath.LangJa)]
         [TestCase("ja-JP", HubSettingsMath.LangJa)]
         [TestCase("zh-CN", HubSettingsMath.LangZh)]
@@ -96,7 +110,8 @@ namespace VRCKatamari.Tests
                     || id == HubSettingsMath.Language || id == HubSettingsMath.EffectsVolume
                     || id == HubSettingsMath.Haptics || id == HubSettingsMath.PushCue
                     || id == HubSettingsMath.CatchName || id == HubSettingsMath.CollisionWireframe
-                    || id == HubSettingsMath.LowEffects || id == HubSettingsMath.ReduceAutoRotate;
+                    || id == HubSettingsMath.LowEffects || id == HubSettingsMath.ReduceAutoRotate
+                    || id == HubSettingsMath.BallSkin;
                 Assert.AreEqual(expected, HubSettingsMath.HasConsumer(id), "id " + id);
             }
         }

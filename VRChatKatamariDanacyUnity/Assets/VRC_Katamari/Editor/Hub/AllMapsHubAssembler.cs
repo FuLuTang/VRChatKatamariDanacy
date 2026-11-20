@@ -247,6 +247,12 @@ namespace VRCKatamari.Editor.Hub
                 return Finish(lines, problems, hc, output);
             }
 
+            // ---- the ball skin setting ----
+            // The skin pass ran before the hub existed, so the settings store it would have wired
+            // was not there yet; now it is.
+            if (skinApplied) WireSkinSetting(output, lines, problems);
+            if (problems.Count > 0) return Finish(lines, problems, hc, output);
+
             // ---- the rider's UX on top of the hub ----
             // After the hub assembly, never before: the hub creates the VR thumbstick adapter the
             // ride station's gate needs (vrInput), and the ride assembly only adds to what the hub
@@ -290,7 +296,7 @@ namespace VRCKatamari.Editor.Hub
 
             // ---- self-check ----
             SelfCheck(output, hub, data, outcome, lines, problems);
-            if (skinApplied) CheckCoreSkin(output, problems);
+            if (skinApplied) CheckCoreSkin(output, lines, problems);
             for (int i = 0; i < data.Count; i++)
                 ReferenceParityAudit.Append(data[i].Entry.id, data[i].Shell, lines, problems);
 
@@ -605,8 +611,24 @@ namespace VRCKatamari.Editor.Hub
             return applied;
         }
 
-        // The skin is one child named OriginalCoreSkin under the ball's core mesh.
-        private static void CheckCoreSkin(Scene output, List<string> problems)
+        private static void WireSkinSetting(Scene output, List<string> lines, List<string> problems)
+        {
+            BallView view = CoreSkinAssembler.FindBallView(output);
+            if (view == null)
+            {
+                problems.Add("the core skin was applied but the output has no single BallView to wire"
+                    + " the ball skin setting to");
+                return;
+            }
+            var notes = new List<string>();
+            bool wired = CoreSkinAssembler.WireSettingsHost(output, view, notes);
+            Line(lines, "skin: ball skin setting " + (wired ? "wired to" : "already on") + " '" + view.name + "'");
+            for (int i = 0; i < notes.Count; i++) Line(lines, "warn: " + notes[i]);
+        }
+
+        // The skins are one container named OriginalCoreSkin under the ball's core mesh, its
+        // core_NN children are BallView's skin table, and the settings store switches that view.
+        private static void CheckCoreSkin(Scene output, List<string> lines, List<string> problems)
         {
             int count = 0;
             GameObject[] roots = output.GetRootGameObjects();
@@ -617,13 +639,67 @@ namespace VRCKatamari.Editor.Hub
                 {
                     SerializedProperty core = new SerializedObject(views[v]).FindProperty("coreMesh");
                     Transform coreTransform = core == null ? null : core.objectReferenceValue as Transform;
-                    if (coreTransform != null && coreTransform.Find(CoreSkinAssembler.SkinName) != null) count++;
+                    Transform container = coreTransform == null ? null
+                        : coreTransform.Find(CoreSkinAssembler.SkinName);
+                    if (container == null) continue;
+                    count++;
+                    CheckSkinTable(views[v], container, lines, problems);
                 }
             }
             if (count != 1)
             {
                 problems.Add("the core skin was applied but " + count + " ball(s) have an '"
                     + CoreSkinAssembler.SkinName + "' under their core mesh (expected 1)");
+            }
+            HubSettingsHost[] hosts = UnityEngine.Object.FindObjectsOfType<HubSettingsHost>(true);
+            BallView single = CoreSkinAssembler.FindBallView(output);
+            bool udonMatches = hosts.Length == 1 && single != null
+                && FeedbackReferenceMatches(hosts[0], "ballView", single);
+            if (hosts.Length != 1 || single == null
+                || new SerializedObject(hosts[0]).FindProperty("ballView").objectReferenceValue != single
+                || !udonMatches)
+            {
+                problems.Add("HubSettingsHost.ballView is not the ball's BallView on both the proxy and"
+                    + " the backing Udon table: the ball skin setting would not switch the ball");
+            }
+        }
+
+        // BallView.skinNumbers/skinRenderers: one entry per core_NN child, valid numbers, every
+        // renderer the child's own, exactly one enabled; proxy and Udon table agree on the count.
+        private static void CheckSkinTable(BallView view, Transform container, List<string> lines,
+            List<string> problems)
+        {
+            var so = new SerializedObject(view);
+            SerializedProperty numbers = so.FindProperty("skinNumbers");
+            SerializedProperty renderers = so.FindProperty("skinRenderers");
+            if (numbers == null || renderers == null)
+            {
+                problems.Add("BallView has no skinNumbers/skinRenderers (renamed?)");
+                return;
+            }
+            int n = numbers.arraySize;
+            var list = new int[n];
+            int enabled = 0;
+            bool ok = renderers.arraySize == n && n == container.childCount;
+            for (int i = 0; ok && i < n; i++)
+            {
+                list[i] = numbers.GetArrayElementAtIndex(i).intValue;
+                var renderer = renderers.GetArrayElementAtIndex(i).objectReferenceValue as MeshRenderer;
+                Transform child = container.Find(CoreSkinAssembler.SkinChildName(list[i]));
+                ok = renderer != null && child != null && renderer.transform == child;
+                if (ok && renderer.enabled) enabled++;
+            }
+            object udonNumbers;
+            bool udonOk = UdonVariableAccess.TryRead(view, "skinNumbers", out udonNumbers)
+                && udonNumbers is int[] && ((int[])udonNumbers).Length == n;
+            Line(lines, "diag ball skins: " + n + " [" + string.Join(",", Array.ConvertAll(list, x => x.ToString("00")))
+                + "], enabled=" + enabled + ", Udon table " + (udonOk ? "matches" : "MISSING/STALE"));
+            if (!ok || !BallSkinMath.IsValidList(list) || enabled != 1 || !udonOk)
+            {
+                problems.Add("BallView's skin table does not match the " + container.childCount
+                    + " core_NN children under " + CoreSkinAssembler.SkinName
+                    + " (needs ascending original numbers, each its own child's renderer, exactly one"
+                    + " enabled, and the same table on the backing UdonBehaviour)");
             }
         }
 

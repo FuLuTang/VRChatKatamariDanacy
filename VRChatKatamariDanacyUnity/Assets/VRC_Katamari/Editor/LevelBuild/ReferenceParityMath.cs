@@ -66,12 +66,6 @@ namespace VRCKatamari.Editor.LevelBuild
             }
         }
 
-        // Both transparent shaders and transparent/cutout queues are allowed by this heuristic.
-        public static bool SuspectCutout(bool hasAlpha, int renderQueue, string shaderName) =>
-            hasAlpha && renderQueue < 2450 &&
-            (shaderName ?? "").IndexOf("Cutout", StringComparison.OrdinalIgnoreCase) < 0 &&
-            (shaderName ?? "").IndexOf("Transparent", StringComparison.OrdinalIgnoreCase) < 0;
-
         // This side table is optional, but a partial join must not turn unknown into false.
         public static HashSet<string> ReadAnimatedIds(PlacementV2Document document, string json)
         {

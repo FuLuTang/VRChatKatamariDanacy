@@ -9,8 +9,9 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <summary>
     /// Model import hook for the reference props under <c>Assets/_RefUnlicensed/Models/</c>:
     /// gives each imported material the render mode its source glTF material declares
-    /// (MASK -> Standard Cutout with <c>_Cutoff</c> = <c>alphaCutoff</c>, BLEND -> Standard
-    /// Fade, OPAQUE unchanged). The rules are <see cref="ReferenceMaterialAlphaMath"/>.
+    /// (MASK -> Standard Cutout at <c>_Cutoff</c> 0.5 with a mipmap-free texture, as REROLL;
+    /// BLEND -> Standard Fade; OPAQUE unchanged). The rules are
+    /// <see cref="ReferenceMaterialAlphaMath"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -41,7 +42,7 @@ namespace VRCKatamari.Editor.LevelBuild
     public sealed class ReferenceModelMaterialPostprocessor : AssetPostprocessor
     {
         /// <summary>Bump when the mapping changes so Unity reimports the models.</summary>
-        private const uint Version = 1;
+        private const uint Version = 2;
 
         /// <summary>The reference model root this hook handles (nothing else is touched).</summary>
         public const string ModelsRoot = "Assets/_RefUnlicensed/Models/";
@@ -148,11 +149,19 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
-        /// A texture beside a reference model whose source GLB has a MASK or BLEND material gets
-        /// "Alpha Is Transparency": Unity then fills the RGB of fully transparent texels from
-        /// their neighbours, so filtering at the cut edge blends towards the leaf colour instead
-        /// of the colour the extraction left under alpha 0 (tomato: pink). Every reference model
-        /// folder holds one model and its textures, and every source GLB has at most one image.
+        /// The texture beside a reference model, set from its source GLB's materials
+        /// (<see cref="ReferenceMaterialAlphaMath.TextureSettings"/>):
+        /// <list type="bullet">
+        /// <item>a MASK or BLEND material: "Alpha Is Transparency", so Unity fills the RGB of
+        /// fully transparent texels from their neighbours and filtering at the cut edge blends
+        /// towards the leaf colour instead of the colour the extraction left under alpha 0
+        /// (tomato: pink);</item>
+        /// <item>a textured MASK material: no mipmaps, as REROLL samples mip 0 only (see
+        /// <see cref="ReferenceMaterialAlphaMath"/>). Opaque and BLEND-only textures keep theirs,
+        /// and the filter mode is not changed.</item>
+        /// </list>
+        /// Every reference model folder holds one model and its textures, and every source GLB
+        /// has exactly one image, so the folder decides.
         /// </summary>
         private void OnPreprocessTexture()
         {
@@ -164,7 +173,7 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             var importer = assetImporter as TextureImporter;
-            if (importer == null || importer.alphaIsTransparency) return;
+            if (importer == null) return;
 
             string folder = Path.GetDirectoryName(assetPath) ?? "";
             string[] models;
@@ -181,16 +190,10 @@ namespace VRCKatamari.Editor.LevelBuild
             ReferenceMaterialAlphaMath.SourceMaterial[] materials;
             string error;
             if (!TryReadSourceMaterials(models[0].Replace('\\', '/'), out materials, out error)) return;
-            for (int i = 0; i < materials.Length; i++)
-            {
-                ReferenceMaterialAlphaMath.RenderMode mode = materials[i].Mode;
-                if (mode == ReferenceMaterialAlphaMath.RenderMode.Cutout ||
-                    mode == ReferenceMaterialAlphaMath.RenderMode.Fade)
-                {
-                    importer.alphaIsTransparency = true;
-                    return;
-                }
-            }
+            bool alphaIsTransparency, disableMipmaps;
+            ReferenceMaterialAlphaMath.TextureSettings(materials, out alphaIsTransparency, out disableMipmaps);
+            if (alphaIsTransparency) importer.alphaIsTransparency = true;
+            if (disableMipmaps) importer.mipmapEnabled = false;
         }
 
         private void OnPreprocessModel()
@@ -259,11 +262,14 @@ namespace VRCKatamari.Editor.LevelBuild
                 return;
             }
 
-            Apply(material, mode, source.CutoffValue);
+            Apply(material, mode);
         }
 
-        /// <summary>Sets a Standard material to the mode, as Unity's Standard inspector does.</summary>
-        public static void Apply(Material material, ReferenceMaterialAlphaMath.RenderMode mode, float cutoff)
+        /// <summary>
+        /// Sets a Standard material to the mode, as Unity's Standard inspector does; Cutout cuts
+        /// at <see cref="ReferenceMaterialAlphaMath.CutoutThreshold"/>.
+        /// </summary>
+        public static void Apply(Material material, ReferenceMaterialAlphaMath.RenderMode mode)
         {
             material.SetFloat("_Mode", ReferenceMaterialAlphaMath.StandardMode(mode));
             material.SetOverrideTag("RenderType", ReferenceMaterialAlphaMath.RenderTypeTag(mode));
@@ -278,7 +284,10 @@ namespace VRCKatamari.Editor.LevelBuild
                 else material.DisableKeyword(each);
             }
 
-            if (mode == ReferenceMaterialAlphaMath.RenderMode.Cutout) material.SetFloat("_Cutoff", cutoff);
+            if (mode == ReferenceMaterialAlphaMath.RenderMode.Cutout)
+            {
+                material.SetFloat("_Cutoff", ReferenceMaterialAlphaMath.CutoutThreshold);
+            }
             material.renderQueue = ReferenceMaterialAlphaMath.RenderQueue(mode);
         }
     }

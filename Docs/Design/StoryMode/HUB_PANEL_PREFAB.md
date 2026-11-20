@@ -57,7 +57,7 @@
 |---|---|---|---|---|
 | Levels | 6400 × 2700 | (1200, 1.55, 3.76) | 0° | Pink |
 | Help | 3200 × 2300 | (1195.146, 1.55, 2.411) | -50° | Sky |
-| Settings | 3200 × 2300 | (1204.854, 1.55, 2.411) | +50° | Mint |
+| Settings | 3200 × 2590 | (1204.854, 1.55, 2.411) | +50° | Mint |
 
 缩放 0.001。读者站在 Canvas 的 -Z 一侧（出生点 HubSpawn (1200, 0.1, 0.8) 面向 +Z），看到的是正面、文字不镜像。
 
@@ -154,23 +154,25 @@ HubBoard_Settings
 │  │  └─ Arrow             TMP「◀」
 │  └─ More                 Image + Button + HubSettingButton（+ UdonBehaviour）
 │     └─ Arrow             TMP「▶」
-├─ SettingRow_01 … SettingRow_11
+├─ SettingRow_01 … SettingRow_14
 ```
 
 | 物体 | pos | size | 字号 | 对齐 | 色 |
 |---|---|---|---|---|---|
-| Text_SettingsTitle | (0, 980) | 2800 × 260 | 170 | 居中 | 白 |
-| Text_SettingsHint | (0, 700) | 2800 × 100 | 60 | 居中 | Navy |
+| Text_SettingsTitle | (0, 1125) | 2800 × 260 | 170 | 居中 | 白 |
+| Text_SettingsHint | (0, 845) | 2800 × 100 | 60 | 居中 | Navy |
 
-行：`SettingRow_NN` 是空 RectTransform，pos (0, y)，size 3000 × 140；NN = 设置 id（00–11，顺序见 HUB_ROOM「设置项」）。`y = 580 − 145 × NN`（最后一行 `y = −1015`），保留现有板高 2300 与提示行的位置。现有 Prefab 待 Unity 操作员补 `SettingRow_11`：复制 `SettingRow_10`，去掉偶数行专用的 `Stripe`，并重排 12 行到上述坐标；新行两按钮的 `settingId` 都改为 11，确认 `delta` 仍为 −1 / +1 且按钮分别指向复制后自己的 backing UdonBehaviour。
+行：`SettingRow_NN` 是空 RectTransform，pos (0, y)，size 3000 × 130；NN = 设置 id（00–14，顺序见 HUB_ROOM「设置项」）。`y = 725 − 135 × NN`（第一行 725，最后一行 `y = −1165`，下沿 −1230），板高 2590（上下沿 ±1295）与标题、提示行位置不变。15 行按旧的 145 行距会把最后一行推到 −1305、超出板下沿，所以行距改 135、行高改 130。
+
+现有 Prefab 有 `SettingRow_00`–`13`（行距 145、行高 140），待 Unity 操作员：复制 `SettingRow_13` 为 `SettingRow_14`，从 `SettingRow_12` 复制 `Stripe` 放到新行第一个子位（14 是偶数行）；新行两按钮的 `settingId` 都改为 14，确认 `delta` 仍为 −1 / +1 且按钮分别指向复制后自己的 backing UdonBehaviour；再把 15 行按上式重排，行与行内 Stripe、Label、Value 的高改 130。
 
 行内子物体（pos 相对行中心）：
 
 | 物体 | 类型 | pos | size | 内容 |
 |---|---|---|---|---|
-| Stripe（id 偶数行才有） | Image | (0, 0) | 2950 × 140 | Peach，圆角 50 → 0.2 |
-| Label | TMP | (-680, 0) | 1600 × 140 | 字号 66，左对齐 |
-| Value | TMP | (860, 0) | 620 × 140 | 字号 70，居中 |
+| Stripe（id 偶数行才有） | Image | (0, 0) | 2950 × 130 | Peach，圆角 50 → 0.2 |
+| Label | TMP | (-680, 0) | 1600 × 130 | 字号 66，左对齐 |
+| Value | TMP | (860, 0) | 620 × 130 | 字号 70，居中 |
 | Less | Image + Button | (400, 0) | 220 × 130 | Grape，圆角 65 → 0.1538，Raycast Target **开**；HubSettingButton：`settingId` = NN，`delta` = −1 |
 | Less/Arrow | TMP | (0, 0) | 220 × 130 | 「◀」，字号 80，居中，白 |
 | More | Image + Button | (1300, 0) | 220 × 130 | 同上；`delta` = +1 |

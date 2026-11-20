@@ -181,6 +181,23 @@
 - 内嵌材质复制后 shader/keywords/属性/renderQueue 全同，外观应与原来一致；若某个道具颜色/贴图不对，删除
   `_RefUnlicensed/Materials/Instanced/` 下对应 `.mat` 重跑装配（不要手改场景）。
 
+### 6.1.3 参考关卡装配对账
+
+装配末尾对每个 `_ref_*` 岛输出一条 `[ref-parity]` 汇总。对账从当前关卡的 v2 placement 取预期，只读装配后的岛与序列化宿主，不改场景。`PROBLEM` 计入 `[allmaps] result` 的 `problems` 并阻止保存；`warning` 只记录，不阻止保存。容忍缺口为 0，每项最多列 10 个按名称排序的样本。
+
+| 字段 | 如何读 | 缺口等级 |
+|---|---|---|
+| `instances` | `Props` 下的道具根数 / `props[]` 长度；按 `itemId` 对比，重复与遗漏不能互相抵消。 | `PROBLEM` |
+| `visible` | 启用、对象激活且有非空网格的道具 / `defs[].model` 声明模型的道具；坏骨架不算可见，不需要相机或进入 Play。 | `PROBLEM` |
+| `skins` | 骨架完整的 SMR / 实际 SMR；另将已有 `skinned_defs.json` 所覆盖的 placement 道具查一遍，抓整件丢失的蒙皮。 | `PROBLEM` |
+| `textured` | 可见材质槽都带主贴图的道具 / 声明模型的道具；按道具去重，`120` 只白蟹各记一个缺口。 | `warning`，已有蒙皮贴图缺口 |
+| `animators` | 有 Animator 的道具 / 原作 `animated` 道具；可选的 `motion_table.json` 放在 placement 同目录，按 `instanceIndex` 逐件匹配，和参考素材一样不入库。旁表缺失或不匹配时分母为 `?`，不用场景现存的 Animator 反推。 | `warning`，原作骨骼尚未全部导出 |
+| `motionRows` / `motionDeclared` / `motionRowsAll` | 实际有效行 / placement 标为 `motion`、`attached` 或 `ambient` 的件数；`motionDeclared` 限于声明件的实际覆盖；`motionRowsAll` 的分母另纳入随动链与只播动画的道具，要求原作旁表。`whackLoop` 另计原作应循环的行。 | `warning`，已有动画缺行或程序配置缺口 |
+| `staticBoxes` | 本关 `LevelArenaHost.staticBoxes` 表项 / 本区域应进入静态表的 `box`；拆分代理按 `parts` 展开，异区、坡块和边界平面不计。也检查拾取宿主的异区禁碰撞 ID 能否解析。 | `PROBLEM` |
+| `cutout` | 参考道具的可见材质按材质对象去重；分母是主贴图源有 alpha 通道或从灰度生成 alpha 的材质。分子是其中队列低于 2450 且 shader 名不含 `Cutout` / `Transparent` 的材质。没有 `TextureImporter` 的贴图不纳入；这只是白底问题的筛查，不是像素验证。 | `warning`，列出材质名 |
+
+操作员重跑 **Assemble All-Maps Hub** 后抄录 `[ref-parity]` 汇总及缺口行。若要对比缺失的原作 Animator 或完整运动行，应先放好对应关卡的原作旁表。运动方向、材质像素透明和动画实播仍需单独验证。
+
 ### 6.2 `MoveGameObjectToScene` 与 UdonSharp 的已知未知
 
 默认用 `MoveGameObjectToScene`：同一批对象（含 U# 代理 + backing `UdonBehaviour` 一对）整体换场景，搬运集合内部引用不变，只有指回源场景的引用要重映射。**这条路没有在 UdonSharp 的 backing 上实测过。** 若搬后某个行为的变量为空或 `CopyProxyToUdon` 报错：勾选“Use Instantiate Fallback”重跑。后备路径：对每个 takeRoot `Object.Instantiate(…, 外壳, true)`，删掉克隆里的 `leaveBehind` 子树，沿两棵层级同步遍历建“原件→克隆”表，把所有仍指向原件的引用改指克隆、仍指向源场景的按路径重映射，之后的步骤相同。底板即源时（野餐关）不用后备路径（对象本来就在输出场景里）。

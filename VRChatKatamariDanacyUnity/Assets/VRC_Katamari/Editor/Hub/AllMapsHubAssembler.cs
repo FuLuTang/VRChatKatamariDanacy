@@ -291,6 +291,8 @@ namespace VRCKatamari.Editor.Hub
             // ---- self-check ----
             SelfCheck(output, hub, data, outcome, lines, problems);
             if (skinApplied) CheckCoreSkin(output, problems);
+            for (int i = 0; i < data.Count; i++)
+                ReferenceParityAudit.Append(data[i].Entry.id, data[i].Shell, lines, problems);
 
             return Finish(lines, problems, hc, output);
         }

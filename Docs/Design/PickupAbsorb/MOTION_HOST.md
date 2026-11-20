@@ -13,7 +13,7 @@
 | 各类 | sporadic_walk 31、hop 18、sway 15、wait_for_player 15、whack_a_mole 8、path_collision 7、spin 7、clouds 5、sloping_path 2、bob 2、flip 2、back_and_forth 1 |
 | 触发门 | 本数据**没有** `triggerRadiusM`；`wait_for_player` 15 件：7 件 `motionID 0x00` 按 `PanicRadiusM(sizeGroup 0)=2 m`，8 件 `0x04`（条件 `inZone && parentRolled`，原作未知）保持静止 |
 | 相位 | 本数据**没有** `props[].phase`；全部走 `hash32(meta.id/itemId)` |
-| 骨骼 | `placement.v2.json` **没有** `defs[].clips` / `props[].clipStart`（0 条）。骨骼数据在仓库外：`~/KatamariRef/props/skinned/type_{480,481,482}.glb`（3 种螃蟹，120/153 实例，5 骨 5 剪辑），其余 16 型（33 实例）**未导出** |
+| 骨骼 | `placement.v2.json` 不携带 `defs[].clips` / `props[].clipStart`（0 条）。蟹座可摆放的原作骨骼道具共 18 型、152 件；骨骼资产和剪辑清单留在本地参考目录，见 §6。 |
 | 编辑器播放走哪套 | 同一份 `placement.v2.json` → `Tools/motion_sim`（把 `MotionMath.cs`/`PhaseSeed.cs` 当源码编译）→ `Tools/leveleditor`。与游戏**同一份数学**，不同的只是宿主（组合/调度）；本轮之后组合层的类/空间/速度解算在 `MotionHostMath.cs`，`motion_sim` 仍保留自己的 `Pose` 组合（父链用同一个公式，已对拍口径一致，未合并，列为后续） |
 
 ## 2. 形状
@@ -104,13 +104,14 @@
 
 ## 6. 骨骼动画：普通 Animator
 
-- **数据**（仓库外，`_RefUnlicensed`，不入 git）：`~/KatamariRef/props/skinned/type_{480,481,482}.glb` + `report.json`（剪辑名/fps/时长）。
-- **转换**：`Tools/levelbuild/blender/skinned_glb_to_fbx.py`（Blender 4.0.2 无头，**本机已跑通**）→ `~/KatamariRef/props/skinned_fbx/type_N/type_N.fbx`（armature + 蒙皮 + 5 个 take：`walk walk_fast slot2 idle slot4`，按 glTF 动作名去掉 `_root` 后缀查剪辑表命名，并断言每个 take 时长等于 `report.json` 的秒数）+ `skinned_defs.json`（def→type）。
+- **数据**（仅供本地参考，不入 Git 或上传）：初代 PS2 蟹座 level 11 任务包的骨骼 LOD1、原作 `animationBlock`、`motion_table.json`；以 `inLevelProps && animated` 为范围，按 `nameIdx` 对上 `original_defs.json` 的 `mono`，得到 **18 型、152 件**。`1695 Lalala` 不在这一关的摆放定义里。不要按英文名匹配鸽子或麻雀：两对同名类型各有自己的 `mono`。
+- **转换**：仓库外的 `katamari_stage_extract.build_props` 出 `type_N.glb` 和 `report.json`，再由 [蒙皮转换器](../../../Tools/levelbuild/blender/skinned_glb_to_fbx.py) 在 Windows Blender 无头运行，输入 `--src`、`--out`、`--motion-table` 和 `--original-defs`，产出每型 `type_N/type_N.fbx` 和唯一的 `skinned_defs.json`。缺源、重名或实例数不一致会中止；`--only` 试转不发布清单。剪辑按原作槽映射：0 → `walk`，1 → `walk_fast`，3 → `idle`，其他槽保留 `slotN`。这三个名字是控制器状态接口，不保证对每种动物都是字面动作。
+- **材质**：18 型的 LOD0 和 LOD1 使用同一张原作纹理（按该型的 TEX0 和逐像素 RGBA 对照），但几何和 UV 点集不同。装配按 `def` 选 FBX，`Skin` 保留 LOD1 UV，把同件静态模型的唯一有贴图共享材质赋给每个蒙皮槽，不复制材质、不改透明设置。如果静态材质缺失或不唯一、蒙皮槽数不对，报 `[anim_material]`，不猜映射。这 18 型原作纹理的 alpha 均不透明。
 - **装配**（编辑器，菜单 `VRC Katamari/Level/Assemble Skeletal Animation (reference)`，`SkeletalAnimationAssembler.cs`）：FBX 按 Generic 导入、take 循环；每型一个 `AnimatorController`（参数 `Moving`、`Panic`；状态 `idle`（默认）/`walk`/`walk_fast`）；每个骨骼实例在道具下建子物体 `Skin`（FBX 实例，按 mesh 包围盒中心对齐静态模型，静态 Renderer 关掉但保留），挂 Animator + 共享控制器；输出 `[anim_fit]` 行校验蒙皮/静态尺寸比（>±25% 就标红，提示 FBX 轴有问题）。两侧都取 `sharedMesh.bounds` 经各自 transform 的 8 角（蒙皮侧是 bind 姿态）；不用 `renderer.bounds`，因为 `SkinnedMeshRenderer.bounds` 覆盖全部剪辑姿态且在倾斜的根骨坐标系里，天然比模型大。拾取同步（`PickupFieldSync`）量尺寸时跳过 `Skin` 子树，只量静态 Renderer，所以 `propBounds`/`propLocalBounds`/回退 BoxCollider 不含蒙皮包围盒。源文件跟踪：每型的戳（FBX 字节与 `skinned_defs.json` 的 SHA-256）存在 FBX 导入器的 `userData`；戳与磁盘不符即视为源已变：剪辑设置从文件重读（take 范围随之更新）、控制器三个状态改接到重导入后的剪辑、该型现存的 `Skin` 全部重建。`Skin` 缺网格、任一蒙皮渲染器缺根骨或骨骼引用（`bones-missing`）、实例的不是该 FBX、或 bounds 中心偏离静态模型超过 0.5 mm 也重建。重建替换整个 FBX 实例，不保留旧实例的骨骼删除覆盖。重建前先查 `Skin` 子树：有 `MonoBehaviour`（含 `UdonBehaviour`）则什么都不销毁，报 problem 并清掉戳以便下次重试。重导入后每条剪辑的长度与 `skinned_defs.json` 的秒数对照（`[anim_clip]`，差 >2 ms 算 problem）。每次运行对每个现存 `Skin` 都输出 `[anim_fit]`。`Skin` 以外挂在道具下的骨骼 FBX 实例（名为 `type_N` 或来自动画根目录的资产）报 `[anim_stray]` problem，不自动删除：它的 renderer 会撑大道具的量测包围盒。源不变时幂等（`+0 ~0 -0`）；换了 FBX 或 `skinned_defs.json` 不需要手工删 `Skin`，也不需要清空 `clipAnimations`。
-- **帧率**：FBX 的 `TimeMode` 是 Unity 剪辑的采样率，Unity 把 take 取整到整帧。转换脚本把场景帧率设为使全部剪辑为整帧的最低值（这三型 60 fps：walk/idle 58 帧 = 0.9667 s，walk_fast 29 帧 = 0.4833 s，slot2 6 帧 = 0.1 s）；`skinned_defs.json` 记 `fps`，装配器核对导入后的剪辑长度。
+- **帧率**：转换器优先选能让所有 take 落在整帧的最低采样率；少数原作 Q8 速率不能精确对齐时，端点只允许舍入到 1 ms 以内。源速度为零的槽导出一帧长的定格，不补出动作。`skinned_defs.json` 的 `seconds` 是 FBX 时长，`sourceSeconds` 保留原作时长（定格为 `null`）。Windows Blender 3.6.21 已生成并回读 18 型的 83 个 take，其中 6 个定格；非定格时长与报告源值的最大差为 0.9 ms。Unity 导入后的时长仍须独立核对。
 - **与运动宿主的关系**：路径运动（宿主写道具根 transform）+ 原地动画（Animator 在子物体 `Skin` 上），互不干涉。宿主：启动时 `Play("idle", 0, phase01)` 打散同相；游走蟹在 Walk 相位时 `Moving=true`；**路径蟹（path_collision / sloping_path / back_and_forth）只要有 Animator 就一直 `Moving=true`**（`MotionHostMath.HoldsMovingAnimation`；原作 dump 里 Cancer 的 8 只路径蟹 `playAnimNo` 全是 1 = 起始 MOVING，路径程序从不切 IDLE，唯一例外是 BackAndForthNoYaw 到端点的一步，未建模），此前它们一直播 idle；WaitForPlayer 触发时 `Panic=true`；被剔除时 `animator.enabled=false`（PROP_BEHAVIOURS §7.3，不是 `SetActive`）。纯骨骼、无运动的件（如静止的蟹）是"只有 Animator 的行"（类 0、无父），同样吃剔除/相位。
 - **导入顺序**：先装配（加 Animator）→ 再跑关卡导入（`rowAnimators` 列由导入器从场景里读）。导入器每次都读，所以装配后重新导入一次即接线。
-- **局限（写明，不假装）**：只有 3 型 120/153 实例；"哪条是 walk"是导出器按"腿摆 ±15°、0.967 s"的命名（研究里最强的读法，非证实）；`playAnimNo` 读法未定，所以开局一律 idle 再按 Moving 切；FBX 轴/尺度未在 Unity 验证（`[anim_fit]` 就是为此）。
+- **局限**：`playAnimNo` 的语义仍未定；宿主开局一律进 `idle`，再按运动和触发切换。Toy Dog 的原作槽 3 是定格，默认待机不动不等于没装 Animator；`doggy_001` 的原作 PC 转储记 `playAnimNo=1`，目前仍走统一的启动策略，不把装配成功当成动作状态已逐件还原。新增 15 型的 Unity 尺寸、材质保存回读和实际播放仍须验收。
 
 ## 7. 给 Unity 操作员
 
@@ -119,8 +120,8 @@
 步骤与判据：
 1. 刷新/编译：Console 0 error；`MotionHost` 出现 U# 程序资产。**特别看**：U# 是否接受 `float[][]` 锯齿数组与 `Transform.SetPositionAndRotation`、`Animator.Play(string,int,float)`；不接受时的退路是把 `rowState` 拍平成带偏移的一维数组并给 `MotionMath` 加偏移重载。
 2. EditMode 测试：`MotionHostMathTests`（31）、`MotionHostSchedulingTests`（17：预计算路径与原步进逐位一致、远处行/步进行降频写入的位姿等于全频版、写入门规则）、`PlacementMotionRowsTests`（10，其中"参考关卡行数"与"带子件的路径蟹仍是自有程序行"两条本机跑不了，需 Unity：前者期望 `Own=113 Rider=42 paths=3 errors=0`）；另有 `PlacementImporterHierarchyTests`（子件文件夹名 `<父id>_children`、容器不与道具同名）与 `PlacementV2StructureProxyTests`（有同 id 道具的 proxy 固体关 Renderer 留 BoxCollider、二次导入 `~0`）。
-3. （可选，要骨骼）把 `~/KatamariRef/props/skinned_fbx/*` 拷到 Windows 工程 `Assets/_RefUnlicensed/Animation/`，跑菜单 `Assemble Skeletal Animation`：期望 `[anim] +N ~0`、每行 `[anim_fit]` 比值接近 1；再跑一次 `+0 ~0`。
-4. 重新导入 RefCancer（`Import Placement`）：期望首次 `motion host: rows=155`（有骨骼则 +已装配的纯动画行）、`writes>0`；**第二次 `writes=0`、headline `other=0`**。
+3. 蟹座参考场景：将转换批次的 18 个 FBX 和 `skinned_defs.json` 放进 Windows 工程 `Assets/_RefUnlicensed/Animation/`，覆盖时保留已有 `.meta`。打开 RefCancer，跑 `Assemble Skeletal Animation (reference)`，核 `[anim] problems=0`、18 型 `[anim_clip]`、152 件 `[anim_fit]`；源和材质不变时重跑应 `+0 ~0 -0`。
+4. 重新导入 RefCancer（`Import Placement`），预期 `motion host: rows=203, animators=152`；重跑 `column writes=0`。保存后重装 All-Maps Hub，核 `[ref-parity] animators=152/152 motionRowsAll=203/203`，并核 152 件蒙皮均有主贴图。
 5. Play：院子里螃蟹游走、风铃摇荡、云平移、旗杆出生驻留后下沉并升回、hop 蟹短促向上跳；勾 `logStatsEachSecond`，每秒 `steps≈1,800–1,900`，`MotionHost.Update` 的 Profiler 耗时记录下来（PC 与 Quest 分别），并与 `decimateFarWrites=false` 对比；蟹座关目标 ≈ 2 ms 量级（基线 ≈ 9 ms）。
 6. 吸收一只在动的蟹：它立刻停在球上（`away` +1），不抖、不回弹；`ResetField`/重开回合后它回到出生位姿重新走（`away` 回落）。
 7. 球走到离某蟹 2 m 内：`GetTriggeredCount` +1、该蟹 Animator `Panic`；球在 3–12 m：蟹照常游走，不触发。

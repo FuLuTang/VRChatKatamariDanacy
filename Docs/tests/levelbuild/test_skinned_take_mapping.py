@@ -7,6 +7,7 @@ duration checks load here with fake action/clip data.
 """
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -94,11 +95,64 @@ class SceneFrameRate(unittest.TestCase):
 
     def test_a_clip_that_fits_no_candidate_rate_is_an_error(self):
         with self.assertRaises(RuntimeError):
-            conv.scene_fps([{"name": "odd", "seconds": 0.0123}])
+            conv.scene_fps([{"name": "too_short", "seconds": 0.0001}])
 
     def test_the_rate_is_the_lowest_that_fits(self):
         self.assertEqual(conv.scene_fps([{"name": "a", "seconds": 1.0}]), 24)
         self.assertEqual(conv.scene_fps([{"name": "a", "seconds": 0.9667}]), 30)
+
+
+class SkeletalManifest(unittest.TestCase):
+    @staticmethod
+    def instance(object_id, in_level=True, animated=True):
+        return {"nameIdx": object_id, "inLevelProps": in_level, "animated": animated}
+
+    @staticmethod
+    def definition(object_id, name, count=1):
+        return {"mono": object_id, "id": name, "instances": count}
+
+    def test_shared_english_names_are_joined_by_original_id(self):
+        rows = [self.instance(519), self.instance(141), self.instance(141), self.instance(1695, False),
+                self.instance(143, animated=False)]
+        defs = [self.definition(141, "pigeon", 2), self.definition(519, "pigeon_519")]
+        self.assertEqual(conv.skeletal_defs(rows, defs), {141: defs[0], 519: defs[1]})
+
+    def test_incomplete_duplicate_or_wrong_instance_counts_fail(self):
+        rows = [self.instance(141), self.instance(519)]
+        a, b = self.definition(141, "pigeon"), self.definition(519, "pigeon_519")
+        for bad in [[a], [a, a, b], [a, dict(b, id="pigeon")], [a, dict(b, instances=2)]]:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                conv.skeletal_defs(rows, bad)
+
+    def test_missing_glb_is_not_silently_ignored(self):
+        with tempfile.TemporaryDirectory() as folder:
+            expected = {141: self.definition(141, "pigeon"), 519: self.definition(519, "pigeon_519")}
+            report = [{"objectId": 141}, {"objectId": 519}]
+            (Path(folder) / "type_141.glb").touch()
+            with self.assertRaisesRegex(ValueError, "type_519"):
+                conv.export_inputs(expected, report, folder, set())
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                conv.export_inputs(expected, report + report[:1], folder, {"type_141"})
+            with self.assertRaisesRegex(ValueError, "unknown selected"):
+                conv.export_inputs(expected, report, folder, {"type_999"})
+
+    def test_blender_36_armature_suffix_and_frozen_take(self):
+        names = ["idle_type_141_skin", "walk_fast_root"]
+        clips = [{"name": "idle", "seconds": 0.3}, {"name": "walk_fast", "seconds": None}]
+        self.assertEqual(conv.take_names(names, clips, ("type_141_skin",)), dict(zip(names, ["idle", "walk_fast"])))
+        self.assertEqual(conv.scene_fps(clips), 30)
+        self.assertEqual(conv.take_frames(None, 30), 1)
+        conv.check_durations({"walk_fast": (0, 1)}, clips, 30)
+        with self.assertRaises(RuntimeError):
+            conv.check_durations({"walk_fast": (0, 2)}, clips, 30)
+
+    def test_q8_dog_speed_is_rounded_by_less_than_one_millisecond(self):
+        clips = [{"name": str(i), "seconds": s} for i, s in enumerate([0.4209, 0.3222, 0.2417, 0.9667, 0.2762])]
+        fps = conv.scene_fps(clips)
+        self.assertEqual(fps, 480)
+        for clip in clips:
+            seconds = clip["seconds"]
+            self.assertLessEqual(abs(conv.take_frames(seconds, fps) / fps - seconds), 0.001)
 
 
 if __name__ == "__main__":

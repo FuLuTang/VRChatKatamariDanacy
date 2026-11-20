@@ -282,6 +282,18 @@ namespace VRCKatamari.Editor.LevelBuild
                             }
                             result.Duplicated++;
                         }
+                        else if (!SameRenderState(copy, source))
+                        {
+                            // The embedded material changed since the copy was made (a reimport
+                            // that set its render mode from the source glTF, a new texture). The
+                            // copy is ours, so it follows the source instead of drawing the old
+                            // state; counted with the copies this pass wrote.
+                            copy.CopyPropertiesFromMaterial(source);
+                            copy.shaderKeywords = source.shaderKeywords;
+                            copy.renderQueue = source.renderQueue;
+                            EditorUtility.SetDirty(copy);
+                            result.Duplicated++;
+                        }
                         if (!copy.enableInstancing)
                         {
                             copy.enableInstancing = true;
@@ -411,6 +423,23 @@ namespace VRCKatamari.Editor.LevelBuild
             copy.renderQueue = source.renderQueue;
             AssetDatabase.CreateAsset(copy, destination);
             return AssetDatabase.LoadAssetAtPath<Material>(destination);
+        }
+
+        // True when the copy still draws like the source: same render queue, keywords, main
+        // texture and colour. The Standard blend state (_Mode, blend factors, depth write) only
+        // changes together with the queue and the alpha keywords, so those two catch a mode
+        // change; texture and colour catch a re-converted model.
+        private static bool SameRenderState(Material copy, Material source)
+        {
+            if (copy.renderQueue != source.renderQueue) return false;
+            if (copy.mainTexture != source.mainTexture) return false;
+            if (copy.HasProperty("_Color") && source.HasProperty("_Color") && copy.color != source.color)
+            {
+                return false;
+            }
+
+            var keywords = new HashSet<string>(copy.shaderKeywords ?? new string[0], StringComparer.Ordinal);
+            return keywords.SetEquals(source.shaderKeywords ?? new string[0]);
         }
 
         private static bool EnsureFolder(string folder)

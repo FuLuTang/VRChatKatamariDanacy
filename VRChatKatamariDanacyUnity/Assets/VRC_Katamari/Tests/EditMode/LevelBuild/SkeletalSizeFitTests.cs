@@ -159,6 +159,21 @@ namespace VRCKatamari.Tests
             }
         }
 
+        [TestCase(0, "atlas")]
+        [TestCase(0, "atlas", "atlas", "atlas")]
+        [TestCase(-1)]
+        [TestCase(-1, "untextured")]
+        [TestCase(-1, "atlas", "other")]
+        [TestCase(-1, "atlas", "untextured")]
+        public void SkeletalSlotsOnlyReuseAnUnambiguousStaticMaterial(int expected, params string[] slots)
+        {
+            Type type = Array.Find(AppDomain.CurrentDomain.GetAssemblies(),
+                a => a.GetType(AssemblerName, false) != null)?.GetType("VRCKatamari.Editor.LevelBuild.SkeletalMaterialMath");
+            Assert.IsNotNull(type);
+            var select = type.GetMethod("SingleSourceIndex").MakeGenericMethod(typeof(string));
+            Assert.AreEqual(expected, select.Invoke(null, new object[] { slots, new Func<string, bool>(s => s == "atlas") }));
+        }
+
         [Test]
         public void StrayInstancesAreRecognisedByNameOrAssetFolder()
         {

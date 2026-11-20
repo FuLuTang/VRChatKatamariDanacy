@@ -16,11 +16,9 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <remarks>
     /// <para>
     /// Input (all under <c>Assets/_RefUnlicensed/Animation/</c>, git-ignored, copied there by the
-    /// operator from <c>~/KatamariRef/props/skinned_fbx</c>, which
-    /// <c>Tools/levelbuild/blender/skinned_glb_to_fbx.py</c> writes): <c>skinned_defs.json</c>
-    /// (def to type, clip seconds) and <c>type_N/type_N.fbx</c> (armature, skinned meshes, one take
-    /// per clip: walk, walk_fast, slot2, idle, slot4). Nothing here is ever written outside
-    /// <c>_RefUnlicensed</c>, and the menu refuses any other root.
+    /// operator from the output of <c>Tools/levelbuild/blender/skinned_glb_to_fbx.py</c>):
+    /// <c>skinned_defs.json</c> (def to type, clip seconds) and <c>type_N/type_N.fbx</c>
+    /// (armature, skinned meshes, one take per original clip).
     /// </para>
     /// <para>
     /// Per type: the FBX is imported Generic with every take looping, and one
@@ -536,6 +534,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 if (!created) result.Updated++;
             }
             SkinnedMeshRenderer[] skins = skin.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            ApplyStaticMaterial(prop, skin, strays, skins, created, result);
             for (int i = 0; i < skins.Length; i++)
             {
                 if (!skins[i].skinnedMotionVectors) continue;
@@ -554,6 +553,50 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 if (children[i].transform.IsChildOf(skin)) continue;
                 children[i].enabled = false;
+            }
+        }
+
+        // The extracted LOD1 UVs use the same atlas as the static LOD0 for these defs.
+        // Reuse the shared material itself, not a copy of its shader/texture settings.
+        private static void ApplyStaticMaterial(Transform prop, Transform skin, List<Transform> strays,
+            SkinnedMeshRenderer[] skins, bool created, Result result)
+        {
+            var excluded = new List<Transform>(strays) { skin };
+            var materials = new List<Material>();
+            Renderer[] renderers = prop.GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer renderer in renderers)
+            {
+                if (!IsUnder(renderer.transform, excluded)) materials.AddRange(renderer.sharedMaterials);
+            }
+            int index = SkeletalMaterialMath.SingleSourceIndex(materials, m => m != null && m.mainTexture != null);
+            if (index < 0)
+            {
+                result.Problems++;
+                result.Lines.Add("[anim_material] " + prop.name + ": expected one distinct textured static material; left skin materials unchanged");
+                return;
+            }
+            foreach (SkinnedMeshRenderer renderer in skins)
+            {
+                Material[] slots = renderer.sharedMaterials;
+                if (slots.Length == 0 || renderer.sharedMesh == null || renderer.sharedMesh.subMeshCount != slots.Length)
+                {
+                    result.Problems++;
+                    result.Lines.Add("[anim_material] " + prop.name + "/" + renderer.name + ": material slots do not match skin submeshes");
+                    continue;
+                }
+                Material source = materials[index];
+                bool changed = false;
+                for (int i = 0; i < slots.Length; i++)
+                {
+                    if (slots[i] == source) continue;
+                    slots[i] = source;
+                    changed = true;
+                }
+                if (!changed) continue;
+                Undo.RecordObject(renderer, "Apply skeletal material");
+                renderer.sharedMaterials = slots;
+                PrefabUtility.RecordPrefabInstancePropertyModifications(renderer);
+                if (!created) result.Updated++;
             }
         }
 
@@ -753,6 +796,20 @@ namespace VRCKatamari.Editor.LevelBuild
             if (skinned != null) return skinned.sharedMesh;
             MeshFilter filter = renderer.GetComponent<MeshFilter>();
             return filter != null ? filter.sharedMesh : null;
+        }
+    }
+
+    public static class SkeletalMaterialMath
+    {
+        // Several renderers may repeat one material. Never pick a winner among distinct materials.
+        public static int SingleSourceIndex<T>(IReadOnlyList<T> slots, Func<T, bool> usable)
+        {
+            if (slots == null || slots.Count == 0 || !usable(slots[0])) return -1;
+            for (int i = 1; i < slots.Count; i++)
+            {
+                if (!EqualityComparer<T>.Default.Equals(slots[0], slots[i])) return -1;
+            }
+            return 0;
         }
     }
 }

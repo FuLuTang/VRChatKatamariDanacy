@@ -121,6 +121,10 @@ namespace VRCKatamari.Editor.LevelBuild
     /// steps - props, structures, colliders, pickup sync, arena binding - so no layer has a
     /// second implementation.
     /// </para>
+    /// <para>
+    /// 删除道具与结构按导入身份；空容器清理只认导入器在创建时留下的标记，
+    /// 不按节点外观猜测，也不进入 prefab 实例内部。
+    /// </para>
     /// </remarks>
     public static partial class PlacementImporter
     {
@@ -147,6 +151,9 @@ namespace VRCKatamari.Editor.LevelBuild
         // Unity project, not inside Assets/, so it can be diffed and validated by the CLI.
         public const string LevelsRepoRelativeFolder = LevelPaths.LevelsRepoRelativeFolder;
         public const string PlacementFileName = LevelPaths.PlacementFileName;
+
+        private const string PropFolderMarkerName = "__PlacementImporterFolder";
+        private const string PropFolderMarkerTag = "EditorOnly";
 
         private const string UndoLabel = "Import Level Placement";
         private const float PositionToleranceM = 0.001f;
@@ -747,9 +754,6 @@ namespace VRCKatamari.Editor.LevelBuild
             }
             bool structuresOk = ApplyStructures(doc, structuresRoot, report);
 
-            // Only the prop tree owns empty folders (kind/zone/group). A structure child is a
-            // deliberate object - a boundary marker has no renderer and no collider, so a
-            // folder cleanup over Structures would delete every wall.
             if (report.PoseScaleCompensated > 0)
             {
                 report.Note(report.PoseScaleCompensated + " prop(s) sit under a container whose scale " +
@@ -758,7 +762,7 @@ namespace VRCKatamari.Editor.LevelBuild
                             "clean managed tree has none");
             }
 
-            DeleteEmptyFolders(propsRoot);
+            DeleteEmptyFolders(propsRoot, report);
 
             MarkSceneDirty();
 
@@ -1998,11 +2002,11 @@ namespace VRCKatamari.Editor.LevelBuild
                                                  string group, string parentId,
                                                  PlacementImportReport report)
         {
-            Transform folder = EnsureFolder(propsRoot, kind, report);
+            Transform folder = EnsureOwnedPropFolder(propsRoot, kind, report);
             if (folder == null) return null;
             if (!string.IsNullOrEmpty(zone))
             {
-                folder = EnsureFolder(folder, zone, report);
+                folder = EnsureOwnedPropFolder(folder, zone, report);
                 if (folder == null) return null;
             }
 
@@ -2016,17 +2020,17 @@ namespace VRCKatamari.Editor.LevelBuild
             // a by-name probe read the folder's identity pose as the prop's.
             if (!string.IsNullOrEmpty(parentId))
             {
-                folder = EnsureFolder(folder, HierarchyFolderName, report);
+                folder = EnsureOwnedPropFolder(folder, HierarchyFolderName, report);
                 if (folder == null) return null;
-                folder = EnsureFolder(folder, HierarchyContainerName(parentId), report);
+                folder = EnsureOwnedPropFolder(folder, HierarchyContainerName(parentId), report);
                 if (folder == null) return null;
             }
 
             if (!string.IsNullOrEmpty(group))
             {
-                folder = EnsureFolder(folder, GroupsFolderName, report);
+                folder = EnsureOwnedPropFolder(folder, GroupsFolderName, report);
                 if (folder == null) return null;
-                folder = EnsureFolder(folder, group, report);
+                folder = EnsureOwnedPropFolder(folder, group, report);
                 if (folder == null) return null;
             }
 
@@ -4082,6 +4086,24 @@ namespace VRCKatamari.Editor.LevelBuild
         private static Transform EnsureFolder(Transform parent, string name,
                                              PlacementImportReport report)
         {
+            return EnsureFolderInternal(parent, name, report, false);
+        }
+
+        private static Transform EnsureOwnedPropFolder(Transform parent, string name,
+                                                       PlacementImportReport report)
+        {
+            return EnsureFolderInternal(parent, name, report, true);
+        }
+
+        private static Transform EnsureFolderInternal(Transform parent, string name,
+                                                     PlacementImportReport report, bool ownedPropFolder)
+        {
+            if (ownedPropFolder && name == PropFolderMarkerName)
+            {
+                report.Error("the container name '" + name + "' is reserved for placement folder ownership");
+                return null;
+            }
+
             Transform existing = FindChild(parent, name);
             if (existing != null)
             {
@@ -4099,6 +4121,16 @@ namespace VRCKatamari.Editor.LevelBuild
             var folder = new GameObject(name);
             Undo.RegisterCreatedObjectUndo(folder, UndoLabel);
             Undo.SetTransformParent(folder.transform, parent, UndoLabel);
+            if (ownedPropFolder)
+            {
+                // The mark is serialized with the scene, but stripped from builds. Existing
+                // unmarked objects are never adopted merely because their name matches.
+                var marker = new GameObject(PropFolderMarkerName);
+                marker.tag = PropFolderMarkerTag;
+                Undo.RegisterCreatedObjectUndo(marker, UndoLabel);
+                Undo.SetTransformParent(marker.transform, folder.transform, UndoLabel);
+                report.PropFoldersCreated++;
+            }
             return folder.transform;
         }
 
@@ -4132,18 +4164,50 @@ namespace VRCKatamari.Editor.LevelBuild
             return null;
         }
 
-        private static void DeleteEmptyFolders(Transform root)
+        private static void DeleteEmptyFolders(Transform propsRoot, PlacementImportReport report)
+        {
+            int removed = 0;
+            int unmarkedKept = 0;
+            bool insidePrefab = false;
+            for (Transform node = propsRoot; node != null; node = node.parent)
+            {
+                if (!PrefabUtility.IsPartOfPrefabInstance(node.gameObject)) continue;
+                insidePrefab = true;
+                break;
+            }
+            if (!insidePrefab) PrunePropFolders(propsRoot, ref removed, ref unmarkedKept);
+            report.PropFolderSummary = "[import] folders: " + report.PropFoldersCreated +
+                " created-marked, " + removed + " removed, " + unmarkedKept + " unmarked empty nodes kept";
+        }
+
+        private static void PrunePropFolders(Transform root, ref int removed, ref int unmarkedKept)
         {
             for (int i = root.childCount - 1; i >= 0; i--)
             {
                 Transform child = root.GetChild(i);
-                DeleteEmptyFolders(child);
-                if (child.childCount == 0 && child.GetComponent<Renderer>() == null &&
-                    child.GetComponent<Collider>() == null)
+                if (PrefabUtility.IsPartOfPrefabInstance(child.gameObject) || IsPropFolderMarker(child)) continue;
+                PrunePropFolders(child, ref removed, ref unmarkedKept);
+
+                // A new component (even a missing script) or any unmanaged child protects the
+                // whole folder; only the marker itself is allowed to be removed with it.
+                if (child.childCount > 1 || child.GetComponents<Component>().Length != 1) continue;
+                if (child.childCount == 0)
                 {
-                    Undo.DestroyObjectImmediate(child.gameObject);
+                    unmarkedKept++;
+                    continue;
                 }
+                if (!IsPropFolderMarker(child.GetChild(0))) continue;
+
+                Undo.DestroyObjectImmediate(child.gameObject);
+                removed++;
             }
+        }
+
+        internal static bool IsPropFolderMarker(Transform node)
+        {
+            return node.name == PropFolderMarkerName && node.CompareTag(PropFolderMarkerTag) &&
+                   node.childCount == 0 && node.GetComponents<Component>().Length == 1 &&
+                   !PrefabUtility.IsPartOfPrefabInstance(node.gameObject);
         }
 
         private static void MarkSceneDirty()

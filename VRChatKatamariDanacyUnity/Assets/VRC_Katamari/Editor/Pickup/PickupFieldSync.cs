@@ -544,6 +544,7 @@ namespace VRCKatamari.Editor.Pickup
             for (int i = 0; i < parent.childCount; i++)
             {
                 Transform child = parent.GetChild(i);
+                if (PlacementImporter.IsPropFolderMarker(child)) continue;
 
                 if (child.GetComponent<Renderer>() != null)
                 {
@@ -559,6 +560,9 @@ namespace VRCKatamari.Editor.Pickup
                     continue;
                 }
 
+                // Unmarked empty folders may remain from older imports. They are not props;
+                // a leaf with actual components still gets the usual missing-renderer error.
+                if (child.GetComponents<Component>().Length == 1) continue;
                 bool hasCollider = child.GetComponent<Collider>() != null;
                 candidates.Add(RejectedCandidate(child, kind, fieldRoot, hasCollider
                     ? "no Renderer: bounds cannot be derived from a collider-only object"

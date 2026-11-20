@@ -40,6 +40,8 @@ namespace VRCKatamari.Editor.LevelBuild
         public int PropsDeleted;
         public int PropsSkipped;
         public int PropErrors;
+        internal int PropFoldersCreated;
+        internal string PropFolderSummary;
 
         /// <summary>
         /// Props whose authored scale had to be divided by a non-1 parent scale so the WORLD size
@@ -257,6 +259,9 @@ namespace VRCKatamari.Editor.LevelBuild
                         System.Globalization.CultureInfo.InvariantCulture))
                     .Append(" ms");
             }
+
+            if (!string.IsNullOrEmpty(PropFolderSummary))
+                text.AppendLine().Append("  ").Append(PropFolderSummary);
 
             for (int i = 0; i < GrowthProblems.Count; i++)
             {

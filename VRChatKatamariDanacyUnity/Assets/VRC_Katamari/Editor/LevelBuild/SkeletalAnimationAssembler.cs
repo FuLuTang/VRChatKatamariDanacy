@@ -477,6 +477,8 @@ namespace VRCKatamari.Editor.LevelBuild
                         source.RebuildBlocked = true;
                         return;
                     }
+                    result.Lines.Add(prop.name + ": rebuilding " + SkinChildName + " (" + reason + ")");
+                    // Replace the whole instance, so removed-object overrides on it are not copied.
                     Undo.DestroyObjectImmediate(skin.gameObject);
                     skin = null;
                     result.Removed++;
@@ -572,7 +574,15 @@ namespace VRCKatamari.Editor.LevelBuild
             if (meshes.Length == 0) return "it has no skinned mesh";
             for (int i = 0; i < meshes.Length; i++)
             {
-                if (meshes[i].sharedMesh == null) return "its mesh reference is missing";
+                SkinnedMeshRenderer mesh = meshes[i];
+                if (mesh.sharedMesh == null) return "its mesh reference is missing";
+                if (mesh.rootBone == null) return "bones-missing: " + mesh.name + " has no rootBone";
+                Transform[] bones = mesh.bones;
+                if (bones == null || bones.Length == 0) return "bones-missing: " + mesh.name + " has no bones";
+                for (int j = 0; j < bones.Length; j++)
+                {
+                    if (bones[j] == null) return "bones-missing: " + mesh.name + " has no bone at index " + j;
+                }
             }
             GameObject fbxSource = PrefabUtility.GetCorrespondingObjectFromSource(skin.gameObject);
             string sourcePath = fbxSource == null ? "" : AssetDatabase.GetAssetPath(fbxSource);

@@ -263,8 +263,9 @@ namespace VRCKatamari.Tests
             Transform groupFolder = propFolder.Find("Groups/caramel_018");
             Assert.IsNotNull(groupFolder, "the group container lives under Groups/");
             Assert.IsNull(groupFolder.GetComponent<Renderer>(), "a container is never a prop");
-            Assert.AreEqual(1, groupFolder.childCount);
-            Assert.AreEqual("caramel_019", groupFolder.GetChild(0).name);
+            Transform groupedProp = groupFolder.Find("caramel_019");
+            Assert.IsNotNull(groupedProp, "the grouped prop is a direct child");
+            Assert.IsNotNull(groupedProp.GetComponent<Renderer>(), "the grouped child is a prop");
 
             object second = NewReport();
             Assert.IsTrue((bool)CallImporter("ApplyProps", doc, propsRoot.transform, second),

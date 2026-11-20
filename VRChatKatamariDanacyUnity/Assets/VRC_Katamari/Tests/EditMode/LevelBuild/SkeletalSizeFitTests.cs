@@ -114,6 +114,51 @@ namespace VRCKatamari.Tests
             Assert.IsFalse((bool)Call("ClipLengthMatches", 0.4583f, 0.4833f));
         }
 
+        [TestCase("rootBone")]
+        [TestCase("bones")]
+        [TestCase("index 1")]
+        public void StaleReasonRequestsRebuildWhenBonesAreMissing(string missing)
+        {
+            var prop = new GameObject("SkeletalStaleReasonTest");
+            prop.hideFlags = HideFlags.DontSave;
+            Mesh mesh = null;
+            try
+            {
+                mesh = new Mesh();
+                Transform skin = new GameObject("Skin").transform;
+                skin.SetParent(prop.transform, false);
+                var good = new GameObject("good", typeof(SkinnedMeshRenderer));
+                good.transform.SetParent(skin, false);
+                var goodRenderer = good.GetComponent<SkinnedMeshRenderer>();
+                goodRenderer.sharedMesh = mesh;
+                goodRenderer.rootBone = skin;
+                goodRenderer.bones = new[] { skin };
+
+                var broken = new GameObject("broken", typeof(SkinnedMeshRenderer));
+                broken.transform.SetParent(skin, false);
+                broken.SetActive(false);
+                var renderer = broken.GetComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.rootBone = missing == "rootBone" ? null : skin;
+                renderer.bones = missing == "bones" ? new Transform[0] : new[] { skin, (Transform)null };
+
+                Type assembler = Array.Find(AppDomain.CurrentDomain.GetAssemblies(),
+                    a => a.GetType(AssemblerName, false) != null)?.GetType(AssemblerName);
+                Assert.IsNotNull(assembler);
+                MethodInfo staleReason = assembler.GetMethod("StaleReason", BindingFlags.NonPublic | BindingFlags.Static);
+                Assert.IsNotNull(staleReason);
+                // Fail on the damaged SMR before checking the source asset or alignment.
+                string reason = (string)staleReason.Invoke(null, new object[] { prop.transform, skin, null, null });
+                StringAssert.StartsWith("bones-missing: broken", reason);
+                StringAssert.Contains("has no " + (missing == "index 1" ? "bone at index 1" : missing), reason);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(prop);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+            }
+        }
+
         [Test]
         public void StrayInstancesAreRecognisedByNameOrAssetFolder()
         {

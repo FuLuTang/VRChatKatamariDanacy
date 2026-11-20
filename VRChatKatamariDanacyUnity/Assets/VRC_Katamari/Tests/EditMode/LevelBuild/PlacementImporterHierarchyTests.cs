@@ -1,7 +1,10 @@
 using System;
 using System.Reflection;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace VRCKatamari.Tests
 {
@@ -237,6 +240,69 @@ namespace VRCKatamari.Tests
             Assert.IsTrue((bool)InvokeImporter("ApplyPose", child, prop));
             Assert.AreEqual(0f, Vector3.Distance(authored, child.transform.lossyScale), 1e-4f,
                 "each axis is compensated separately (the D-5 non-uniform case)");
+        }
+
+        [Test]
+        public void FolderCleanupKeepsPrefabBonesAndUnmarkedNodes()
+        {
+            Scene preview = EditorSceneManager.NewPreviewScene();
+            string prefabPath = "Assets/PlacementFolderCleanup_" + Guid.NewGuid().ToString("N") + ".prefab";
+            try
+            {
+                SceneManager.MoveGameObjectToScene(root, preview);
+                var source = new GameObject("Skin");
+                SceneManager.MoveGameObjectToScene(source, preview);
+                new GameObject("root").transform.SetParent(source.transform, false);
+                GameObject prefab = PrefabUtility.SaveAsPrefabAsset(source, prefabPath);
+                Assert.IsNotNull(prefab);
+
+                Transform occupied = FolderFor("tableware", "porch", null, null);
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, occupied);
+                Transform bone = instance.transform.Find("root");
+                Assert.IsTrue(PrefabUtility.IsPartOfPrefabInstance(bone));
+                Transform empty = FolderFor("furniture", "yard", "set", "table_01");
+                Transform legacy = new GameObject("legacy").transform;
+                legacy.SetParent(propsRoot, false);
+                Assert.AreEqual(legacy, FolderFor("legacy", null, null, null),
+                    "use existing folders without adopting them for deletion");
+                Transform decorated = FolderFor("decorated", null, null, null);
+                decorated.gameObject.AddComponent<AudioSource>();
+
+                InvokeImporter("DeleteEmptyFolders", propsRoot, report);
+
+                Assert.IsTrue(bone != null, "prefab bone was removed");
+                Assert.IsEmpty(PrefabUtility.GetRemovedGameObjects(instance));
+                Assert.IsTrue(empty == null, "the importer-owned empty folder should be removed");
+                Assert.IsTrue(propsRoot.Find("furniture") == null, "prune newly empty ancestors too");
+                Assert.IsTrue(legacy != null, "keep an unmarked empty node");
+                Assert.IsTrue(decorated != null, "do not delete a folder that acquired a component");
+            }
+            finally
+            {
+                EditorSceneManager.ClosePreviewScene(preview);
+                AssetDatabase.DeleteAsset(prefabPath);
+            }
+        }
+
+        [Test]
+        public void FolderMarkerDoesNotReachPickupCandidateValidation()
+        {
+            Transform folder = FolderFor("tableware", "porch", "set", null);
+            Transform prop = new GameObject("teacup_01", typeof(MeshRenderer)).transform;
+            prop.SetParent(folder, false);
+            new GameObject("old_empty_folder").transform.SetParent(folder, false);
+            Transform colliderOnly = new GameObject("collider_only", typeof(BoxCollider)).transform;
+            colliderOnly.SetParent(folder, false);
+            Type sync = FindType("VRCKatamari.Editor.Pickup.PickupFieldSync");
+            Assert.IsNotNull(sync);
+            MethodInfo collect = sync.GetMethod("CollectCandidates", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(collect);
+            var candidates = (System.Collections.IList)collect.Invoke(null, new object[] { propsRoot });
+            Assert.AreEqual(2, candidates.Count, "markers and unmarked empty leaves are not candidates");
+            object colliderRow = candidates[0]; // CollectCandidates 排序按路径，collider_only 在前。
+            Assert.AreEqual(colliderOnly, Field(colliderRow, "Root"));
+            StringAssert.Contains("collider-only", (string)Field(colliderRow, "Rejection"));
+            Assert.AreEqual(prop, Field(candidates[1], "Root"));
         }
 
         private object NewProp(string itemId, float sx, float sy, float sz)

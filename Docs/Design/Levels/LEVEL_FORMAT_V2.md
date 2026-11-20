@@ -1226,6 +1226,10 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 | `defs[]` | manifest + 模型 + `collider` 代理 | 与今天一致；`scalePolicy` 只在编辑器校验里用 |
 | `cameras`/`renderPresets` | 编辑器/Blender 用，不进场景 | 不变 |
 
+`PlacementImporter` 的 v1、v2 共用 `Props` 空容器清理。导入器新建 kind、zone、`Hierarchy/<父 id>_children` 或 `Groups/<组>` 容器时，加一个仅含 Transform 的 `__PlacementImporterFolder` 子标记，标为 Unity 内置 `EditorOnly`；不改容器路径，也不把标记当拾取候选。清理只自底向上删除仅含 Transform、且只剩这个标记的容器；一遇 prefab 实例就跳过整棵子树（包括道具下 `Skin` 实例的骨骼）。旧容器即使同名也不补标、不猜测删除；拾取同步忽略没有子节点的纯 Transform，不因此报拒绝，但仍报告有碰撞体或其他组件而没有 Renderer 的叶子。导入报告的 `[import] folders:` 分别列出本次新建已标记容器、删除的容器以及保留的未标记空节点；最后一项不表示这些节点都由旧版导入器创建。
+
+参考关卡的 `Skin` 由 `VRC Katamari/Level/Assemble Skeletal Animation (reference)` 管理。任一蒙皮渲染器缺根骨、没有骨骼或有空骨骼引用时，装配器标为 `bones-missing`，用同一 FBX 新建整个 `Skin` 实例，丢弃原实例的删除覆盖；有脚本保护时不销毁，报错交操作员处理。装配后保存，再导入一次 placement 重接 `MotionHost` 的 Animator 引用。
+
 ### 11.2 地形网格资产（**我们自己的关卡**）
 
 - 声明了 `meta.playerStart` 的关卡，导入器（`TerrainMeshImporter`，接在地形导入之后）在 `TerrainRoot/TerrainVisual` 上保证网格 + 碰撞体：`MeshFilter` 上已有三角数一致的网格就原样保留，否则按下面的路径生成/原地覆写；`MeshCollider.sharedMesh` 指向该网格，`convex = false`、`isTrigger = false`、Default 层，`TerrainVisual` 世界位姿为单位。参考关卡的网格路径 `Assets/_RefUnlicensed/Meshes/<PascalCase 关卡名>TerrainVisual.asset`（`_ref_cancer` → `RefCancerTerrainVisual`），我们自己的关卡走下面这条。

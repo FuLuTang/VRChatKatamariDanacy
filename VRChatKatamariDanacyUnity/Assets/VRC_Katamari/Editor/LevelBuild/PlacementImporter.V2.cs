@@ -175,8 +175,7 @@ namespace VRCKatamari.Editor.LevelBuild
             bool structuresOk = ApplyStructures(view, structuresRoot, report);
             bool wallsOk = ApplyActivityWalls(doc, levelRoot, report);
 
-            // Only the prop tree owns empty folders (kind/zone/Hierarchy/Groups).
-            DeleteEmptyFolders(propsRoot);
+            DeleteEmptyFolders(propsRoot, report);
             MarkSceneDirty();
 
             if (propsOk)

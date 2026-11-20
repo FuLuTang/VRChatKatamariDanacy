@@ -296,8 +296,11 @@ namespace VRCKatamari.Editor.LevelBuild
             return text.ToString();
         }
 
+        public string AreaCollisionSummary;
+
         public void Log()
         {
+            if (!string.IsNullOrEmpty(AreaCollisionSummary)) UnityEngine.Debug.Log(AreaCollisionSummary);
             if (Success)
             {
                 UnityEngine.Debug.Log(BuildSummary());

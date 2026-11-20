@@ -97,6 +97,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
     public sealed class PlacementV2Meta
     {
+        public int AreaNo = -1;
         public string Id;
         public string Scene;
         public string Units;
@@ -223,6 +224,7 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <summary>One <c>structures.solids[]</c> entry: a large, never-absorbable analytic body.</summary>
     public sealed class PlacementV2Solid
     {
+        public int HitOnAreaNo = -1;
         public string Id;
         public string Kind;
         /// <summary><c>box</c> / <c>ramp</c> / <c>curve_ramp</c>.</summary>
@@ -330,6 +332,7 @@ namespace VRCKatamari.Editor.LevelBuild
     /// </summary>
     public sealed class PlacementV2Prop
     {
+        public int HitOnAreaNo = -1;
         public string ItemId;
         public string Def;
         public string Kind;
@@ -524,7 +527,7 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             "id", "scene", "units", "convention", "ball", "timeLimitS", "playerSpawn",
             "playerStart", "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
-            "expected", "source", "migration"
+            "expected", "source", "migration", "areaNo"
         };
 
         private static readonly string[] PlayerStartKeys = { "position", "facingDeg", "source" };
@@ -559,7 +562,7 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             "id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
             "collision", "absorbable", "support", "meets", "material", "notes", "collider",
-            "proxySource", "parts"
+            "proxySource", "parts", "hitOnAreaNo"
         };
 
         private static readonly string[] CurveKeys =
@@ -589,7 +592,7 @@ namespace VRCKatamari.Editor.LevelBuild
             "shakeOff", "zone", "position", "rotationQuat", "scale", "aabb", "volumeK",
             "growthMm3", "volumePenalty", "absorbDiameterReqMm", "absorbable", "valueUnits",
             "parent", "rigidGroup", "support", "stackedOn", "floatingOk", "notes",
-            "instanceIndex"
+            "instanceIndex", "hitOnAreaNo"
         };
 
         private static readonly string[] DefKeys =
@@ -722,6 +725,7 @@ namespace VRCKatamari.Editor.LevelBuild
             var meta = new PlacementV2Meta();
             ReportUnknown(node, "meta", MetaKeys, result, document);
             meta.Id = node.GetString("id");
+            meta.AreaNo = ReadAreaNo(node, "areaNo", "meta", 0, result);
             meta.Scene = node.GetString("scene");
             meta.Units = node.GetString("units");
             meta.Convention = node.GetString("convention");
@@ -1035,6 +1039,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 ReportUnknown(item, "structures.solids[" + i + "]", SolidKeys, result, document);
                 var solid = new PlacementV2Solid
                 {
+                    HitOnAreaNo = ReadAreaNo(item, "hitOnAreaNo", "structures.solids[" + i + "]", -1, result),
                     Id = item.GetString("id"),
                     Kind = item.GetString("kind"),
                     Role = item.GetString("role"),
@@ -1239,6 +1244,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
                 ReportUnknown(item, "props[" + i + "]", PropKeys, result, document);
                 var prop = new PlacementV2Prop();
+                prop.HitOnAreaNo = ReadAreaNo(item, "hitOnAreaNo", "props[" + i + "]", -1, result);
                 prop.ItemId = item.GetString("itemId");
                 prop.Def = item.GetString("def");
                 prop.Kind = item.GetString("kind");
@@ -1596,6 +1602,19 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         // ------------------------------------------------------------------ helpers ---
+
+        private static int ReadAreaNo(LevelJsonNode node, string key, string path, int minimum,
+            PlacementV2ReadResult result)
+        {
+            LevelJsonNode value = node.Get(key);
+            if (value == null) return -1;
+            double number = value.NumberValue;
+            if (value.Kind == LevelJsonKind.Number && number >= minimum && number <= int.MaxValue &&
+                number == Math.Truncate(number)) return (int)number;
+            result.Errors.Add("[area_collision] " + path + "." + key +
+                " must be an integer >= " + minimum + " within Int32 range");
+            return -1;
+        }
 
         private static float[] ReadVector(LevelJsonNode node, string name, int length)
         {

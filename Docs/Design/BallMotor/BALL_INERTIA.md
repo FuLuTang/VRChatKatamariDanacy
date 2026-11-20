@@ -1,6 +1,6 @@
 # 球的惯性模型（起步、松手滑行、转向、刹车、尺度不变、静止后下坡）
 
-**状态：已实现，待 Unity 验收。** 离线（Python 参考模型 + 本地 .NET 跑 EditMode）已过；Unity 里的速度曲线读数、Udon 编译、VR 舒适都还没有。**所有者 2026-11-17 拍板**：起步更灵敏（≥95% 上限约 0.7 s）；手感与大小无关（长度型量按 D/D0 缩放）；爬升门按同一尺度；静止过一下之后才下坡滑。原作证据见 [ORIGINAL_BALL_INERTIA](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)：**原作没有公开惯性数值**，下面所有数都是我们的 PROVISIONAL，定的是手感，不是复现。
+**状态：源码已采用 WLK A2，场景写入与 Unity/VR 验收待办。** 所有者于 2026-11-20 决定以《We Love Katamari REROLL+ Royal Reverie》v20230608 为惯性基准：松杆匀减速，杆量控制速度上限，不照搬绝对速度与滚阻。尺度规则、爬升门的尺度和静止后才施加坡重力的规则保留。早期原作资料见 [ORIGINAL_BALL_INERTIA](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)。
 
 代码：`Runtime/Motion/BallMotionMath.cs`（`TryStep`）、`Runtime/Motion/RampSlideMath.cs`（静止锁存）、`Runtime/BallMotor/KatamariBallMotor.cs`（字段、`CurrentSizeScale`、`UpdateRampSlide`）、`Runtime/BallContact/ClimbMath.cs`（`GateSpeed`）；参考模型 `Docs/Design/BallMotion/ball_motion.py`（速度部分两份必须一致；静止下坡只在 C#）。
 
@@ -20,44 +20,42 @@
 每个固定步（Unity 0.02 s），以下长度型量都已乘 s。沿**转向后**的朝向把平面速度分解为纵向 `vf` 与横向 `vl`：
 
 1. 转向：`heading += clamp(turn)·turnRate·dt`（不降额）。
-2. 纵向推力：前进意图与 `vf` 反号（反推）用 `braking`，否则用 `acceleration`：`vf += intent·rate·dt`。
-3. 阻力：`vf *= exp(-friction·dt)`；`vl *= exp(-(friction + lateralGrip)·dt)`。抓地取代旧的横向硬钳，转弯时旧方向的速度留在 `vl` 里衰减，形成弧线漂移。
+2. 纵向驱动：`基准上限 = maxSpeed·s`，冲刺时再乘冲刺倍率。杆量曲线给出纵向目标，倒车目标另乘 0.5。反推以 `intent·braking·dt` 先减到零，再受反向目标限制；同向未超目标时以 `intent·acceleration·dt` 加速。
+3. 阻力：`vf *= exp(-friction·dt)`；`vl *= exp(-(friction + lateralGrip)·dt)`。转弯时旧方向的速度留在 `vl` 里衰减，形成弧线漂移。
 4. 侧移输入给 `vl` 加最多 `maxLateral·dt`，且不把 `vl` 推过 `±maxLateral`（已超过的漂移速度只受抓地衰减）。
-5. 滚动阻力：只在**没有前进输入**时，`|vf|` 每步减 `rolling·dt`，下限 0、不反向。
-6. 纵向钳到 `[-0.5·cap, cap]`（`cap = maxSpeed·s`）；再把平面总速度按比例压到 `cap`。
+5. 松手时纵向匀减到零；同向推杆但已有速度高于目标时，不再加推力，按同样的 `rolling·dt` 减到目标，不跳变也不减过头。加速新产生的速度受目标限制；横向不受这条杆量曲线直接钳制。
+6. 纵向硬钳仅使用基准前进／倒车上限，平面总速度也只在超过基准上限时按比例缩小。
 7. 位移 `v·dt`，不分步、不裁剪（扫掠归接触层）。
 
-不变：`ComputeDrive`（目标速度 = `cap × 意图`）、`DesktopMoveInput`（二值）、RIDE接触、墙爬（`T_climb`、高度上限∝D）、恢复判据。45–60°坡爬的体力分流见§4.1。
+`BallMotionMath.DriveSpeedFraction` 同时给纵向驱动与 `ComputeDrive` 的爬升目标速度使用。取归一化前后意图绝对值作为杆量：低于 0.29 线性到 40%；0.29 至小于 0.99 恒为 40%；本作达到 0.99 即 100%。WLK v20230608 的 `sGetMaxSpeedRate` 使用两杆幅值平均；反汇编显示三段曲线，最高段还在 0.99–1.00 插值，本作保留 A2 约定的直接切换。`sSpeedLimit` 0x992d22 比较上一帧速度，既有超速与本帧越限的分支不同，且检查刹车状态（0x992d48）。本作同向以普通滚阻接近目标，是据此避免瞬时削速的工程近似，不是照搬各分支；原作的常规推进也会扣滚阻（`sResistance` 0x991193–0x99143b），本作同向未超目标时不扣。桌面前后键仍是二值。
 
-### 现行参数（D0 下的值，全部 PROVISIONAL）
+### 现行参数（D0 下的工程值）
 
-| 参数 | 值 | 单位 | 缩放 | 说明 |
-|---|---:|---|---|---|
-| `maxSpeedMps` | 4 | m/s | × s | 满推终端速度 |
-| `accelerationMps2` | 7.5 | m/s² | × s | 前进推力；到 50/95% 上限 0.32 / 0.70 s |
-| `frictionPerSecond` | 0.9 | 1/s | — | 纵、横向指数阻力 |
-| `rollingResistanceMps2` | 1.3 | m/s² | × s | 无前进输入时线性滑行减速 |
-| `lateralGripPerSecond` | 2.0 | 1/s | — | 横向额外衰减；极大 = 无漂移 |
-| `brakingMps2` | 6 | m/s² | × s | 只给反向推力（注意：小于前进推力 7.5） |
-| `maxLateralMps` | 1.2 | m/s | × s | 只限制侧移输入的贡献 |
-| `turnRateDegreesPerSecond` | 110 | °/s | — | 不降额 |
-| `rampTangentialGravityScale` | 1 | — | — | 下坡重力占 `g·sinθ` 的比例，只在「静止后」生效 |
-| `rampRestSpeedMps` / `rampRestSeconds` | 0.05 / 0.3 | m/s（× s）/ s | 速度 × s | 判定「静止」 |
-| `rampSlideMinSlopeDegrees` | 2 | ° | — | 小于它的平地不滑；上限用现有 `maxSupportSlopeDegrees` |
+| 参数 | 地图 0 / 电机默认 | StoryMode / TerrainContactLab / AllMapsHub | 单位 / 缩放 |
+|---|---:|---:|---|
+| `maxSpeedMps` | 4 | 4 | m/s，× s |
+| `accelerationMps2` | 7.5 | 5 | m/s²，× s |
+| `brakingMps2` | 8 | 8 | m/s²，× s；只给反向推力 |
+| `frictionPerSecond` | 0 | 0 | 1/s，不缩放 |
+| `rollingResistanceMps2` | 1.9 | 1.9 | m/s²，× s；松杆纵向减速 |
+| `lateralGripPerSecond` | 2.9 | 2.9 | 1/s，不缩放 |
+| `maxLateralMps` | 1.2 | 1.2 | m/s，× s；只限制侧移输入的贡献 |
+| `turnRateDegreesPerSecond` | 110 | 110 | °/s，不缩放 |
+| `rampTangentialGravityScale` | 1 | 1 | 无量纲 |
+| `rampRestSpeedMps` / `rampRestSeconds` | 0.05 / 0.3 | 0.05 / 0.3 | m/s（× s）/ s |
+| `rampSlideMinSlopeDegrees` | 2 | 2 | °，不缩放；坡角必须大于此值 |
 
-离线读数（Python 参考模型 0.02 s；任何球径相同）：到 50 / 90 / 95% 上限 0.32 / 0.64 / 0.70 s；满速松手到 <0.1·s m/s 约 1.4 s，滑行 2.26 m @ 4 m/s（≈ 10.2 个 0.222 m 球径；0.2997 m 起始球则 ≈ 7.5 个球径）；满速反推到速度过零 0.54 s；满推 + 满转到朝向 90° 时速度方向落后朝向约 29°（速度保持 4 m/s，因推力把速度补回上限）。
-
-旧行为对照值（只用于旧 Lab 对照，不是第二套实现）：`s = 1`、`acceleration 5`、`braking 8`、`friction 1.2`、`rollingResistance 8`、`lateralGrip 1000`、`maxLateral 1.2`。近似旧手感（满速松手 ≈ 0.45 s 停；转向速度方向基本跟朝向），不逐位等价。EditMode `LegacyComparisonValuesStopQuicklyAndFollowTheHeading` 与 Python `test_legacy_equivalent_values_stop_in_about_half_a_second` 固定了这组值。
+两套参数的满速松手曲线相同：`v(t) = max(0, 4 − 1.9t)·s`。按 0.02 s 步进，低于 `0.1·s` m/s 约 2.06 s，约 2.12 s 完全停住，共滑约 `4.17·s` m（0.222 m 起始球约 18.8 个球径）。StoryMode 仍保留较低的起步推力，但不再有较高的纵向黏滞。A2 对齐的是减速形状和杆量限速；不是移植 WLK 按球径插值的速度、加速度和滚阻表。
 
 ## 3. 爬升门
 
-`vGate = max(实际平面速度, KIntent·目标速度) / s`，与 D0 下的 `v_req(θ) = 1.5·sinθ`（90° 墙 1.5 m/s）比较，也喂给 `ClimbSpeed` 的速率因子（参考 2 m/s）。因为速度本身 ∝ s，满推始终 `vGate = 2 ≥ 1.5`、半推 `vGate = 1 < 1.5`，大球小球都一样（旧：目标速度 ≥ 3 m/s）。只改了阈值的尺度，`ClimbMath.GateSpeed` 在 `ContactSolveMath.TryStep`（新增末尾默认参数 `gateSizeScale = 1`，既有调用不受影响）与 `KatamariBallMotor.RefreshClimbGate` 共用；`T_climb` 与高度上限未动。
+`vGate = max(实际平面速度, KIntent·目标速度) / s`，与 D0 下的 `v_req(θ) = 1.5·sinθ`（90° 墙 1.5 m/s）比较，也喂给 `ClimbSpeed` 的速率因子（参考 2 m/s）。因为速度本身 ∝ s，满推始终 `vGate = 2 ≥ 1.5`、半推 `vGate = 0.8 < 1.5`，大球小球都一样（旧：目标速度 ≥ 3 m/s）。`ClimbMath.GateSpeed` 在 `ContactSolveMath.TryStep`（新增末尾默认参数 `gateSizeScale = 1`，既有调用不受影响）与 `KatamariBallMotor.RefreshClimbGate` 共用；`T_climb` 与高度上限未动。
 
 ## 4. 静止后下坡
 
-**当前决定（owner 2026-11-17，地图 0 沙盒亲测）：方案 A，滚动阻力照常作用。** C26 2°、C27 5° 顺坡朝向时松手不滑，保持现状；主人原话「26 27不滑动，不错，有点阻力也行」。静止闩锁开启不等于必然有可见下滑，缓坡无需绕过滚动阻力，也不为这两格调整参数。脚本把球转成横向后的坡滑读数是另一朝向的诊断，不是顺坡朝向必须滑动的要求。
+**当前决定（owner 2026-11-17，地图 0 沙盒亲测）：方案 A，滚动阻力照常作用。** C26 2°、C27 5° 顺坡朝向时松手不滑；采用 A2 后 C28 10° 也不持续顺坡滑行。静止闩锁开启不等于必然有可见下滑，缓坡无需绕过滚动阻力，也不为这两格调整参数。脚本把球转成横向后的坡滑读数是另一朝向的诊断，不是顺坡朝向必须滑动的要求。
 
-`RampSlideMath.TryStepRestLatch`：平面速度 < `rampRestSpeedMps·s` 且无推动（`|forward|+|lateral| ≤ 0.05`）时累计静止时间，否则清零；站在可走坡（`2° < 坡角 ≤ maxSupportSlopeDegrees`，非墙、非爬升、非坠落）上且静止满 0.3 s 时锁存「滑动」，之后只要仍在坡上且没有推动就保持（滑动本身是运动，不能靠静止计时维持），任何推动或离开坡面即关闭。滑动期间每步经 `SupportSurfaceMath.TryApplyRampTangentialGravity(重力 g·s，速度上限 maxSpeed·s)` 加沿水平下坡方向的加速度；**运动中（未锁存）不额外加下坡加速**，平地不滑。滑动速度由滚动阻力/阻力/抓地限制：10° 坡朝向垂直坡向时漂移终速约 0.59 m/s·s；坡太缓（`g·sinθ` 小于滚动阻力与阻力平衡）时会慢到几乎不滑。实现位置：`StepContactV2` 里 `RefreshClimbGate` 之后、接触求解之前调 `UpdateRampSlide`；坡面取上一步 `WriteContactSupport` 写下的支撑法线，不在坡上的情形还包括针尖支撑、爬升接触和无支撑（下落）。加进 `planarVelocity` 的下坡速度随同一步的接触求解一起积分；有支撑的子步里求解器把下坡速度投影到支撑面的切平面（`ContactSolveMath.SupportTangentVerticalSpeed`），球顺坡走时贴着坡面、不丢支撑，所以闩锁不会因离开坡面而关；上一步被整步拒绝（残差 > 2 cm）时本步不加（拒绝步的速度本来就被清零），`TeleportTo` 清闩锁与静止计时。覆盖范围：任何给出支撑法线的表面（解析坡、OBB 斜板与地形网格）。
+`RampSlideMath.TryStepRestLatch`：平面速度 < `rampRestSpeedMps·s` 且无推动（`|forward|+|lateral| ≤ 0.05`）时累计静止时间，否则清零；站在可走坡（`2° < 坡角 ≤ maxSupportSlopeDegrees`，非墙、非爬升、非坠落）上且静止满 0.3 s 时锁存「滑动」，之后只要仍在坡上且没有推动就保持（滑动本身是运动，不能靠静止计时维持），任何推动或离开坡面即关闭。滑动期间每步经 `SupportSurfaceMath.TryApplyRampTangentialGravity(重力 g·s，速度上限 maxSpeed·s)` 加沿水平下坡方向的加速度；静止的纵轴若重力分量不超过滚阻，就抵消该分量，横向不受影响（匀减速模型下 `asin(1.9/9.81) ≈ 11.2°`；原作滚阻另随坡度变动，起始球径区间的估算分界约 11.8°）。**运动中（未锁存）不额外加下坡加速**，平地不滑。滑动速度由滚动阻力/阻力/抓地限制：10° 坡朝向垂直坡向时漂移终速约 0.59 m/s·s。实现位置：`StepContactV2` 里 `RefreshClimbGate` 之后、接触求解之前调 `UpdateRampSlide`；坡面取上一步 `WriteContactSupport` 写下的支撑法线，不在坡上的情形还包括针尖支撑、爬升接触和无支撑（下落）。加进 `planarVelocity` 的下坡速度随同一步的接触求解一起积分；有支撑的子步里求解器把下坡速度投影到支撑面的切平面（`ContactSolveMath.SupportTangentVerticalSpeed`），球顺坡走时贴着坡面、不丢支撑，所以闩锁不会因离开坡面而关；上一步被整步拒绝（残差 > 2 cm）时本步不加（拒绝步的速度本来就被清零），`TeleportTo` 清闩锁与静止计时。覆盖范围：任何给出支撑法线的表面（解析坡、OBB 斜板与地形网格）。
 
 ### 4.1 45–60°体力坡爬的耗尽滑回
 
@@ -65,31 +63,22 @@
 不把新陡坡伪装成RIDE。坡通道自己给`RampSlideMath.TryStepRestLatch`传`onSlope=true`，共享motor的0.3s/0.05m/s·s参数；
 它存活时`UpdateRampSlide`因climbActive排除，不重复加重力。耗尽→有效推进归零/along置零→静止0.3s→沿负切线滑回，
 持推也不能把耗尽体力再当新起爬。积分前由坡通道接管速度，防止运动层每步加的新推力把等待变成向上蠕动。
-RIDE缓坡仍受滚动阻力，C26/C27的认可不变；耗尽陡坡在接触通道用重力与1m/s滑回上限，不让缓坡的静摩擦阻住它。
+RIDE缓坡仍受滚动阻力，C26–C28 顺坡不滑；耗尽陡坡在接触通道用重力与1m/s滑回上限，不让缓坡的静摩擦阻住它。
 这是**同一个静止闩锁、不同角度通道的速度归属**，不是另加一个计时器算法。恢复判据不变；真motor有50°/58°回坡脚且recovery=0测试，待Unity执行。
 
-## 5. 契约更正（相对惯性改动前）
+## 5. 运动层接口
 
-1. `BallMotionTests`/`TerrainClimbTests` 里的 `TryStep` 调用同步：签名为 `(forward, turn, lateral, heading, velocity, dt, sizeScale, maxSpeed, acceleration, braking, friction, rollingResistance, lateralGrip, turnRate, maxLateral, out …)`——**删除** `growthFraction`、`growthSpeedFactor`、`growthTurnFactor`，**新增** `sizeScale`（有限且 > 0）、`rollingResistanceMps2`、`lateralGripPerSecond`。
-2. `brakingMps2`：旧 = 无前进输入时对总速度的减速；新 = 只在前进输入与前向速度反号时作为推力率。无输入不再用它。
-3. 无前进输入的停车：旧 = 对总速度减 `braking·dt`；新 = 纵向线性滚动阻力 + 指数阻力，横向只有指数衰减。
-4. 横向：旧 = 硬钳 `±maxLateralMps`；新 = 抓地衰减，`maxLateralMps` 只限制侧移输入的增量。
-5. 倒车：旧 = 同前进上限与加速度；新 = 上限 0.5·cap，从前进速度反推时走 `brakingMps2`。
-6. 大球不再降速（旧 `growthSpeedFactor` 把 2.20 档压到 3.0 m/s、转向压到 71.5°/s）；现在速度、加速度随 s 变大，转向不变。
-7. 爬升门阈值读 `vGate / s`；`ContactSolveMath.TryStep` 增加末尾默认参数 `gateSizeScale`。
-8. `rampTangentialGravityScale` 默认 0 → 1，并只在「静止后」生效；新增三个序列化字段（`rampRestSpeedMps`、`rampRestSeconds`、`rampSlideMinSlopeDegrees`）。
-9. 总平面速度仍压到 `cap`（保留，使侧移输入叠加漂移时不超上限）。
-10. `ComputeDrive`、`DesktopMoveInput`、接触 v2、爬升其它逻辑、恢复判据：无改动。
+`TryStep` 的签名不变：纯平面固定步，读取调用方给出的 `sizeScale` 与调参值。纵向黏滞仍可配置，A2 取 0；无前后输入只在纵轴扣匀滚阻，横向仍由抓地衰减。倒车上限仍为前进上限的一半。`ComputeDrive` 使用同一杆量曲线，不另起一套限速。墙爬、接触 v2 和恢复的规则不变。
 
 ## 6. 与接触 v2、恢复的相互作用
 
 | 项 | 影响 | 处理 |
 |---|---|---|
 | 贴墙滑行 | 切向速度原样保留；有惯性后擦墙带着残余切向速度滑得更远，横向漂移让撞墙更常发生 | 无需改接触层；Unity 看 C 矩阵与 W 格 `contact_count` 不增加卡顿 |
-| 爬升门 | 读 `vGate/s`，大小球一致；起步变快（0.7 s）后推墙更早到门 | 只改阈值尺度 |
+| 爬升门 | 读 `vGate/s`，大小球一致；推墙时用实际速度和同一杆量曲线的目标速度 | 同一尺度，不复制杆量曲线 |
 | 爬升退出 | 松手 `vGate→0` 仍按现行退出并冷却 0.35 s | 无改动 |
 | 卡死恢复 | v2 判据读意图（`|forward|+|lateral| > 0.05` 且不受阻）与 1 cm 圆盘；松手滑行或下坡滑动时 `driveIntent = 0`，`stuckStep` 为假、`stuckSeconds` 每步清零，**滑行不会累计卡死**（读代码的论证，`UpdateContactRecovery`）。软恢复清 `planarVelocity`、硬恢复传送都会清掉惯性 | 无改动；Unity 看 `recovery_delta == 0` |
-| 坡上松手 | 满足坡角与静止门后施加下坡重力，仍受滚动阻力/阻力/抓地限制；C26 2°、C27 5° 顺坡朝向不滑 | owner 2026-11-17 认可缓坡不滑，保持现行参数与滚动阻力 |
+| 坡上松手 | 满足坡角与静止门后施加下坡重力，仍受滚动阻力/阻力/抓地限制；C26–C28 顺坡朝向不滑 | A2 保留横向坡滑 |
 
 ### 拒绝位移时不得积存速度（E3 A2，2026-11-17）
 
@@ -99,7 +88,7 @@ E3 驱动脚本直接取 `motor.GetProgramVariable("planarVelocity")` 并打印 
 
 回归：`ContactSolveTests.ARejectedObbStepCannotStoreSpeedOrLaunchWhenTheObstacleDisappears`（松手/反推两例）、`TheResidualGateDiscardsVelocityOnlyWhenItRejectsTheMove`（阈值下/等于/阈值上三例），以及真电机 `ContactModelV2Tests.ARejectedPropGapStepClearsTheMotorsStoredVelocity`（需 Unity）。这不解决夹缝本身的几何不可解；残差、拒绝计数与现行恢复策略保持可见。
 
-**风险**：横向漂移会让球在狭窄通道里蹭墙更久；若 W2/W7、Story 关卡出现新的 recovery，先调大 `lateralGripPerSecond`。大球速度 ∝ s（D=5 m 时 90 m/s）：扫掠层与关卡尺度是否承受须 Unity 验证；`brakingMps2`（6）小于 `accelerationMps2`（7.5），反推的「刹车」比前进推力弱，试玩觉得刹车不够狠就调大。
+**风险**：横向漂移会让球在狭窄通道里蹭墙更久；若 W2/W7、Story 关卡出现新的 recovery，先调大 `lateralGripPerSecond`。大球速度 ∝ s（D=5 m 时 90 m/s）：扫掠层与关卡尺度是否承受须 Unity 验证。
 
 ## 7. Unity 验收（PhysicsTestField 以 0.02 s 采样 `GetPlanarVelocity` 画速度-时间曲线）
 
@@ -107,17 +96,17 @@ E3 驱动脚本直接取 `motor.GetProgramVariable("planarVelocity")` 并打印 
 
 | 判据 | 期望 | 容差 |
 |---|---|---|
-| 满推到 50% / 95% 上限时间 | 0.32 s / 0.70 s（任何球径） | ±15% |
-| 松手到速度 < 0.1·s m/s | 约 1.4 s | ±20% |
-| 松手滑行距离（满速） | 2.26 m @ D0（≈ 10.2 个 0.222 m 球径，任何球径同比例） | ±20% |
-| 反推到速度过零（满速） | 约 0.54 s | ±20% |
-| 满推 + 满转到朝向 90° 时，速度方向与朝向差 | 约 29° | ±10° |
-| 爬升门 | 满推（目标速度 = 4·s）能爬，半推（2·s）不爬，球径 0.222 / 0.8 / 5 m 都一致 | — |
-| 静止后下坡 | 10° 坡上静止 ≥ 0.3 s 后开始滑；运动中不加速；平地不滑 | 开始时刻 ±0.1 s |
-| 贴墙满推、松手、W2 回滑、卡死恢复 | 与现行相同 | `recovery_delta == 0` |
+| 满推到 50% / 90% / 95% 上限时间 | 地图 0 约 0.28 / 0.50 / 0.52 s；StoryMode 约 0.40 / 0.72 / 0.76 s | ±15% |
+| 松手到速度 < 0.1·s m/s / 完全停住 | 2.06 / 2.12 s；相邻 0.02 s 帧的纵向速度差为 `0.038·s` m/s，最后一步除外 | ±20%（时间） |
+| 松手滑行距离（满速） | `4.17·s` m | ±20% |
+| 满速反推到零 | 约 0.50 s | ±20% |
+| 满推 + 满转到朝向 90° 时，速度方向与朝向差 | 地图 0 约 23°，StoryMode 约 27° | ±10° |
+| 爬升门 | 从静止贴墙：满推目标 `4·s` m/s 能爬；半推目标 `1.6·s` m/s 不能。实际速度仍计入门槛 | — |
+| 静止后下坡 | C26–C28 顺坡不滑；C28 横向静止约 0.3 s 后滑、终速约 `0.6·s` m/s；平地不滑 | 静止门 ±0.1 s |
+| 贴墙满推、松手、W2 回滑、卡死恢复 | 不应新增恢复 | `recovery_delta == 0` |
 
-场景里 `accelerationMps2` / `brakingMps2` / `frictionPerSecond` / `rampTangentialGravityScale: 0` 有显式旧值覆盖，须先由操作员改成现行值再读数；场景里残留的 `growthSpeedFactor` / `growthTurnFactor` 键是死键（Unity 忽略）。VR 舒适：最大减速度约 6 m/s²·s，大球绝对加速度更大，**本文不声称舒适**。Udon 成本：每步多一个 `exp` 与几次乘加，无分配。
+场景已有显式字段，不能靠改电机默认值更新。先在 Unity 写入地图 0、StoryMode、TerrainContactLab 的现行值；AllMapsHub 以 StoryMode 为底图，重装配后继承加速 5 m/s² 的预设。VR 验收：半推摇杆稳态上限固定约为满推的 **40%**；试轻推、半推、接近满推和完全松手，并观察大球的加速与冲刺退出，本文不声称舒适。
 
 ## 8. 所有者已定 / 仍开放
 
-已定：预设 B 的松手/反推/转向手感；起步 95% ≈ 0.7 s；尺度不变（D0 基准）；转向漂移开；爬升门同尺度；静止后下坡（0.3 s、坡角 >2°，滚动阻力照常作用，C26/C27 顺坡朝向不滑保持现状，owner 2026-11-17）；`growthSpeedFactor` 删除（PARITY M01 的「大球更慢」分歧随之消除）。仍开放：试玩后调 `acceleration` / `rolling` / `grip` / `braking`；是否要「动量爬升」（门读实际速度，需重做 v2 验收）。
+已定：WLK A2 匀滚阻、杆量限速，保留 D0 缩放、两套起步推力、转向漂移及现有坡滑闩锁。仍开放：是否对齐原作按球径变化的绝对速度、是否使用动量爬升；不在本次验收范围。

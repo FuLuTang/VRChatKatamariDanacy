@@ -344,6 +344,7 @@ namespace VRCKatamari.Editor.LevelBuild
         [Serializable]
         public class PropEntry
         {
+            [NonSerialized] public bool noBallCollision;
             public string itemId;
             public string def;
             public string kind;
@@ -412,6 +413,7 @@ namespace VRCKatamari.Editor.LevelBuild
         [Serializable]
         public class StructureEntry
         {
+            [NonSerialized] public bool noBallCollision;
             public string id;
             public string kind;
             public string role;
@@ -3590,6 +3592,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
 
+            SyncAreaCollision(host, doc, exemptFromField, report);
             SyncAbsorbAudio(host, doc, referencePlacementPath, report);
             SyncCatchNames(host, doc, referencePlacementPath, report);
 
@@ -3701,6 +3704,9 @@ namespace VRCKatamari.Editor.LevelBuild
                     {
                         continue;
                     }
+
+                    // Keep the visible body and player collider; the ball reads only this bake.
+                    if (structure.noBallCollision) continue;
 
                     if (string.Equals(structure.role, "boundary", StringComparison.Ordinal))
                     {

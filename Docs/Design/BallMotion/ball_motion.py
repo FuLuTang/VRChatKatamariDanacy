@@ -12,6 +12,24 @@ import math
 REVERSE_SPEED_FRACTION = 0.5
 
 
+# WLK REROLL+ v20230608，sGetMaxSpeedRate 0x9835b7–0x98365b。
+NO_FORWARD_INTENT = 1e-9
+HALF_SPEED_START = 0.29
+FULL_SPEED_START = 0.99
+HALF_SPEED_RATE = 0.4
+
+
+def drive_speed_fraction(forward):
+    if not math.isfinite(forward):
+        return 0.0
+    power = abs(forward)
+    if power < NO_FORWARD_INTENT:
+        return 0.0
+    if power < HALF_SPEED_START:
+        return HALF_SPEED_RATE * (power / HALF_SPEED_START)
+    return HALF_SPEED_RATE if power < FULL_SPEED_START else 1.0
+
+
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
@@ -39,13 +57,13 @@ class MotionConfig:
     max_radius_m: float = 2.0
     # Length-type values below are at the START diameter D0 and scale with
     # s = D / D0 (= radius / base_radius_m); time constants do not scale.
-    # Owner 2026-11-17, Docs/Design/BallMotor/BALL_INERTIA.md; all PROVISIONAL.
+    # Owner 2026-11-20, Docs/Design/BallMotor/BALL_INERTIA.md; all PROVISIONAL.
     max_speed_mps: float = 4.0
     acceleration_mps2: float = 7.5
-    braking_mps2: float = 6.0  # thrust opposing the forward velocity only
-    friction_per_s: float = 0.9
-    rolling_resistance_mps2: float = 1.3  # linear coast-down, only with no forward input
-    lateral_grip_per_s: float = 2.0  # extra exponential decay of sideways velocity
+    braking_mps2: float = 8.0  # thrust opposing the forward velocity only
+    friction_per_s: float = 0.0
+    rolling_resistance_mps2: float = 1.9  # linear coast-down, only with no forward input
+    lateral_grip_per_s: float = 2.9  # extra exponential decay of sideways velocity
     turn_rate_degps: float = 110.0
     max_lateral_mps: float = 1.2
     stuck_timeout_s: float = 2.0
@@ -133,10 +151,16 @@ class BallSimulator:
         # leaves the old direction behind as lateral velocity (drift).
         vf = s.vx*fx + s.vz*fz
         vl = s.vx*lx + s.vz*lz
-        has_input = abs(fwd) >= 1e-9
-        if has_input:
-            # Input against the current forward velocity uses the brake rate.
-            rate = (c.braking_mps2 if vf*fwd < 0 else c.acceleration_mps2) * k
+        drive_fraction = drive_speed_fraction(fwd)
+        has_input = drive_fraction > 0.0
+        drive_sign = -1.0 if fwd < 0 else 1.0
+        target_speed = speed_cap * drive_fraction
+        if drive_sign < 0:
+            target_speed *= REVERSE_SPEED_FRACTION
+        along_drive = vf * drive_sign
+        above_target = has_input and along_drive > target_speed
+        if has_input and not above_target:
+            rate = (c.braking_mps2 if along_drive < 0 else c.acceleration_mps2) * k
             vf += fwd*rate*dt
         vf *= math.exp(-c.friction_per_s*dt)
         vl *= math.exp(-(c.friction_per_s + c.lateral_grip_per_s)*dt)
@@ -146,9 +170,12 @@ class BallSimulator:
             vl = max(vl, min(vl + side_in*c.max_lateral_mps*k*dt, c.max_lateral_mps*k))
         elif side_in < 0:
             vl = min(vl, max(vl + side_in*c.max_lateral_mps*k*dt, -c.max_lateral_mps*k))
-        if not has_input:
-            # Rolling resistance: linear, floors at zero, never reverses.
-            vf = math.copysign(max(0.0, abs(vf)-c.rolling_resistance_mps2*k*dt), vf)
+        if not has_input or above_target:
+            floor = target_speed if above_target else 0.0
+            if abs(vf) > floor:
+                vf = math.copysign(max(floor, abs(vf)-c.rolling_resistance_mps2*k*dt), vf)
+        elif vf * drive_sign > target_speed:
+            vf = drive_sign * target_speed
         vf = clamp(vf, -REVERSE_SPEED_FRACTION*speed_cap, speed_cap)
         planar_speed = math.hypot(vf, vl)
         if planar_speed > speed_cap:

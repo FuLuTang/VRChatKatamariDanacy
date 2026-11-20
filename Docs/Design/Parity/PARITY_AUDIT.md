@@ -49,9 +49,9 @@
 | 支撑图（`rests_on`） | **堆叠逻辑无公开证据**：专利也不讲堆叠，官方图鉴只有反证（`PROP_BEHAVIOURS.md` §5.1）；但原作数据侧有**单父指针** `parentProp.monoControlIndex`（1,970 条子件 / 1,082 个父件 / 链深 13 层，§10.4）——那就是原作表达「组」的唯一形式 | `support`/`stackedOn` 只喂校验器；运行时 `PropFallHost`（单父指针 + 复检 + 坠落）已写，待 Unity 验证与场景接线 | 原作**逻辑**未知（拿得到数据、拿不到逻辑，§10.4/P18）；按原作的父指针形状做，不做支撑计数 | restore（**用原作的父指针形式**；owner 2026-11-16 确认「子件坠落、不带」，v1 设计见 `PROP_BEHAVIOURS.md` §10.9 / `OPEN_DECISIONS` (s)） | owner 2026-11-16 |
 | 方向箭头 | 初代 REROLL 无指向 HUD；WLK REROLL+ 新增导航指示 `NextArrow`（官方说明为帮玩家找目标物和路障，屏幕空间图标、按关卡/区域条件显示；实际样式未证）（`~/KatamariRef/wlkrr/il2cpp/dump.cs`，`/tmp/absorb_research.md` §5） | 推进/驾驶朝向箭头，相对球心前上方固定，随语义球径等比例缩放，设置可关 | 含义不同：我方指推进方向是 VR 操控辅助，不复刻导航 | 保留我方（owner 决定箭头保持推进方向含义） | owner 2026-11-19 |
 | 吸物显示物品名 | 原作屏幕左下角圆框 + 单独相机渲染的转动模型 + 逐字打出名字，每字 2 帧、停 105 帧（WLK `UIMonoNameDisplay`/`UILastCatchMonoDisplay`，`.work/notes/research/wlk_reroll_mining.md` §3） | 跟随视角 HUD（视线下方 15°、偏左 12°）+ 借用被吸物件网格的副本，计时照原作 | VR 没有屏幕角落；额外相机每帧多一遍渲染 | 保留适配（owner 已要求此功能，形态为 VR 改编） | owner 2026-11-19 |
-| 物件按尺寸/区域关闭碰撞 | WLK 逐实例 `NoHitSize`（「ヒットを見なくなるサイズ」，球达到该尺寸后不再检查碰撞；蟹座类物件如樱花树、庭园树、门、栅栏有值，部分=1 即始终无碰撞）；初代逐实例 `hitOnAreaNo`（蟹座 49 个大件=3）（`.work/notes/reports/collision_fix.md`） | 不可吸物件一律实心挡路；导入丢了 `hitOnAreaNo` | `none -> restore` | restore：待设计「不再挡路的尺寸」字段并实现（先等初代原关数据确认） | owner 2026-11-19 |
+| 物件按尺寸/区域关闭碰撞 | WLK 逐实例 `NoHitSize`（「ヒットを見なくなるサイズ」，球达到该尺寸后不再检查碰撞；蟹座类物件如樱花树、庭园树、门、栅栏有值，部分=1 即始终无碰撞）；初代 REROLL（PC 2019.01.31）逐实例 `s8MonoHitOnAreaNo` 传入原生模拟，区域匹配规则是强推断（蟹座活动区域 2，普通实例 46 件写 3、Minivan 写 2） | 已按初代 `hitOnAreaNo` 还原：异区实例不产生挡路或支撑，不改渲染和可吸性；待 Unity、VR 复测 | WLK `NoHitSize` 只作证据，本轮不实现 | restore | owner 2026-11-20 |
 | `DUMMYHIT` 隐形挡块 | 初代蟹座 12 个 `DUMMYHIT*` 实例有位置与吸附门槛，没有形状（例 `DUMMYHIT01_A` 在地形缝旁 (−8.34,−0.93,5.62)） | `original_defs.json` 导出了位置但无代码使用 | `none -> restore`：缺形状数据，需从初代原关或推断补形状 | restore（待初代数据） | owner 2026-11-19 |
-| 静态固体的接触形状（`structures.solids`） | 原作静态碰撞跟模型形状：参考关卡 35 条 scenery 固体，18 个凸包、17 个能当 box；晒衣架范围内原作碰撞无三角（`Docs/Design/Levels/_ref_cancer/placement.v2.json`、`REF_STAGE_VIEW.md`） | 电机静态表只认 OBB。凸包占自身 AABB < 0.6 的固体按模型三角网拆成 ≤4 个子盒（`structures.solids[].parts`，`LEVEL_FORMAT_V2` §4）：蟹座 10 件，静态 OBB 35 → 65；晒衣架离地 5–30 cm 只挡足印 3–6%（原单盒 100%）。其余凸包仍装箱成单个 OBB，导入器逐件打 note | 真凸包/球/胶囊需要一条静态非 OBB 接触通道（另需「只支撑不阻挡」通道）；子盒拆分是近似 | restore（轻量版已做 2026-11-19；真凸包通道待 Unity 线框实看后再定） | owner 2026-11-19 |
+| 静态固体的接触形状（`structures.solids`） | 原作静态碰撞跟模型形状：参考关卡 35 条 scenery 固体，18 个凸包、17 个能当 box；晒衣架范围内原作碰撞无三角（`Docs/Design/Levels/_ref_cancer/placement.v2.json`、`REF_STAGE_VIEW.md`） | 电机静态表只认 OBB。凸包占自身 AABB < 0.6 的固体按模型三角网拆成 ≤4 个子盒（`structures.solids[].parts`，`LEVEL_FORMAT_V2` §4）：蟹座 10 件，几何拆分为 65 个盒；晒衣夹 4 个子盒因异区不注册，实际预期 61 个静态 OBB。其余凸包仍装箱成单个 OBB，导入器逐件打 note | 真凸包/球/胶囊需要一条静态非 OBB 接触通道（另需「只支撑不阻挡」通道）；子盒拆分是近似 | restore（轻量版已做 2026-11-19；真凸包通道待 Unity 线框实看后再定） | owner 2026-11-19 |
 | 推墙爬升与台阶阈值 | WLK USA手册印刷p.23/PDF25约同球大小（A，续作定性）；REROLL独立坡体力/时长/尺寸（逆向补丁C）；初代官方冲刺帮助陡坡（A）。原作精确坡墙角、cap/速率未知；见ORIGINAL_CLIMB_OBSERVATIONS §0.1 | 接触求解唯一位置权威；45–60°体力坡爬，无高度cap、平地满、大球减耗，>60°墙维持1.5D、T_climb=2.8125s；速度门保留，dash增速减耗 | 恢复坡/墙分离结构；60°、消耗与速度公式为工程PROVISIONAL，不声称原作精确复现 | restore（owner2026-11-17）：体力坡爬、60°试验分界、墙1.5D保持；[TERRAIN_CLIMB §0.1](../BallMotor/TERRAIN_CLIMB.md#01-体力坡爬2026-11-17-当前决定)，待Unity验收 | owner2026-11-17 |
 | 撞墙掉已吸附道具 | 高速撞到卷不动的东西或**墙** ⇒ 块会崩、变小（Bandai PS2 作品页，官方，定性；`ORIGINAL_CLIMB_OBSERVATIONS` §7 附注）；碰墙即算碰撞、连**尝试爬墙**都会掉吸附物（REROLL 社区 S3/S4，D 级） | 碰撞只做推出 + 去掉墙内速度分量（`ResolveTerrainPenetration`、v2 接触推挤），**没有任何「件脱落」通道**：吸附物只有 attach/hidden 两态 | `none -> restore`：冲击门与掉落量都无来源，需要一次独立设计（「撞墙掉落」），不是调参 | undecided（待认领；`TERRAIN_CLIMB.md` §10 记录在案） | lead 2026-11-16 |
 | 梯子 / 绳索类表面 | 墙上有梯子、绳或台阶时可以**无限爬**（多来源一致：REROLL S2、TV Tropes S5、OUAK 帖 S13、日文攻略 S15/S16，见 `ORIGINAL_CLIMB_OBSERVATIONS` §3）；共识读法是「普通墙封顶、梯子例外」 | 地形数据里**没有「可爬/无限爬」这类标记**，`terrain` 只有三角面 + chunk + zone，没有任何 surface 类别位；也没有对应机制 | 无数据表达方式：原作没把「哪面是梯子」写成我们能读的字段，造一个新类别等于编原作规则 | keep（v1 不做；要做需先加地形类别，`TERRAIN_CLIMB.md` §10） | lead 2026-11-16 |
@@ -112,10 +112,10 @@
 | F6 | 内容体量 | 单关实例 523–3955；单关每 **0.1 m** 尺寸档 20–180 件（中位 ~90）；覆盖 0.30→1.25 m 需 **600–900** 个可吸实例 | `object dump` 28,698 行；`reroll_numbers.md` §2.2 | 数据挖掘 |
 | F7 | 实例有真实 XYZ | 28,698 行中 **13,723** 行非零；MAS1 **652/654**；坐标是**米、area 局部**（MAS1 是一件 ~4×2.3×6 m 的屋子）；只有 `loading area 0` 有坐标；**没有旋转、没有缩放** | `object dump.position`；`DATAMODEL_NOTES.md` §0/§3 | 数据挖掘 |
 | F8 | 碰撞与行为结构性事实 | 球有**碰撞网格**、物件有**包围盒 + vault 点**、每物件每 tick 一个矩阵；物件类型表带 `pathSpeedIndex`、`num vault pts`、`playAnimNo` | Practice Mod 功能表；`name_props`；`object dump` | 源码 + 数据挖掘 |
-| F9 | 运动常数**不存在** | 速度上限、加速度、转向、坡度、攀爬阈值：公开源码里**一个数字都没有** | `reroll_numbers.md` §6.2 | — |
+| F9 | 初代公开源码不含运动常数 | WLK REROLL+ Royal Reverie v20230608 的反汇编可另作证据；已用于对照杆量、加速、滚阻和坡重力 | `reroll_numbers.md` §6.2；[BALL_INERTIA](../BallMotor/BALL_INERTIA.md#2-模型现行) | 初代资料缺项；WLK 反汇编 |
 | F10 | 时限单位未证实 | `GAME_TIME` = 4（MAS1），值域 4–30，教程 90；按分钟读则 240 s，**未证实** | `reroll_numbers.md` §6.1 | 推断 |
 
-### 1.3 分叉：位置有、旋转/缩放没有、物理常数没有
+### 1.3 分叉：位置有、旋转/缩放缺失、物理常数部分可得
 
 原来的二选一（"逐物件 XYZ 可得" vs "只有参数+内容+区域描述"）被数据推翻了一半，改成三档：
 
@@ -123,7 +123,7 @@
 |---|---|---|---|
 | **A. 位置 + 尺寸 + 区域 + 类别**（MAS1、Cancer、Cygnus…19 关的 area 0） | `object dump` 有非零 `position` 与 `f32Volume`，类型表有 `Req Pickup Size`/`Volume`/`penalty` | **近 1:1 布局**：可把 652 件按真实坐标摆进灰盒；旋转需自定（`DATAMODEL_NOTES.md` §5.1） | 内容密度、成长曲线、门槛、台阶/爬墙在**真实布局**上的可玩性；"我们的校验器拒绝哪些件" |
 | **B. 只有参数 + 内容 + 区域描述**（多 area 关的 area≥1，13/32 个 area 全零） | 同上但无坐标 | **参数/内容/规则对齐，布局手摆** | 关卡节奏、目标/上限比例、星级、时限；不能量"通道宽度/可达性" |
-| **C. 物理常数** | 无公开来源（F9） | **无法对齐**，只能拿手册/专利锚点做定性对照 | 只能证明"我们的值是我们选的"；不许写"还原原作手感" |
+| **C. 物理常数** | 初代资料缺项；WLK 反汇编已有部分证据（F9） | **可对齐惯性曲线形状** | 不等于转向、爬升、绝对速度或实际手感一致 |
 
 **结论**：MAS1 属 A 档（99.7% 有坐标），所以种子语料用 MAS1；`Make Cancer` 也属 A 档（523/523）但**没有增长曲线来源**，作为第二语料只验内容与尺度，不验成长（§6.2）。
 
@@ -149,8 +149,8 @@
 | 指标 | 定义 | 原作侧（证据） | 我方侧 | 单位 | gap 意味着什么 |
 |---|---|---|---|---|---|
 | `M01` 最大平面速度 | 满推稳态速度 | **无公开数值**（F9） | `maxSpeedMps=4`（`README.md:298`） | m/s | 无法校准；原作的 Vmax 随体积增大（专利），我们现在也随 D/D0 增大（2026-11-17 起按球径缩放，`growthSpeedFactor` 已删除，见 `BALL_INERTIA.md`） |
-| `M02` 加速度/刹车 | 到速与停车的快慢 | **无数值**（F9）；有定性：专利行进参数含惯性、手册有显式 Brake 输入、5 cm 球录像起停 ≤0.2 s（`ORIGINAL_BALL_INERTIA.md`，录像弱） | 现行惯性预设：加速 7.5 / 反推刹车 6 m/s²（×D/D0）；滚动阻力 1.3 m/s²（×D/D0），见 [BALL_INERTIA §2](../BallMotor/BALL_INERTIA.md#2-模型现行) | m/s² | 数值无法按原版校准；惯性预设 B 已定，缓坡另按方案 A 保留滚动阻力（owner 2026-11-17），不是待选项 |
-| `M03` 坡面切向重力 | 坡上是否下滑 | 有打滑/失控的**定性**证据（`/tmp/orig_physics/report.md` §3.1） | `rampTangentialGravityScale=1`，静止 0.3 s 后且坡角 >2° 才施加下坡重力，仍受滚动阻力限制（[BALL_INERTIA §4](../BallMotor/BALL_INERTIA.md#4-静止后下坡)） | — | owner 2026-11-17 认可 C26 2°、C27 5° 顺坡朝向不滑，方案 A 保持滚动阻力照常作用；不是待选项 |
+| `M02` 加速度/刹车 | 到速与停车的快慢 | WLK `sAcc`、`sResistance`、`sGetMaxSpeedRate`（v20230608 反汇编）：杆量 0.29/0.99、平台 40%，松杆近匀减速，原作推进时也扣滚阻 | WLK A2：加速 7.5（地图 0）/ 5（StoryMode），刹车 8、松杆滚阻 1.9（长度量 ×D/D0），纵向黏滞 0；见 [BALL_INERTIA](../BallMotor/BALL_INERTIA.md#2-模型现行) | m/s²、1/s、倍率 | owner 2026-11-20：对齐滑行曲线与杆量限速；保留工程起步推力、绝对速度及推进时不扣滚阻 |
+| `M03` 坡面切向重力 | 坡上是否下滑 | 有打滑/失控的**定性**证据（`/tmp/orig_physics/report.md` §3.1） | `rampTangentialGravityScale=1`，静止 0.3 s 后且坡角 >2° 才施加下坡重力，仍受滚动阻力限制（[BALL_INERTIA §4](../BallMotor/BALL_INERTIA.md#4-静止后下坡)） | — | owner 2026-11-17 认可 C26/C27 顺坡不滑；A2 下 C28 10° 顺坡也不滑，横向诊断仍保留 |
 | `M04` 滚/坡/墙分界角 | 接触角分类 | 无原作分界角；66.6°只是逆向坡体力消耗饱和（C） | RIDE45°（+既有0.5°容差）、坡/墙60°试验分界 | deg | owner2026-11-17决定；60°不是原作测值 |
 | `M05` 爬墙高度上限 / 坡体力 | 墙能升高多少、坡何时回滑 | WLK手册约1D（印刷p.23/PDF25，A定性）；Jones画面0.73D可上/1.31D未上（C）；REROLL坡独立体力（C） | 墙H_cap=1.5·(2r+λL)保持；45–60°坡无高度cap、耗尽滑回 | ×D / stamina | owner2026-11-17：坡体力制、墙1.5D保留，工程PROVISIONAL，见TERRAIN_CLIMB §0.1 |
 | `M06` 90° 爬升速度 | 满推贴墙的上升速率 | **无**（F9，只有"极慢地蹭"的体感） | `climb_speed`（T_climb=2.8125 s，所有者 2026-11-17 试玩后提速 60%）→ 起始球 0.183 m/s | m/s | 数值是我方设计；owner 2026-11-17 在 C06 认可当前慢爬，不改速度 |
@@ -230,7 +230,7 @@
 | H9 | 5 cm 球在我们引擎里会被米制常数淹没 | **SUSPECTED**（算得出，未实跑） | 本文 `S03`：7 个常数里 5 个 >10% 球径；`CONTACT_MODEL_V2.md` §3.5 的 `cap_margin=0.02` 在 5 cm 球上是 40% | `S03`/`S04` |
 | H10 | 30 Hz vs 50 Hz 会改变贴墙/接缝手感 | **SUSPECTED** | 步长比 1.67×；`M09` 的 0.25D 钳位与子步数（`T03`）都按时长算 | `T01`/`T03` |
 | H11 | 相机 37° vs 60° 会让"看见前方多少"差很远 | **SUSPECTED** | `L03`；`README.md:248` 讨论过 60° 下球占画面下缘 | `L03` |
-| H12 | 原作速度/加速度/坡度常数可以对齐 | **UNKNOWN（不可）** | F9：无公开数值 | `M01`/`M02`/`M06` |
+| H12 | 原作速度/加速度/坡度常数可以对齐 | **部分** | WLK 有惯性反汇编证据（F9）；绝对速度、坡/墙爬升常数未对齐 | `M01`/`M02`/`M06` |
 | H13 | 原作是否按尺寸阈值换区 | **UNKNOWN** | `swirls` 是"播特效的尺寸点"，真正换区机制未在公开源码出现（`reroll_datamodel.md` §4） | `L01` |
 | H14 | 时限单位 | **UNKNOWN** | F10 | `L02` |
 | H15 | 原作堆叠的规则 | **UNKNOWN**（数据侧只有父指针，逻辑未公开） | `PROP_BEHAVIOURS.md` §5.1、§10.4（P18：拿得到数据、拿不到逻辑） | `C05` |
@@ -424,7 +424,7 @@
 
 1. **旋转与缩放**：dump 没有（F7）。→ 重建必须自定朝向；`ref-level-builder` 的 placement 里应写"朝向由我们选"。
 2. **area≥1 的坐标**：13/32 个 area 全零。→ 多 area 关只能做 B 档审计。
-3. **物理常数**：无公开来源（F9）。→ `M01`/`M02`/`M06` 永远是"原作未知"；除非用户愿意在自己机器上跑一次运行时 hook（本轮禁区）。
+3. **物理常数**：WLK 反汇编支持 `M02` 的曲线形状对照；`M01` 的绝对速度与 `M06` 的爬升速度不在本次对齐范围。
 4. **`pathSpeedIndex` / vault 点的语义**：字段存在、取值存在（`pathSpeedIndex` 11 个取值，`2` 占 80.2%，含 1 个坏值 `t`；vault 点 0/2/3/8 个），但"index 2 是什么意思"未知——只能判它是**速度档**（`[推断]`，原版没给单位）。→ `C04` 只报"有这些字段"，不报"有 574 个移动件"。
 5. **随机位置组**：`position=0` 的行属于 `randomLocGroup + spawn chance(x/256)` 表（202 行），本语料未展开。→ 多 area 关的实例数会低估。
 6. **`Req Pickup Size` 的 mm 取整**：原作门槛取整，我们的 `D_req` 不取整；语料里存原值（mm），比较时用浮点。差 <1 mm。

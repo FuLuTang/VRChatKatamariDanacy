@@ -2,7 +2,7 @@ import math
 import unittest
 
 from Docs.Design.BallMotion.ball_motion import (
-    BallSimulator, MotionConfig, Plane, radius_from_growth,
+    BallSimulator, MotionConfig, Plane, drive_speed_fraction, radius_from_growth,
 )
 
 
@@ -54,7 +54,7 @@ class BallMotionTests(unittest.TestCase):
         self.assertTrue(sim.state.out_of_bounds)
         self.assertEqual((sim.state.x, sim.state.z), (0.0, 0.0))
 
-    # ---- Inertia model (preset B defaults; Docs/Design/BallMotor/BALL_INERTIA.md) ----
+    # ---- Inertia model (WLK A2 defaults; Docs/Design/BallMotor/BALL_INERTIA.md) ----
 
     @staticmethod
     def _run(sim, seconds, **inputs):
@@ -71,6 +71,32 @@ class BallMotionTests(unittest.TestCase):
         self.assertTrue(all(b >= a-1e-12 for a, b in zip(speeds, speeds[1:])))
         self.assertLessEqual(max(speeds), sim.config.max_speed_mps+1e-9)
 
+    def test_forward_intent_uses_the_wlk_stick_thresholds(self):
+        for power, fraction in ((0.145, 0.2), (0.29, 0.4), (0.5, 0.4),
+                                (0.989, 0.4), (0.99, 1.0), (1.0, 1.0), (-0.5, 0.4)):
+            with self.subTest(power=power):
+                self.assertAlmostEqual(drive_speed_fraction(power), fraction)
+                sim = BallSimulator()
+                self._run(sim, 3.0, forward=power)
+                self.assertAlmostEqual(sim.state.vz, (4.0 if power > 0 else -2.0)*fraction)
+        self.assertEqual(drive_speed_fraction(0.0), 0.0)
+
+    def test_reducing_push_rolls_down_to_target_without_a_jump(self):
+        for sign, initial, target in ((1, 4.0, 1.6), (-1, 2.0, 0.8)):
+            sim = BallSimulator(MotionConfig(fixed_dt_s=0.02))
+            self._run(sim, 1.2, forward=sign)
+            self.assertAlmostEqual(sign * sim.state.vz, initial)
+            for i, speed in enumerate(self._run(sim, 1.4, forward=sign*0.5), 1):
+                self.assertAlmostEqual(speed, max(target, initial - i*0.038))
+
+    def test_half_reverse_brakes_before_using_the_reverse_target(self):
+        sim = BallSimulator(MotionConfig(fixed_dt_s=0.02))
+        sim.state.vz = 4.0
+        for i, speed in enumerate(self._run(sim, 1.0, forward=-0.5), 1):
+            self.assertAlmostEqual(speed, 4.0 - i*0.08)
+        self._run(sim, 0.6, forward=-0.5)
+        self.assertAlmostEqual(sim.state.vz, -0.8)
+
     def test_release_coasts_monotonically_to_rest_without_reversing(self):
         sim = BallSimulator()
         self._run(sim, 8.0, forward=1)
@@ -81,6 +107,7 @@ class BallMotionTests(unittest.TestCase):
         self.assertTrue(all(b <= a+1e-12 for a, b in zip(speeds, speeds[1:])))
         self.assertGreaterEqual(min(speeds), 0.0)
         self.assertEqual(speeds[-1], 0.0)
+        self.assertAlmostEqual(speeds[0], 4.0 - 1.9*sim.config.fixed_dt_s)
         # A visible glide, not an instant stop: still moving 0.5 s after release.
         self.assertGreater(speeds[int(0.5/sim.config.fixed_dt_s)], 1.0)
 
@@ -137,8 +164,8 @@ class BallMotionTests(unittest.TestCase):
         for r in results:
             self.assertAlmostEqual(r[0], results[0][0], places=6)
             self.assertAlmostEqual(r[1], results[0][1], places=6)
-        # Owner 2026-11-17: >= 95 % of the cap in about 0.7 s.
-        self.assertAlmostEqual(results[0][1], 0.70, delta=0.05)
+        # 地图 0：7.5 m/s²，0.02 s 步进。
+        self.assertAlmostEqual(results[0][1], 0.52, delta=0.05)
 
     def test_release_glide_in_diameters_is_scale_invariant(self):
         glides = []
@@ -152,9 +179,8 @@ class BallMotionTests(unittest.TestCase):
             glides.append((sim.state.z - z0) / d)
         for g in glides:
             self.assertAlmostEqual(g, glides[0], places=6)
-        # The reference config's D0 is 1 m, so 2.26 m of glide = 2.26 diameters here
-        # (7.6 diameters for the 0.2997 m start ball).
-        self.assertGreater(glides[0], 2.0)
+        # 参考配置 D0 = 1 m；滑行 4.17 m = 4.17 个球径。
+        self.assertAlmostEqual(glides[0], 4.17, delta=0.01)
 
     def test_terminal_speed_scales_with_diameter_and_turn_rate_does_not(self):
         small, big = self._scaled(1.0), self._scaled(5.0)

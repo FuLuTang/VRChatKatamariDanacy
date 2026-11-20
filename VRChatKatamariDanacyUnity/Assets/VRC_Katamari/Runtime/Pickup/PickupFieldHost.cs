@@ -178,6 +178,9 @@ namespace VRCKatamari.Pickup
         [Header("Props: one entry per prop, index-aligned")]
         [SerializeField] private Transform[] propTransforms;
         [SerializeField] private string[] itemIds;
+        // Baked IDs, not row offsets: editor pickup sync may reorder the rows.
+        [SerializeField] private string[] areaCollisionOffItemIds;
+        private bool[] areaCollisionOffRows;
         [SerializeField] private string[] kinds;
         // Optional per-prop scream id (the original's object voice), indexed exactly like
         // itemIds; 0 = no scream. The serialized name predates the meaning and is kept.
@@ -490,6 +493,7 @@ namespace VRCKatamari.Pickup
             ResolveGrowthMm3();
             MarkSubmittable();
             PreparePropRows();
+            ResolveAreaCollisionRows();
             BuildSpatialIndex();
             ReportPropDataProblems();
             seenEvents = 0;
@@ -885,6 +889,31 @@ namespace VRCKatamari.Pickup
             {
                 growthFallbackRows = propCount - propGrowthMm3.Length;
             }
+        }
+
+        private void ResolveAreaCollisionRows()
+        {
+            if (areaCollisionOffItemIds == null || areaCollisionOffItemIds.Length == 0) return;
+            areaCollisionOffRows = new bool[propCount];
+            int resolved = 0;
+            int unresolved = 0;
+            for (int i = 0; i < areaCollisionOffItemIds.Length; i++)
+            {
+                string id = areaCollisionOffItemIds[i];
+                bool found = false;
+                for (int row = 0; row < propCount; row++)
+                {
+                    if (string.IsNullOrEmpty(id) || itemIds[row] != id) continue;
+                    found = true;
+                    if (!areaCollisionOffRows[row]) resolved++;
+                    areaCollisionOffRows[row] = true;
+                }
+                if (!found) unresolved++;
+            }
+            string message = "[pickup] area collision off: " + areaCollisionOffItemIds.Length +
+                " ids, " + resolved + " rows resolved, " + unresolved + " unresolved";
+            if (unresolved > 0) Debug.LogError(message);
+            else Debug.Log(message);
         }
 
         private int LengthOfIds()
@@ -2286,6 +2315,7 @@ namespace VRCKatamari.Pickup
             for (int k = 0; k < nearCount; k++)
             {
                 int i = nearRows[k];
+                if (areaCollisionOffRows != null && areaCollisionOffRows[i]) continue;
                 // Absorbed and hidden props are no longer walls or floors. A row with no
                 // transform or no usable volume has no box to build, so it is skipped too
                 // (not because it is unsubmittable: a prop the motor would refuse as a

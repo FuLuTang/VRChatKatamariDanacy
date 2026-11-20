@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
+  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -877,6 +877,7 @@ MonoBehaviour:
   _udonSharpBackingUdonBehaviour: {fileID: 146237941}
   station: {fileID: 146237937}
   input: {fileID: 1630179827}
+  vrInput: {fileID: 0}
   roundController: {fileID: 0}
   seatEye: {fileID: 146237942}
   ballInteract: {fileID: 0}
@@ -884,6 +885,7 @@ MonoBehaviour:
   exitPoint: {fileID: 0}
   exitHintText: {fileID: 0}
   exitPanelRoot: {fileID: 0}
+  panelRoot: {fileID: 0}
   scaleRiderWithBall: 0
   eyeHeightFilterHz: 5
   eyeHeightStepFraction: 0.005
@@ -5389,16 +5391,8 @@ MonoBehaviour:
   pushYawSource: {fileID: 1717063597}
   rideStation: {fileID: 146237940}
   roundController: {fileID: 0}
+  settings: {fileID: 0}
   cueRoot: {fileID: 1108361071}
-  gapBaseMeters: 0.35
-  gapPerDiameter: 0.45
-  hoverAboveBallTopMeters: 0.08
-  lengthBaseMeters: 0.1
-  lengthPerDiameter: 0.4
-  minLengthMeters: 0.05
-  maxLengthMeters: 2.5
-  bobAmplitudeMeters: 0.025
-  bobHz: 0.25
 --- !u!114 &1146045046
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6845,15 +6839,16 @@ MonoBehaviour:
     PrefabModifications: []
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1524211378}
+  performanceDiagnostics: {fileID: 0}
   fixedStepSeconds: 0.02
   maxStepsPerFrame: 5
   stuckTimeoutSeconds: 1.5
   maxSpeedMps: 4
   accelerationMps2: 7.5
-  brakingMps2: 6
-  frictionPerSecond: 0.9
-  rollingResistanceMps2: 1.3
-  lateralGripPerSecond: 2
+  brakingMps2: 8
+  frictionPerSecond: 0
+  rollingResistanceMps2: 1.9
+  lateralGripPerSecond: 2.9
   turnRateDegreesPerSecond: 110
   maxLateralMps: 1.2
   groundPlaneNormal: {x: 0, y: 1, z: 0}
@@ -6897,6 +6892,7 @@ MonoBehaviour:
   debugTurn: 0
   debugLateral: 0
   debugMenuOpen: 0
+  settings: {fileID: 0}
   debugTraceItemId: 
   propProxyContactEnabled: 0
   rampSlabThicknessM: 0.04

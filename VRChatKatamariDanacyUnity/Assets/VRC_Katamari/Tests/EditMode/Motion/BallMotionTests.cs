@@ -19,7 +19,7 @@ namespace VRCKatamari.Tests
     /// exp(-(friction+grip)*dt), rolling resistance per step, every length-type
     /// value times sizeScale) or invariants, never re-runs of the implementation.
     /// The harness defaults are the inertia values at D0 (BALL_INERTIA.md,
-    /// owner 2026-11-17, all PROVISIONAL), sizeScale 1 and are passed explicitly; none of them is a project
+    /// owner 2026-11-20, all PROVISIONAL), sizeScale 1 and are passed explicitly; none of them is a project
     /// constant. LegacyHarness() holds the pre-inertia comparison values.
     /// </summary>
     public class BallMotionTests
@@ -38,10 +38,10 @@ namespace VRCKatamari.Tests
             public float SizeScale = 1f;
             public float MaxSpeedMps = 4f;
             public float AccelerationMps2 = 7.5f;
-            public float BrakingMps2 = 6f;
-            public float FrictionPerSecond = 0.9f;
-            public float RollingResistanceMps2 = 1.3f;
-            public float LateralGripPerSecond = 2f;
+            public float BrakingMps2 = 8f;
+            public float FrictionPerSecond = 0f;
+            public float RollingResistanceMps2 = 1.9f;
+            public float LateralGripPerSecond = 2.9f;
             public float TurnRateDegreesPerSecond = 110f;
             public float MaxLateralMps = 1.2f;
 
@@ -83,16 +83,13 @@ namespace VRCKatamari.Tests
         [Test]
         public void SteadyForwardInputReachesTheSizeScaledSpeedCap()
         {
-            // One step from rest adds 7.5 * (1/120) along +Z and then damps it by
-            // exp(-0.9/120): 0.0625 * 0.9925280 = 0.0620330 m/s.
+            // A2 满推一步增加 7.5 / 120，纵向无黏滞。
             BallHarness ball = new BallHarness();
             Assert.IsTrue(ball.Step(1f, 0f, 0f, FixedStepSeconds));
-            Assert.AreEqual(0.0620330f, ball.Velocity.z, 1e-6f);
+            Assert.AreEqual(0.0625f, ball.Velocity.z, 1e-6f);
             Assert.AreEqual(0f, ball.Velocity.x, 0f);
 
-            // The clamped map's fixed point is the cap itself: (4 + 7.5/120) *
-            // exp(-0.0075) = 4.0321 > 4, so 4 m/s is terminal and not the
-            // friction equilibrium. Nothing in the ramp may exceed the cap.
+            // 满推速度单调趋向上限，不得超出。
             float previous = ball.Speed();
             for (int i = 0; i < 1200; i++)
             {
@@ -109,6 +106,7 @@ namespace VRCKatamari.Tests
             // step of discretisation below the continuous a/k = 7.5/0.9 = 8.333.
             BallHarness uncapped = new BallHarness();
             uncapped.MaxSpeedMps = 10f;
+            uncapped.FrictionPerSecond = 0.9f; // 单独覆盖可选黏滞路径
             for (int i = 0; i < 1200; i++) Assert.IsTrue(uncapped.Step(1f, 0f, 0f, FixedStepSeconds));
             Assert.AreEqual(8.302f, uncapped.Speed(), 5e-3f);
 
@@ -119,22 +117,84 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(12f, grown.Velocity.z, 1e-4f);
         }
 
+        [TestCase(0.145f, 0.2f)]
+        [TestCase(0.29f, 0.4f)]
+        [TestCase(0.5f, 0.4f)]
+        [TestCase(0.989f, 0.4f)]
+        [TestCase(0.99f, 1f)]
+        [TestCase(1f, 1f)]
+        [TestCase(-0.5f, 0.4f)]
+        public void ForwardIntentCapsThePlanarStepAtWlkStickThresholds(float input, float fraction)
+        {
+            Assert.AreEqual(fraction, BallMotionMath.DriveSpeedFraction(input), Tolerance);
+            BallHarness ball = new BallHarness { SizeScale = 3f };
+            for (int i = 0; i < 150; i++) Assert.IsTrue(ball.Step(input, 0f, 0f, 0.02f));
+            Assert.AreEqual((input < 0f ? -6f : 12f) * fraction, ball.Velocity.z, Tolerance);
+        }
+
+        [TestCase(1f, 4f, 1.6f)]
+        [TestCase(-1f, 2f, 0.8f)]
+        public void FullToHalfPushLosesOnlyOneStepOfRollingResistance(float sign, float initial, float target)
+        {
+            BallHarness ball = new BallHarness();
+            for (int i = 0; i < 60; i++) Assert.IsTrue(ball.Step(sign, 0f, 0f, 0.02f));
+            Assert.AreEqual(initial, sign * ball.Velocity.z, Tolerance);
+            for (int i = 1; i <= 70; i++)
+            {
+                Assert.IsTrue(ball.Step(sign * 0.5f, 0f, 0f, 0.02f));
+                Assert.AreEqual(Mathf.Max(target, initial - i * 0.038f),
+                    sign * ball.Velocity.z, Tolerance);
+            }
+        }
+
+        [Test]
+        public void HalfReverseBrakesFromFullSpeedBeforeApplyingTheReverseTarget()
+        {
+            BallHarness ball = new BallHarness { Velocity = new Vector3(0f, 0f, 4f) };
+            for (int i = 1; i <= 49; i++)
+            {
+                Assert.IsTrue(ball.Step(-0.5f, 0f, 0f, 0.02f));
+                Assert.AreEqual(4f - i * 0.08f, ball.Velocity.z, Tolerance);
+            }
+            Assert.IsTrue(ball.Step(-0.5f, 0f, 0f, 0.02f));
+            Assert.AreEqual(0f, ball.Velocity.z, Tolerance);
+            for (int i = 0; i < 30; i++) Assert.IsTrue(ball.Step(-0.5f, 0f, 0f, 0.02f));
+            Assert.AreEqual(-0.8f, ball.Velocity.z, Tolerance);
+        }
+
+        [Test]
+        public void StickTargetDoesNotClampExistingLateralVelocity()
+        {
+            BallHarness ball = new BallHarness { Velocity = new Vector3(3f, 0f, 0f) };
+            Assert.IsTrue(ball.Step(0.5f, 0f, 0f, 0.02f));
+            Assert.AreEqual(3f * Mathf.Exp(-2.9f * 0.02f), ball.Velocity.x, Tolerance);
+            Assert.AreEqual(0.075f, ball.Velocity.z, Tolerance);
+        }
+
+        [Test]
+        public void ZeroForwardIntentKeepsCoastingAndStrafeButHasNoDriveTarget()
+        {
+            Assert.AreEqual(0f, BallMotionMath.DriveSpeedFraction(0f));
+            Assert.AreEqual(0f, BallMotionMath.DriveSpeedFraction(float.NaN));
+            BallHarness ball = new BallHarness { Velocity = new Vector3(0f, 0f, 4f) };
+            Assert.IsTrue(ball.Step(0f, 0f, 1f, 0.02f));
+            Assert.AreEqual(3.962f, ball.Velocity.z, Tolerance);
+            Assert.AreEqual(0.024f, ball.Velocity.x, Tolerance);
+        }
+
         [Test]
         public void ZeroInputDecaysToRestWithoutOscillation()
         {
-            // Friction first, then rolling resistance: 4 * exp(-0.0075) - 1.3/120 =
-            // 3.970112 - 0.010833 = 3.959279 m/s after one coasting step.
+            // 恒定滚阻：4 - 1.9/120 = 3.984167 m/s。
             BallHarness ball = new BallHarness();
             ball.Velocity = new Vector3(0f, 0f, 4f);
             Assert.IsTrue(ball.Step(0f, 0f, 0f, FixedStepSeconds));
-            Assert.AreEqual(3.959279f, ball.Velocity.z, Tolerance);
+            Assert.AreEqual(3.984167f, ball.Velocity.z, Tolerance);
 
-            // dv/dt = -0.9 v - 1.3 reaches zero at ln(1 + 0.9*4/1.3)/0.9 = 1.47 s,
-            // so 2 s of coasting is enough; the speed never rises and the velocity
-            // never turns around, which is the "no oscillation" claim.
+            // v(t) = max(0, 4 - 1.9t)，约 2.11 s 停，速度不回升、不反向。
             float previous = ball.Speed();
             bool reachedZero = false;
-            for (int i = 0; i < 240; i++)
+            for (int i = 0; i < 260; i++)
             {
                 Assert.IsTrue(ball.Step(0f, 0f, 0f, FixedStepSeconds));
                 float current = ball.Speed();
@@ -156,7 +216,7 @@ namespace VRCKatamari.Tests
             // forward motion.
             BallHarness back = new BallHarness();
             back.Velocity = new Vector3(0f, 0f, -4f);
-            for (int i = 0; i < 240; i++)
+            for (int i = 0; i < 260; i++)
             {
                 Assert.IsTrue(back.Step(0f, 0f, 0f, FixedStepSeconds));
                 Assert.LessOrEqual(back.Velocity.z, 0f);
@@ -244,14 +304,14 @@ namespace VRCKatamari.Tests
             // Acceleration follows the heading the step ENDED with: a 180 deg/s
             // turn rate over a 0.5 s step is a full 90 deg turn, so the speed
             // this step adds must land on +X, not on the +Z it started facing.
-            // 7.5 * 0.5 = 3.75 m/s, damped by exp(-0.45) = 0.637628.
+            // 7.5 * 0.5 = 3.75 m/s，尚未触及上限。
             BallHarness turned = new BallHarness();
             turned.TurnRateDegreesPerSecond = 180f;
             Assert.IsTrue(turned.Step(1f, 1f, 0f, 0.5f));
             Assert.AreEqual(90f, turned.HeadingDegrees, 1e-4f);
-            Assert.AreEqual(2.391105f, turned.Velocity.x, 1e-4f);
+            Assert.AreEqual(3.75f, turned.Velocity.x, 1e-4f);
             Assert.AreEqual(0f, turned.Velocity.z, 1e-4f);
-            Assert.AreEqual(1.195553f, turned.Displacement.x, 1e-4f);
+            Assert.AreEqual(1.875f, turned.Displacement.x, 1e-4f);
         }
 
         [Test]
@@ -302,13 +362,13 @@ namespace VRCKatamari.Tests
             Assert.Greater(fast.Displacement.z, 0.6f);
             Assert.AreEqual(0f, fast.Velocity.y, 0f);
 
-            // One 2.5 s step is not 2.5 s of stepping: (7.5 * 2.5) * exp(-2.25) =
-            // 1.976236 m/s, far from the ~3.9 m/s the same input reaches in 300
-            // fixed steps. Sub-stepping belongs to the caller's clock.
+            // 相同持续侧向输入的一大步和多个小步不同；调用方负责分步。
             BallHarness coarse = new BallHarness();
-            Assert.IsTrue(coarse.Step(1f, 0f, 0f, 2.5f));
-            Assert.AreEqual(1.976236f, coarse.Velocity.z, 1e-4f);
-            Assert.Greater(Mathf.Abs(coarse.Velocity.z - first.Speed()), 1f);
+            BallHarness fine = new BallHarness();
+            Assert.IsTrue(coarse.Step(0f, 0f, 1f, 2.5f));
+            for (int i = 0; i < 300; i++) Assert.IsTrue(fine.Step(0f, 0f, 1f, FixedStepSeconds));
+            Assert.AreEqual(1.2f, coarse.Velocity.x, 1e-4f);
+            Assert.AreEqual(0.4185f, fine.Velocity.x, 2e-3f);
         }
 
         [Test]
@@ -342,7 +402,7 @@ namespace VRCKatamari.Tests
             }
 
             // Sideways speed is no longer hard-clamped: a 3 m/s sideways entry
-            // decays by the grip, exp(-(0.9 + 2.0)/120) = 0.976123, so one step
+            // decays by the grip, exp(-2.9/120) = 0.976123, so one step
             // leaves 2.928369 m/s (the drift that replaced the old 1.2 m/s clamp).
             BallHarness sideways = new BallHarness();
             sideways.MaxSpeedMps = 20f;
@@ -364,7 +424,7 @@ namespace VRCKatamari.Tests
             assisted.MaxSpeedMps = 20f;
             for (int i = 0; i < 1200; i++)
             {
-                Assert.IsTrue(assisted.Step(1f, 0f, 1f, FixedStepSeconds));
+                Assert.IsTrue(assisted.Step(0f, 0f, 1f, FixedStepSeconds));
                 Assert.LessOrEqual(LateralSpeedOf(assisted.Velocity, 0f),
                     1.2f + Tolerance);
             }
@@ -473,11 +533,8 @@ namespace VRCKatamari.Tests
         [Test]
         public void ReleaseGlideIsAVisibleCoastNotAnInstantStop()
         {
-            // Preset B at the motor's 0.02 s step, from the 4 m/s cap. The
-            // continuous solution v(t) = (4 + c) exp(-0.9 t) - c with c = 1.3/0.9 =
-            // 1.444 reaches 0.1 m/s at 1.40 s, and the distance there is
-            // (4 + c)/0.9 * (1 - exp(-0.9 * 1.40)) - c * 1.40 = 2.31 m; the old
-            // model stopped in 0.40 s over 0.68 m.
+            // A2：v(t) = max(0, 4 - 1.9t)。按 0.02 s 步进，首次低于
+            // 0.1 m/s 是 2.06 s，走 4.17 m。
             BallHarness ball = new BallHarness();
             ball.Velocity = new Vector3(0f, 0f, 4f);
             float time = 0f;
@@ -488,33 +545,32 @@ namespace VRCKatamari.Tests
                 time += 0.02f;
                 distance += ball.Displacement.z;
             }
-            Assert.AreEqual(1.4f, time, 0.2f);
-            Assert.AreEqual(2.3f, distance, 0.3f);
+            Assert.AreEqual(2.06f, time, 0.2f);
+            Assert.AreEqual(4.17f, distance, 0.3f);
             Assert.Greater(time, 1.0f);
         }
 
         [Test]
         public void OpposingInputUsesTheBrakeRateAndSkipsRollingResistance()
         {
-            // From 4 m/s, reverse input: 4 - 6/120 = 3.95, damped by 0.992528 =
-            // 3.920487. Had it used acceleration the step would be 3.9337.
+            // 反推一步扣 8/120，而不是 7.5/120。
             BallHarness brake = new BallHarness();
             brake.Velocity = new Vector3(0f, 0f, 4f);
             Assert.IsTrue(brake.Step(-1f, 0f, 0f, FixedStepSeconds));
-            Assert.AreEqual(3.920487f, brake.Velocity.z, 1e-5f);
+            Assert.AreEqual(4f - 8f / 120f, brake.Velocity.z, 1e-5f);
 
-            // The brake rate is the BrakingMps2 field: zeroing it leaves only drag.
+            // 刹车率归零，且无黏滞，因此保持速度。
             BallHarness weak = new BallHarness();
             weak.BrakingMps2 = 0f;
             weak.Velocity = new Vector3(0f, 0f, 4f);
             Assert.IsTrue(weak.Step(-1f, 0f, 0f, FixedStepSeconds));
-            Assert.AreEqual(4f * 0.9925280f, weak.Velocity.z, 1e-5f);
+            Assert.AreEqual(4f, weak.Velocity.z, 1e-5f);
 
-            // Same-sign input is plain acceleration: (1 + 7.5/120) * 0.992528.
+            // 同向一步是 1 + 7.5/120。
             BallHarness push = new BallHarness();
             push.Velocity = new Vector3(0f, 0f, 1f);
             Assert.IsTrue(push.Step(1f, 0f, 0f, FixedStepSeconds));
-            Assert.AreEqual(1.054561f, push.Velocity.z, 1e-5f);
+            Assert.AreEqual(1.0625f, push.Velocity.z, 1e-5f);
 
             // Rolling resistance exists only without forward input: a huge value
             // changes nothing while a forward key is held, and does with none.
@@ -539,7 +595,7 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(reversing.Step(-1f, 0f, 0f, 0.02f));
                 crossTime += 0.02f;
             }
-            Assert.AreEqual(0.54f, crossTime, 0.1f);
+            Assert.AreEqual(0.50f, crossTime, 0.1f);
             Assert.IsTrue(reversing.Step(-1f, 0f, 0f, 0.02f));
             Assert.Less(reversing.Velocity.z, 0f);
         }
@@ -566,16 +622,16 @@ namespace VRCKatamari.Tests
         public void TurningLeavesTheVelocityDirectionBehindTheHeading()
         {
             // Full speed, then full turn at the motor's 0.02 s step until the
-            // heading reaches 90 deg. The defaults leave the velocity near 61 deg
-            // (a ~29 deg lag) at the 4 m/s cap (the thrust refills the speed); a stronger grip lags less, and a
+            // heading reaches 90 deg. The defaults leave a ~23 deg lag at the
+            // 4 m/s cap; a stronger grip lags less, and a
             // huge grip (the old hard-clamp behaviour) follows the heading.
             float lag12 = TurnLagDegrees(1.2f);
-            float lag20 = TurnLagDegrees(2.0f);
+            float lag29 = TurnLagDegrees(2.9f);
             float lag30 = TurnLagDegrees(3.0f);
             float lagHuge = TurnLagDegrees(1000f);
-            Assert.AreEqual(29f, lag20, 8f);
-            Assert.Greater(lag12, lag20);
-            Assert.Greater(lag20, lag30);
+            Assert.AreEqual(23.3f, lag29, 8f);
+            Assert.Greater(lag12, lag29);
+            Assert.Greater(lag29, lag30);
             Assert.Greater(lag30, lagHuge);
             Assert.Less(lagHuge, 1f);
 
@@ -616,16 +672,13 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void ApiIsStatelessPlanarAndSingleEntryPoint()
+        public void StepApiIsStatelessAndPlanar()
         {
-            // One entry point, no overloads, scalars and Vector3 only: no config
-            // object, no rotation, no arrays and nothing to allocate.
-            MethodInfo[] methods = typeof(BallMotionMath).GetMethods(
+            // 单一步进入口，只用标量和 Vector3，不分配对象或数组。
+            MethodInfo step = typeof(BallMotionMath).GetMethod("TryStep",
                 BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
-            Assert.AreEqual(1, methods.Length);
-            Assert.AreEqual("TryStep", methods[0].Name);
-
-            ParameterInfo[] parameters = methods[0].GetParameters();
+            Assert.IsNotNull(step);
+            ParameterInfo[] parameters = step.GetParameters();
             int outputIndex = 0;
             for (int i = 0; i < parameters.Length; i++)
             {

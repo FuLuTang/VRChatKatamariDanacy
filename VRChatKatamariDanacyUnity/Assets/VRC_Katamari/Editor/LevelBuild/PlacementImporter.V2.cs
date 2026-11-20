@@ -6,6 +6,7 @@ using UnityEngine;
 using UdonSharp;
 using UdonSharpEditor;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Pickup;
 using VRCKatamari.Story;
 
 namespace VRCKatamari.Editor.LevelBuild
@@ -160,6 +161,15 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             PlacementDocument view = BuildV1View(doc);
+            var offAreaIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (PropEntry prop in view.props)
+                if (prop != null && prop.noBallCollision) offAreaIds.Add(prop.itemId);
+            foreach (StructureEntry solid in view.structures)
+                if (solid != null && solid.noBallCollision) offAreaIds.Add(solid.id);
+            if (meta.AreaNo >= 0 || offAreaIds.Count > 0)
+                report.AreaCollisionSummary = "[import] area collision: level area " +
+                    (meta.AreaNo < 0 ? "undeclared" : meta.AreaNo.ToString(CultureInfo.InvariantCulture)) +
+                    ", " + offAreaIds.Count + " instances off-area (no ball collision)";
             bool propsOk = ApplyProps(view, propsRoot, report);
             if (propsOk) propsOk = VerifyPropRows(view, propsRoot, report);
             bool structuresOk = ApplyStructures(view, structuresRoot, report);
@@ -270,6 +280,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     inherit = prop.Inherit,
                     scale = prop.Scale,
                     absorbable = prop.Absorbable,
+                    noBallCollision = !AreaCollisionMath.CollidesInArea(prop.HitOnAreaNo, meta.AreaNo),
                     position = prop.Position,
                     rotationQuat = prop.RotationQuat,
                     aabb = prop.Aabb,
@@ -317,6 +328,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     size = solid.Size,
                     rotationQuat = solid.RotationQuat,
                     collision = solid.Collision,
+                    noBallCollision = !AreaCollisionMath.CollidesInArea(solid.HitOnAreaNo, meta.AreaNo),
                     support = solid.Support,
                     meets = solid.Meets,
                     collider = ToColliderEntry(solid.Collider),
@@ -458,7 +470,8 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < doc.Solids.Length; i++)
             {
                 PlacementV2Solid solid = doc.Solids[i];
-                if (solid == null) continue;
+                if (solid == null || !AreaCollisionMath.CollidesInArea(solid.HitOnAreaNo, meta.AreaNo))
+                    continue;
                 if (string.Equals(solid.Role, "box", StringComparison.Ordinal) ||
                     string.Equals(solid.Role, "ramp", StringComparison.Ordinal))
                 {

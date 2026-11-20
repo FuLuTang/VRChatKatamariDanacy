@@ -181,6 +181,10 @@
 
 - **删除 v1 位置权威（owner 2026-11-17）** — 统一为一套位置逻辑，避免两份实现。
 
+### 所有者决定 2026-11-20（球惯性）
+
+- **惯性采用 WLK A2（owner 2026-11-20）** — 以《We Love Katamari REROLL+ Royal Reverie》v20230608 为基准，采用松杆匀滚阻和杆量限速，保留本作的绝对速度与场景推力；见 [BALL_INERTIA](Design/BallMotor/BALL_INERTIA.md#2-模型现行)。
+
 ### Owner decisions 2026-11-17（地图 0 沙盒亲测）
 
 - **缓坡松手不滑保持现状：方案 A，滚动阻力照常作用（owner 2026-11-17）** — C26 2°、C27 5° 顺坡朝向时不滑，主人接受「有点阻力也行」；见 [BALL_INERTIA §4](Design/BallMotor/BALL_INERTIA.md#4-静止后下坡)、[PHYSICS_TEST_FIELD §4.9](Design/BallMotor/PHYSICS_TEST_FIELD.md#49-2026-11-17-的新格c25-墙--顶棚c26--c27--c28-缓坡)。
@@ -196,6 +200,7 @@
 - **未入座时可正常跳跃，滚球时短按 Jump 不下车（owner 2026-11-19）** — 座位已能禁止默认退座，无需禁用玩家的跳跃；仍可按住 Jump 1.5 秒主动下车，见[防退座与退出](01_GAME_DESIGN.md#防退座与退出)。
 - **VR 冲刺只用左扳机，不支持双摇杆交替摇（owner 2026-11-19）** — 原作的 gacha 计数折算成按住时长。
 - **体积回收曲线按新版做（owner 2026-11-19）** — 采用 WLK REROLL+ 数据里的回收比曲线；拿到数据前维持全局 0.8。
+- **蟹座异区物件不与球碰撞（owner 2026-11-20）** — 照初代 `hitOnAreaNo`，晒衣夹虽有模型却不是本关障碍，不再用静态盒挡球；见[区域碰撞格式](Design/Levels/LEVEL_FORMAT_V2.md#物件的活动区域号)。
 - **骑手随球放大、眼点抬高（2026-11-19）** — 吸附物挡前路，推球角定为 52°，即居中腿中轴离球面至少 0.03r 的最大整数候选；不改球径，见 [骑球几何 §1.1](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md#11-ψ-的候选每单位-rpitch-0-时的视角)。
 
 ### Still open

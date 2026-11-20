@@ -59,6 +59,27 @@ def collision_list():
     }]]
 
 
+class HitAreaJoinTests(unittest.TestCase):
+    def test_original_values_join_both_layers_without_counting_dummy_props(self):
+        document = {"meta": {"expected": {}}, "props": [{"itemId": "hanger"}, {"itemId": "van"}],
+                    "structures": {"solids": [{"id": "hanger", "shape": "proxy",
+                                                "parts": [{}, {}, {}, {}]}]}}
+        rows = [{"our_itemId": item, "s8MonoHitOnAreaNo": area}
+                for item, area in [("hanger", "3"), ("van", "2"), ("", "3")]]
+        build.apply_instance_hit_areas(document, rows, 2)
+        self.assertEqual(document["meta"]["areaNo"], 2)
+        self.assertEqual([p["hitOnAreaNo"] for p in document["props"]], [3, 2])
+        solids = document["structures"]["solids"]
+        self.assertEqual(solids[0]["hitOnAreaNo"], 3)
+        self.assertEqual(document["meta"]["expected"]["staticObbs"], 0)
+        self.assertEqual(build.placement_v2.static_obb_count(solids, 3), 4)
+
+    def test_incomplete_join_is_an_error(self):
+        document = {"props": [{"itemId": "missing"}], "structures": {"solids": []}}
+        with self.assertRaisesRegex(build.RefV2Error, "missing"):
+            build.apply_instance_hit_areas(document, [], 2)
+
+
 class GuardTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="refv2-guard-"))

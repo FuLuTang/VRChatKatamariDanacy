@@ -63,11 +63,10 @@ namespace VRCKatamari.Tests
             {
                 Assert.IsTrue(DashMath.IsCharging(state));
                 Assert.IsTrue(BallMotionMath.TryStep(0f, 0f, 0f, 0f, velocity, Step, 1f,
-                    BaseSpeed, 5f, 8f, 1.2f, 1.3f, 2f, 110f, 1.2f,
+                    BaseSpeed, 5f, 8f, 0f, 1.9f, 2.9f, 110f, 1.2f,
                     out _, out Vector3 next, out _));
-                if (i == 1) Assert.AreEqual(4f * Mathf.Exp(-1.2f * Step) - 0.026f, next.z, 1e-6f);
-                if (i < 65) Assert.Greater(next.z, 0f);
-                else Assert.AreEqual(Vector3.zero, next);
+                // 1.4 s 的起转点早于 A2 的完全滑停（2.12 s）。
+                Assert.AreEqual(4f - i * 1.9f * Step, next.z, 1e-5f);
                 velocity = next;
                 Assert.IsFalse(Advance(state, 1));
                 Assert.AreEqual(i == 70, DashMath.IsSpinning(state, SmallDiameterM));
@@ -122,12 +121,14 @@ namespace VRCKatamari.Tests
         public void DashEndsOnWallButNotWhenOrdinaryResistanceBringsItToRest()
         {
             float[] state = LaunchedState();
-            Vector3 velocity = Vector3.forward * 9.96319f;
+            // 模拟出射后已部分失速；即使正常滚阻在寿命内将其降至零，
+            // 冲刺状态也不能因零速退出。
+            Vector3 velocity = Vector3.forward * 2f;
             DashMath.DriveScales(state, SmallDiameterM, out float speed, out float acceleration);
             for (int i = 0; i < 99; i++)
             {
                 Assert.IsTrue(BallMotionMath.TryStep(0f, 0f, 0f, 0f, velocity, Step, 1f,
-                    BaseSpeed * speed, 5f * acceleration, 8f, 1.2f, 1.3f, 2f, 110f, 1.2f,
+                    BaseSpeed * speed, 5f * acceleration, 8f, 0f, 1.9f, 2.9f, 110f, 1.2f,
                     out _, out Vector3 next, out _));
                 Advance(state, 1);
                 velocity = next;
@@ -154,9 +155,9 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(4.333333f / 1.1f, acceleration, 1e-6f);
             Assert.AreEqual(speed * 0.67f, DashMath.LaunchSpeedScale(state, speed), 1e-6f);
             Assert.IsTrue(BallMotionMath.TryStep(1f, 0f, 0f, 0f, Vector3.zero, Step, 1f,
-                BaseSpeed * speed, 5f * acceleration, 8f, 1.2f, 1.3f, 2f, 110f, 1.2f,
+                BaseSpeed * speed, 5f * acceleration, 8f, 0f, 1.9f, 2.9f, 110f, 1.2f,
                 out _, out Vector3 next, out _));
-            Assert.AreEqual(5f * acceleration * Step * Mathf.Exp(-1.2f * Step), next.z, 1e-6f);
+            Assert.AreEqual(5f * acceleration * Step, next.z, 1e-6f);
         }
 
         [Test]

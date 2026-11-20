@@ -83,10 +83,10 @@ namespace VRCKatamari.BallMotor
         // s = D / D0 (CurrentSizeScale); friction, grip and turn rate are time constants
         // and are not scaled.
         [SerializeField] private float accelerationMps2 = 7.5f;
-        [SerializeField] private float brakingMps2 = 6f;            // forward input opposing the velocity only
-        [SerializeField] private float frictionPerSecond = 0.9f;
-        [SerializeField] private float rollingResistanceMps2 = 1.3f; // coast-down, only with no forward input
-        [SerializeField] private float lateralGripPerSecond = 2.0f;  // sideways-velocity decay (turn drift)
+        [SerializeField] private float brakingMps2 = 8f;             // 只用于反推
+        [SerializeField] private float frictionPerSecond = 0f;
+        [SerializeField] private float rollingResistanceMps2 = 1.9f; // 松手时的匀减速
+        [SerializeField] private float lateralGripPerSecond = 2.9f;   // 横向速度衰减
         [SerializeField] private float turnRateDegreesPerSecond = 110f;
         [SerializeField] private float maxLateralMps = 1.2f;
 
@@ -2102,7 +2102,8 @@ namespace VRCKatamari.BallMotor
                 supportSurfaceNormalWorld, gravityMps2 * scale, rampTangentialGravityScale, dt,
                 maxSpeedMps * scale, out slopeVelocity))
             {
-                planarVelocity = slopeVelocity;
+                planarVelocity = BallMotionMath.HoldLongitudinalSlope(planarVelocity,
+                    slopeVelocity, headingDegrees, rollingResistanceMps2 * scale * dt);
             }
         }
 
@@ -2293,7 +2294,7 @@ namespace VRCKatamari.BallMotor
             }
 
             float speedCap = maxSpeedMps * CurrentSizeScale() * dashSpeedScale;
-            speed = speedCap * Mathf.Abs(forwardIntent);
+            speed = speedCap * BallMotionMath.DriveSpeedFraction(forwardIntent);
             if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) speed = 0f;
 
             Vector3 planar = new Vector3(planarVelocity.x, 0f, planarVelocity.z);

@@ -45,6 +45,7 @@ Everything is deterministic: sorted ids, fixed rounding, no timestamps.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -86,6 +87,8 @@ READ_ROOT = Path.home() / "KatamariRef"
 LEVELS_ROOT = core.LEVELS_DIR
 
 DOCUMENT_NAME = "placement.v2.json"
+CANCER_AREA_NO = 2  # GAMEINFO_MIS_11 START_STAGE + initial playArea (0)
+CANCER_AREA_TABLE = Path("kdrr/tables/cancer_instances_reroll.tsv")
 
 #: The sidecar/binary names come from the format module (re-exported with it).
 
@@ -952,6 +955,37 @@ def load_level_inputs(level_dir):
     return doc, original, models_root, table
 
 
+def apply_instance_hit_areas(document, rows, area_no):
+    """Join the original simulation table by item ID; DummyProps have no placement ID."""
+    by_id = {}
+    for row in rows:
+        item_id = row["our_itemId"]
+        if not item_id:
+            continue
+        if item_id in by_id:
+            raise RefV2Error("duplicate hit-area instance: %s" % item_id)
+        by_id[item_id] = int(row["s8MonoHitOnAreaNo"])
+    props = document["props"]
+    solids = document["structures"]["solids"]
+    prop_ids = {prop["itemId"] for prop in props}
+    solid_ids = {solid["id"] for solid in solids}
+    if prop_ids | solid_ids != by_id.keys():
+        missing = sorted((prop_ids | solid_ids) - by_id.keys())
+        extra = sorted(by_id.keys() - (prop_ids | solid_ids))
+        raise RefV2Error("hit-area instance IDs differ: missing %r, extra %r" % (missing, extra))
+    for group, id_key in ((props, "itemId"), (solids, "id")):
+        for instance in group:
+            instance["hitOnAreaNo"] = by_id[instance[id_key]]
+    meta = document["meta"]
+    meta["areaNo"] = area_no
+    meta["expected"]["staticObbs"] = placement_v2.static_obb_count(solids, area_no)
+
+
+def apply_cancer_hit_areas(document):
+    with guard_read(READ_ROOT / CANCER_AREA_TABLE).open(encoding="utf-8", newline="") as table:
+        apply_instance_hit_areas(document, csv.DictReader(table, delimiter="\t"), CANCER_AREA_NO)
+
+
 def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
                    max_diameter_m=DESIGN_MAX_DIAMETER_M, volume_penalty=DEFAULT_VOLUME_PENALTY,
                    time_limit_s=420.0, position_source="instance", visual=None):
@@ -1140,6 +1174,8 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "renderPresets": [],
         "regions": [],
     }
+    if level_id == "_ref_cancer":
+        apply_cancer_hit_areas(document)
     sidecar, index_width = sidecar_bytes(terrain)
     digest = hashlib.sha256(sidecar).hexdigest()
     document["terrain"] = _terrain_block(terrain, boxes, chunks, index_width, digest)
@@ -1803,7 +1839,7 @@ def main(argv=None):
         written = write_outputs(folder, document, sidecar, dry_run=not args.write,
                                 visual=visual)
     except (RefV2Error, ref_stage.RefStageError, ref_models.RefAssetError, OSError,
-            ref_stage_visual.RefVisualError) as error:
+            ref_stage_visual.RefVisualError, ValueError, KeyError) as error:
         print("ref_v2_from_extract: %s" % error, file=sys.stderr)
         return 2
     report["written"] = {"document": core.display_path(written["document"]),
@@ -1836,7 +1872,8 @@ def main(argv=None):
               % (report["structures"]["withSolid"], report["structures"]["neverAbsorbable"],
                  report["structures"]["background"],
                  report["structures"].get("splitSolids", 0),
-                 placement_v2.static_obb_count(document["structures"]["solids"])))
+                 placement_v2.static_obb_count(document["structures"]["solids"],
+                                                 document["meta"].get("areaNo"))))
         print("  original position: %d props moved in x/z (max %.2f m), %d heights "
               "replaced by the original; %d scales applied"
               % (report["props"]["scavenged"]["positionMoved"],

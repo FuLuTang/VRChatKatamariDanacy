@@ -23,10 +23,10 @@ namespace VRCKatamari.Tests
         // Inertia values at D0 (the motor defaults).
         private const float MaxSpeed = 4f;
         private const float Acceleration = 7.5f;
-        private const float Braking = 6f;
-        private const float Friction = 0.9f;
-        private const float Rolling = 1.3f;
-        private const float Grip = 2f;
+        private const float Braking = 8f;
+        private const float Friction = 0f;
+        private const float Rolling = 1.9f;
+        private const float Grip = 2.9f;
         private const float TurnRate = 110f;
         private const float MaxLateral = 1.2f;
 
@@ -73,9 +73,9 @@ namespace VRCKatamari.Tests
                 Assert.AreEqual(first50, t50, 1e-4f, "D=" + Diameters[k]);
                 Assert.AreEqual(first95, t95, 1e-4f, "D=" + Diameters[k]);
             }
-            // Owner 2026-11-17: >= 95 % of the cap in about 0.7 s.
-            Assert.AreEqual(0.70f, first95, 0.05f);
-            Assert.AreEqual(0.32f, first50, 0.05f);
+            // 地图 0：7.5 m/s² 匀加速，0.02 s 步进。
+            Assert.AreEqual(0.52f, first95, 0.05f);
+            Assert.AreEqual(0.28f, first50, 0.05f);
         }
 
         [Test]
@@ -102,9 +102,9 @@ namespace VRCKatamari.Tests
                 Assert.AreEqual(firstGlide, glideInDiameters, 1e-3f, "D=" + Diameters[k]);
                 Assert.AreEqual(firstTime, time, 1e-4f, "D=" + Diameters[k]);
             }
-            // 2.26 m of glide for the 0.222 m ball at 4 m/s is 10.2 diameters.
-            Assert.AreEqual(10.2f, firstGlide, 0.5f);
-            Assert.AreEqual(1.4f, firstTime, 0.2f);
+            // 4.17 m / 0.222 m ≈ 18.8 个球径。
+            Assert.AreEqual(18.8f, firstGlide, 0.5f);
+            Assert.AreEqual(2.06f, firstTime, 0.2f);
         }
 
         [Test]
@@ -115,7 +115,7 @@ namespace VRCKatamari.Tests
                 float scale = Diameters[k] / D0;
                 float required = ClimbMath.RequiredSpeed(90f);
                 float full = ClimbMath.GateSpeed(0f, MaxSpeed * scale, scale);
-                float half = ClimbMath.GateSpeed(0f, 0.5f * MaxSpeed * scale, scale);
+                float half = ClimbMath.GateSpeed(0f, BallMotionMath.DriveSpeedFraction(0.5f) * MaxSpeed * scale, scale);
                 Assert.GreaterOrEqual(full, required, "full push climbs, D=" + Diameters[k]);
                 Assert.Less(half, required, "half push does not, D=" + Diameters[k]);
                 Assert.IsTrue(ClimbMath.IsClimbEligible(1f, full, 90f, 0f, 1f, 0f));
@@ -208,8 +208,32 @@ namespace VRCKatamari.Tests
                     Vector3 slid;
                     Assert.IsTrue(SupportSurfaceMath.TryApplyRampTangentialGravity(velocity,
                         normal, 9.81f * scale, 1f, Dt, MaxSpeed * scale, out slid));
-                    velocity = slid;
+                    velocity = BallMotionMath.HoldLongitudinalSlope(velocity, slid, heading,
+                        Rolling * scale * Dt);
                 }
+            }
+        }
+
+        [TestCase(5f, 90f, false)]
+        [TestCase(10f, 90f, false)]
+        [TestCase(10f, 270f, false)]
+        [TestCase(12f, 90f, true)]
+        [TestCase(10f, 0f, true)]
+        public void RestingSlopeHoldsOnlyTheLongitudinalComponentBelowRollingResistance(
+            float slope, float heading, bool shouldMove)
+        {
+            float radians = slope * Mathf.Deg2Rad;
+            Vector3 normal = new Vector3(Mathf.Sin(radians), Mathf.Cos(radians), 0f);
+            foreach (float diameter in Diameters)
+            {
+                float scale = diameter / D0;
+                Vector3 raw;
+                Assert.IsTrue(SupportSurfaceMath.TryApplyRampTangentialGravity(Vector3.zero,
+                    normal, 9.81f * scale, 1f, Dt, MaxSpeed * scale, out raw));
+                Vector3 held = BallMotionMath.HoldLongitudinalSlope(Vector3.zero, raw, heading,
+                    Rolling * scale * Dt);
+                Assert.AreEqual(shouldMove ? raw.x : 0f, held.x, 1e-6f, "D=" + diameter);
+                Assert.AreEqual(0f, held.z, 1e-6f);
             }
         }
 

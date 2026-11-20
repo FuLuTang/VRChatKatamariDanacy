@@ -125,6 +125,12 @@
 
 ---
 
+### 物件的活动区域号
+
+`meta.areaNo` 可选，是本关活动区域号（非负 32 位整数），不是 `zones[].code`。`structures.solids[]` 与 `props[]` 可写 `hitOnAreaNo`（`-1` 或非负 32 位整数，缺省 `-1`）。仅 `-1` 或与 `meta.areaNo` 相同的实例参与球碰撞；未声明关卡区域时只有 `-1` 通过。导入时关闭异区 solid 的球接触注册（包括子盒和斜坡支撑）、关闭异区 prop 的球挡路和支撑资格。渲染、玩家碰撞与可吸性不变，运行时不读 JSON。同一实例兼有 solid 与 prop 行时，两行应填同一原作值。
+
+蟹座参考生成器按 `our_itemId` 连接初代 REROLL（PC 2019.01.31）的逐实例表，保留 `s8MonoHitOnAreaNo` 原值。`meta.areaNo = 2` 来自任务 11 的 `START_STAGE` 加开局 `playArea = 0`；当前导入固定该区域，不做运行时切区。没有 placement 对应行的 DummyProps 不生成。
+
 ## 3. `terrain`：静态三角网 + 碰撞 AABB broad phase
 
 ### 3.1 表示选择（研究已定，不再讨论高度场做主表示）
@@ -315,7 +321,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 - 校验器：`shape:"proxy"` 要求 `collider` 合法且 `proxySource` 在枚举里；`shape:"box"` 带 `collider` 或 `parts` 是错误；`parts` 个数不在 2–4、`size` 非正、带未知键或越出 `size` 盒也是错误（`[structure_proxy]`）。
 - **电机静态表只认 OBB**：导入器（`PlacementV2Rules.TrySolidContactBox`）把盒/球/胶囊/凸包代理都装成它的局部 AABB 一个盒，再把盒顶抬到 `size` 顶（支撑面），逐件打 note。
 - **`parts`：稀疏件拆成几个盒（2026-11-19）。** 凸包占自身 AABB 不到 0.6 的件，单盒会在空处造墙（晒衣架凸包占 0.30，单盒是 1.43 m × 2 m 的实墙，原作关卡碰撞在盒内地面以上没有三角）。生成器（`ref_v2_from_extract.def_parts` → `collider_proxy.solid_parts`）对这类件从**模型三角网**（不是凸包：一根立杆加横跨全宽的底脚，其凸包本身就是整片楔形）自顶向下切分：每轮在所有盒 × 3 轴 × 15 个等分切位里选去掉空体积最多的一刀，穿过切面的三角精确裁成两段，所以相邻盒无缝；去掉的空体积 < 整体 AABB 的 2% 或已有 4 盒即停；盒每轴至少 1 cm，向外取整到 0.1 mm；按低角 (y, x, z) 排序。确定性：同一网格同一输出。导入器给这类固体挂 `parts.length` 个 `BoxCollider`（按文档顺序），全部进 `LevelArenaHost.staticBoxes`；只把**最高的那个盒**的顶抬到 `size` 顶，其余盒保留自身高度。`collider` 原样保留（`spawn_reach` 与编辑器仍用真凸包）。
-- `meta.expected.staticObbs` = 每个固体 1 个、带 `parts` 的固体记 `parts` 个数（`placement_v2.static_obb_count`）。蟹座参考关卡：35 个固体中 10 个带 `parts`（各 4 盒），静态 OBB 35 → 65，容量 256。
+- `meta.expected.staticObbs` 只计参与本关球碰撞的固体：每个 1 个，带 `parts` 的记子盒数（`placement_v2.static_obb_count`）。蟹座 35 条固体里有 1 条异区晒衣夹（4 个子盒），所以静态 OBB 从 65 降至 61；容量仍是 256。
 
 **v1 的 `role=boundary` 不再进 `structures`**：它本质是活动范围，迁移到 `activityArea`（§5）。**`role=ground` 也不再进 `structures`**：平地由 `meta.groundY` 兜底，真地形由 `terrain` 表达。转换器遇到无法无损映射的边界（非矩形、非轴对齐）时保留为 `role:"boundary"` 并记 warning，不猜。
 
@@ -1098,7 +1104,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 ```python
 META_KEYS      = ("id","scene","units","convention","ball","timeLimitS","playerSpawn","playerStart",
                   "groundY","bounds","spawnClearanceM","zones","arena","caps","budget",
-                  "expected","source","migration")
+                  "expected","source","migration","areaNo")
 BALL_KEYS      = ("startDiameterM","targetDiameterM","maxDiameterRef","maxDiameterM",
                   "start","spawnSource")
 CAPS_KEYS      = ("props","terrainTriangles","terrainVertices","staticSolids",
@@ -1125,7 +1131,7 @@ GRID_KEYS      = ("cellM","origin","cellsX","cellsZ")
 SEGMENT_KEYS   = ("id","firstIndex","indexCount","material")
 STRUCTURE_KEYS_V2 = ("id","kind","role","shape","center","size","curve","rotationQuat",
                      "collision","absorbable","support","meets","material","notes",
-                     "collider","proxySource","parts")
+                     "collider","proxySource","parts","hitOnAreaNo")
 SOLIDS_KEYS    = ("solids",)
 ACTIVITY_KEYS  = ("walls","killPlane","softMarginM","source")
 WALL_KEYS      = ("id","points","closed","heightM","thicknessM","minBallDiameterM",
@@ -1135,7 +1141,7 @@ PROP_KEYS_V2   = ("itemId","def","kind","behaviour","motion","inherit","phase","
                   "shakeOff","zone","position","rotationQuat","scale","aabb","volumeK",
                   "volumePenalty","volumeMm3","growthMm3","absorbDiameterReqMm","absorbable",
                   "valueUnits","parent","rigidGroup","support","stackedOn","floatingOk",
-                  "notes","instanceIndex")
+                  "notes","instanceIndex","hitOnAreaNo")
 DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","volumePenalty","collider",
                   "scalePolicy","speedIndex","clips","notes")
 MOTION_KEYS    = ("id","class","speed","path","params","updatesPerSecond","loop",

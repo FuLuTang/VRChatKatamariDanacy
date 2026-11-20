@@ -53,15 +53,18 @@ namespace VRCKatamari.Motion
     /// and lateral drag exp(-(friction + lateralGrip) * deltaTime); strafe input
     /// adds up to maxLateralMps of lateral speed; with no forward input the
     /// forward speed loses rollingResistance * deltaTime, floored at zero;
-    /// forward speed is clamped to [-0.5 * cap, cap]; the planar speed is scaled
+    /// the WLK stick curve sets a longitudinal drive target. Same-direction
+    /// overspeed rolls down to it; opposing input brakes without a target clamp
+    /// before crossing zero. The base forward/reverse and planar caps still apply;
+    /// the planar speed is scaled
     /// down to the cap, keeping its direction. Position is the new velocity
     /// times deltaTime, so travel is never sub-stepped or clipped: keeping a
     /// fast ball out of a thin wall is the sweep layer's job.
     /// </para>
     /// <para>
     /// Inertia (BALL_INERTIA.md): all tune values are PROVISIONAL. The values are
-    /// given at D0; the KatamariBallMotor defaults are acceleration 7.5, friction 0.9, rolling
-    /// resistance 1.3, lateral grip 2.0, braking 6, max speed 4. The old behaviour is
+    /// given at D0; the KatamariBallMotor defaults are acceleration 7.5, friction 0, rolling
+    /// resistance 1.9, lateral grip 2.9, braking 8, max speed 4. The old behaviour is
     /// approximated by sizeScale 1, acceleration 5, braking 8, friction 1.2, rolling
     /// resistance 8, lateral grip 1000 (comparison only; not bit-identical,
     /// because the old clamp acted on the lateral part and the old brake on the
@@ -94,6 +97,41 @@ namespace VRCKatamari.Motion
         // Reverse speed cap as a fraction of the size-scaled forward cap
         // (PROVISIONAL, BALL_INERTIA.md section 3).
         private const float ReverseSpeedFraction = 0.5f;
+
+        // WLK REROLL+ Royal Reverie v20230608 反汇编：sGetMaxSpeedRate
+        // 0x9835b7–0x98365b，BasicParam.f32SpeedTilt1/2、f32HalfSpeedRate。
+        // 证据：.work/notes/research/wlk_reroll_mining.md；inertia_wlk.md「WLK 的模型」。
+        private const float HalfSpeedStart = 0.29f;
+        private const float FullSpeedStart = 0.99f;
+        private const float HalfSpeedRate = 0.4f;
+
+        /// <summary>把前后意图映射为目标速度倍率；松手没有驱动目标。</summary>
+        public static float DriveSpeedFraction(float forward)
+        {
+            if (!KatamariMath.IsFiniteFloat(forward)) return 0f;
+            float power = Mathf.Abs(forward);
+            if (power < NoForwardIntent) return 0f;
+            if (power < HalfSpeedStart) return HalfSpeedRate * (power / HalfSpeedStart);
+            return power < FullSpeedStart ? HalfSpeedRate : 1f;
+        }
+
+        /// <summary>静止纵轴由滚阻抵消不超过它的坡重力，横向分量不变。</summary>
+        public static Vector3 HoldLongitudinalSlope(Vector3 velocity, Vector3 slopeVelocity,
+            float headingDegrees, float rollingSpeedDelta)
+        {
+            float radians = headingDegrees * (Mathf.PI / 180f);
+            float x = Mathf.Sin(radians);
+            float z = Mathf.Cos(radians);
+            float forwardSpeed = velocity.x * x + velocity.z * z;
+            float change = (slopeVelocity.x - velocity.x) * x + (slopeVelocity.z - velocity.z) * z;
+            // WLK REROLL+ sResistance / sGravity（inertia_wlk.md「WLK 的模型」）：
+            // 重力不超过滚阻时不持续下滑。本作只对静止的纵轴实现这道门，
+            // 因接触层在运动层扣完滚阻后才加重力，否则这个增量会每步造成位移。
+            if (Mathf.Abs(forwardSpeed) > rollingSpeedDelta * 1e-4f ||
+                Mathf.Abs(change) > rollingSpeedDelta) return slopeVelocity;
+            return new Vector3(slopeVelocity.x - x * change, slopeVelocity.y,
+                slopeVelocity.z - z * change);
+        }
 
         /// <summary>
         /// Solves one fixed step of planar ball motion.
@@ -189,14 +227,20 @@ namespace VRCKatamari.Motion
             float forwardSpeed = velocity.x * forwardX + velocity.z * forwardZ;
             float lateralSpeed = velocity.x * lateralX + velocity.z * lateralZ;
 
-            // Thrust. Input against the current forward velocity is a brake push
-            // and uses brakingMps2; otherwise accelerationMps2.
-            bool hasForwardIntent = Mathf.Abs(forwardIntent) >= NoForwardIntent;
-            if (hasForwardIntent)
+            float driveSpeedFraction = DriveSpeedFraction(forwardIntent);
+            bool hasForwardIntent = driveSpeedFraction > 0f;
+            float driveSign = forwardIntent < 0f ? -1f : 1f;
+            float targetSpeed = speedCap * driveSpeedFraction;
+            if (driveSign < 0f) targetSpeed *= ReverseSpeedFraction;
+            float speedInDriveDirection = forwardSpeed * driveSign;
+            bool aboveTarget = hasForwardIntent && speedInDriveDirection > targetSpeed;
+            if (hasForwardIntent && !aboveTarget)
             {
-                float rate = (forwardSpeed * forwardIntent < 0f) ? scaledBraking : scaledAcceleration;
+                // 反推先按杆量和刹车率减速，过零后才受另一方向的目标限制。
+                float rate = speedInDriveDirection < 0f ? scaledBraking : scaledAcceleration;
                 forwardSpeed += forwardIntent * rate * deltaTime;
             }
+            if (!KatamariMath.IsFiniteFloat(forwardSpeed)) return false;
 
             // Viscous drag; the lateral axis adds lateralGripPerSecond, which
             // replaces the old hard lateral clamp.
@@ -221,12 +265,21 @@ namespace VRCKatamari.Motion
                     lateralSpeed + lateralIntent * scaledLateral * deltaTime, -scaledLateral));
             }
 
-            // Rolling resistance: linear, only with no forward input, floors at
-            // zero so coasting never oscillates through a stop.
-            if (!hasForwardIntent)
+            // 松杆匀减到零；同向超出目标时不再加推力，以普通滚阻降到目标。
+            // 原作 sSpeedLimit 区分既有超速与本帧越限，且有刹车状态分支；
+            // 这里用同向滚阻接近目标是工程近似，不是其分支的逐行移植。
+            if (!hasForwardIntent || aboveTarget)
             {
-                float coasted = Mathf.Max(0f, Mathf.Abs(forwardSpeed) - scaledRolling * deltaTime);
-                forwardSpeed = forwardSpeed < 0f ? -coasted : coasted;
+                float floor = aboveTarget ? targetSpeed : 0f;
+                float speed = Mathf.Abs(forwardSpeed);
+                if (speed > floor)
+                    forwardSpeed = (forwardSpeed < 0f ? -1f : 1f) *
+                        Mathf.Max(floor, speed - scaledRolling * deltaTime);
+            }
+            else if (forwardSpeed * driveSign > targetSpeed)
+            {
+                // 只约束本步新增的推力，不能将已有速度硬削到杆量目标。
+                forwardSpeed = driveSign * targetSpeed;
             }
 
             forwardSpeed = Mathf.Clamp(forwardSpeed, -ReverseSpeedFraction * speedCap, speedCap);

@@ -88,7 +88,7 @@ DOC_ORDER = ("schema", "meta", "terrain", "structures", "activityArea", "props",
              "motions", "paths", "cameras", "renderPresets", "regions")
 META_KEYS = ("id", "scene", "units", "convention", "ball", "timeLimitS", "playerSpawn",
              "playerStart", "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
-             "expected", "source", "migration")
+             "expected", "source", "migration", "areaNo")
 PLAYER_START_KEYS = ("position", "facingDeg", "source")
 # Older files may contain both maxDiameter keys; preserve them on round-trip but
 # never interpret them as settings. meta.migration.maxDiameterM is provenance.
@@ -126,7 +126,7 @@ GRID_KEYS = ("cellM", "origin", "cellsX", "cellsZ")
 SEGMENT_KEYS = ("id", "firstIndex", "indexCount", "material")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes",
-                  "collider", "proxySource", "parts")
+                  "collider", "proxySource", "parts", "hitOnAreaNo")
 #: ``shape`` values: a box (the motor's OBB) or a fitted proxy (``collider`` in local space,
 #: ``size`` kept as the support surface's AABB).  A proxy solid may also carry ``parts``:
 #: 2..4 local boxes the static table receives instead of one box around the proxy.
@@ -141,7 +141,7 @@ PROP_KEYS = ("itemId", "def", "kind", "behaviour", "motion", "inherit", "phase",
              "shakeOff", "zone", "position", "rotationQuat", "scale", "aabb", "volumeK",
              "volumePenalty", "volumeMm3", "absorbDiameterReqMm", "growthMm3", "absorbable",
              "valueUnits", "parent", "rigidGroup", "support", "stackedOn", "floatingOk",
-             "notes", "instanceIndex")
+             "notes", "instanceIndex", "hitOnAreaNo")
 DEF_KEYS = ("id", "kind", "model", "valueUnits", "volumeK", "volumePenalty", "collider",
             "scalePolicy", "speedIndex", "clips", "notes")
 MOTION_KEYS = ("id", "class", "speed", "path", "params", "updatesPerSecond", "loop",
@@ -504,7 +504,17 @@ def _check_player_start(meta, report):
                    % (source,))
 
 
+def _check_area_no(row, key, minimum, path, report):
+    if key not in row:
+        return
+    value = row[key]
+    if not _is_int(value) or not minimum <= value <= 2147483647:
+        report.err("[area_collision] %s.%s: expected integer in %d..2147483647, got %r"
+                   % (path, key, minimum, value))
+
+
 def _check_meta(document, meta, report, path):
+    _check_area_no(meta, "areaNo", 0, "meta", report)
     _unknown(report, meta, META_KEYS, "meta")
     if meta.get("units") != "m":
         report.err("[meta_units] meta.units: expected 'm', got %r" % (meta.get("units"),))
@@ -1255,12 +1265,14 @@ def _check_broadphase(terrain, vertices, indices, count, report):
 
 
 # -- structures ------------------------------------------------------------- #
-def static_obb_count(solids):
+def static_obb_count(solids, area_no=None):
     """The motor's static OBBs for ``structures.solids``: one per solid, ``len(parts)`` for a
     proxy solid that carries parts (§4)."""
     total = 0
     for solid in solids or []:
         if not isinstance(solid, dict):
+            continue
+        if solid.get("hitOnAreaNo", -1) not in (-1, area_no):
             continue
         parts = solid.get("parts") if solid.get("shape") == "proxy" else None
         total += len(parts) if isinstance(parts, list) and parts else 1
@@ -1286,6 +1298,7 @@ def _check_structures(document, meta, report):
             report.err("[structure_role] %s: expected an object, got %r" % (where, solid))
             continue
         _unknown(report, solid, STRUCTURE_KEYS, "structures")
+        _check_area_no(solid, "hitOnAreaNo", -1, where, report)
         solid_id = solid.get("id")
         if not isinstance(solid_id, str) or not solid_id.strip():
             report.err("[structure_role] %s.id: expected a non-empty string, got %r"
@@ -1705,6 +1718,7 @@ def _check_props(document, report, catalog, motion_ids):
             report.err("[prop_key] props[%d]: expected an object, got %r" % (index, prop))
             continue
         _unknown(report, prop, PROP_KEYS, "props")
+        _check_area_no(prop, "hitOnAreaNo", -1, "props[%d]" % index, report)
         item_id = prop.get("itemId")
         if not isinstance(item_id, str) or not item_id.strip():
             report.err("[prop_id] props[%d].itemId: expected a non-empty string, got %r"
@@ -2075,7 +2089,7 @@ def _check_expected(document, meta, props, boxes, report):
         report.err("[expected_structure_count] meta.expected.structureCount: expected %d, "
                    "got %r (%+d)" % (len(solids), wanted_solids, len(solids) - wanted_solids))
     wanted_obbs = expected.get("staticObbs")
-    obbs = static_obb_count(solids)
+    obbs = static_obb_count(solids, meta.get("areaNo"))
     if wanted_obbs is not None and wanted_obbs != obbs:
         report.err("[expected_static_obbs] meta.expected.staticObbs: expected %d, got %r (%+d)"
                    % (obbs, wanted_obbs, obbs - wanted_obbs))

@@ -890,11 +890,6 @@ namespace VRCKatamari.Editor.Pickup
             public int[] Faces;              // convex: 3 hull indices per face
             public int FaceCount;
             public float FitError;
-
-            public bool IsConvex()
-            {
-                return Kind == ProxyKindConvex;
-            }
         }
 
         public const int ProxyKindBox = 0;

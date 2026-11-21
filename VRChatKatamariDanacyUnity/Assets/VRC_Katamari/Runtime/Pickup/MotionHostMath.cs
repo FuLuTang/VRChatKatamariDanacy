@@ -193,14 +193,6 @@ namespace VRCKatamari.Pickup
                 motionClass == ClassBackAndForth;
         }
 
-        /// <summary>
-        /// True when the class needs the ball: only WaitForPlayer reads the observer distance.
-        /// </summary>
-        public static bool NeedsObserver(int motionClass)
-        {
-            return motionClass == ClassWaitForPlayer;
-        }
-
         // --- Reset and step -----------------------------------------------------
 
         /// <summary>

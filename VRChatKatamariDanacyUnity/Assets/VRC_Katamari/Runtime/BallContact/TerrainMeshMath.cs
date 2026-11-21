@@ -387,7 +387,7 @@ namespace VRCKatamari.BallContact
         /// on the previous support and never on the arena ground plane
         /// (<c>LEVEL_FORMAT_V2</c> §1.3 rule 3, §3.6). Upward it is exactly
         /// <paramref name="stepLimitM"/>: that is the step gate, and it is deliberately the
-        /// same <see cref="SupportSurfaceMath.IsStepWithinLimit"/> the static-box mask uses.
+        /// shared <see cref="SupportSurfaceMath.IsStepWithinLimit"/>.
         /// Downward there is NO bound at all: a gully, a pit or a tunnel floor any distance
         /// below the ball is a support, and a real fall is the level's kill plane's decision
         /// rather than a band's. A triangle above the ceiling is inside the footprint but too

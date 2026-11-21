@@ -966,12 +966,6 @@ namespace VRCKatamari.Pickup
             for (int i = 0; i < propCount; i++) propGateK[i] = EffectiveVolumeK(i);
         }
 
-        private int LengthOfGrowth()
-        {
-            if (propGrowthMm3 == null) return 0;
-            return propGrowthMm3.Length;
-        }
-
         // Two tiny comparators rather than Mathf calls, because the prop count is fixed by
         // the shortest parallel array and this code must not depend on a Mathf overload that
         // UdonSharp may not bind.

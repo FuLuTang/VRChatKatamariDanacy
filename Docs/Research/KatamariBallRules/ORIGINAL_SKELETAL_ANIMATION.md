@@ -286,16 +286,17 @@ GLB 要做什么；速率到底知不知道；Unity 端怎么进。
   ——漏了会炸成尖刺（第一版实测如此）；**(b)** 每部件 1 primitive、每顶点 1 骨权重 1，IBM = 绑定世界矩阵之逆。
 - **重采样偏差【实测】**：导出关键帧的线性插值与源曲线在**帧间中点**对比，最大角误差 **0.085°**、位置误差 **0.000 cm**；
   循环以 `maxFrame` 为周期，首末帧姿态差 ≤0.4°（源数据量化残差）。
-- **剪辑命名（只用测得的）**：`walk`=slot0（30 帧/0.967 s，腿摆 ±15°）、`walk_fast`=slot1（0.483 s，同动作 2×）、
-  `slot2`=0.1 s ±30° 快抖（相对模式，语义没把握，保留原名）、`idle`=slot3（0.967 s，±5° + 0.76 cm 起伏）、
-  `slot4`=与 slot0 同曲线（重复）。
+- **剪辑命名**：PS2 槽号按 REROLL `resources.assets` 的 `mononame.ANIM_NAME` 对应原作状态：slot0 `walk`、slot1 `escape`、
+  slot2 `rampage`、slot3 `idle`、slot4 `chase`、slot5 `special`（对照与证据见 [MOTION_HOST](../../Design/PickupAbsorb/MOTION_HOST.md)
+  「骨骼动画：普通 Animator」）。这三型螃蟹测得：walk 30 帧/0.967 s，腿摆 ±15°；escape 0.483 s，同动作 2×；rampage 0.1 s
+  ±30° 快抖（相对模式）；idle 0.967 s，±5° + 0.76 cm 起伏；chase 与 walk 同曲线。
 - **视觉验证**（无头 chromium + 仓库里 vendored 的 three r186；截图在 `~/KatamariRef/props/shots/`）：
   `strip_walk.png`（6 相位）、`strip_idle.png`（4 相位，几乎静止）、`strip_relative.png`（相对模式 + Coconut Crab）、
   `cmp_noclip_vs_ours.png`（上排 noclip 3 帧 / 下排我们 3 相位）。**腿在动、身体没炸、朝向与静态包里同种螃蟹一致、
   三种螃蟹比例各自正确、相对模式没弄反**（弄反会双倍旋转）。`check_prop_glb.py` 三文件全 ok
   （骨索引合法、权重和 =1、IBM 非奇异、时间轴单调、只用 LINEAR）。
-- **FBX 转换【实测】**：`Tools/levelbuild/blender/skinned_glb_to_fbx.py` 出的 FBX 静止姿态尺寸与静态模型一致（单位、轴向、bind 姿态都对，三型差 ≤0.0001 m）；take 名按 Blender 导入后的动作名（`<clip>_root`）去后缀后查剪辑表，三型的 `walk/walk_fast/slot2/idle/slot4` 时长为 0.9667/0.4833/0.1/0.9667/0.9667 s，与 `report.json` 一致。`SkinnedMeshRenderer.bounds` 覆盖全部剪辑姿态且处于倾斜约 8° 的根骨坐标系中，约为静止模型的 1.17×1.27×1.17，不能当模型尺寸用。
-- **FBX 帧率【实测】**：FBX 的 `TimeMode` 就是 Unity 剪辑的采样率，Unity 把 take 取整到该帧率的整帧。源剪辑的秒数是 29/30（0.9667）、29/60（0.4833）、9/90（0.1），在 Blender 默认 24 fps 下不是整帧：烘焙只打到整数帧（关键帧末点 0.9583 s，24 帧），Unity 读成 23 帧 = 0.9583 s、walk_fast 0.4583 s。转换脚本把场景帧率设为使全部剪辑为整帧的最低值（`scene_fps`，这三型是 60：58 / 29 / 6 帧），导入 glTF 前设置，导出的 FBX `TimeMode` 为 60 fps，关键帧末点 0.9667 / 0.4833 / 0.1 s。`skinned_defs.json` 记 `fps`，装配器在导入后核对每条剪辑的长度。
+- **FBX 转换【实测】**：`Tools/levelbuild/blender/skinned_glb_to_fbx.py` 出的 FBX 静止姿态尺寸与静态模型一致（单位、轴向、bind 姿态都对，三型差 ≤0.0001 m）；take 名按 Blender 导入后的动作名（`<clip>_root`）去后缀后查剪辑表，三型的 `walk/escape/rampage/idle/chase` 时长为 0.9667/0.4833/0.1/0.9667/0.9667 s，与 `report.json` 一致。`SkinnedMeshRenderer.bounds` 覆盖全部剪辑姿态且处于倾斜约 8° 的根骨坐标系中，约为静止模型的 1.17×1.27×1.17，不能当模型尺寸用。
+- **FBX 帧率【实测】**：FBX 的 `TimeMode` 就是 Unity 剪辑的采样率，Unity 把 take 取整到该帧率的整帧。源剪辑的秒数是 29/30（0.9667）、29/60（0.4833）、9/90（0.1），在 Blender 默认 24 fps 下不是整帧：烘焙只打到整数帧（关键帧末点 0.9583 s，24 帧），Unity 读成 23 帧 = 0.9583 s、escape 0.4583 s。转换脚本把场景帧率设为使全部剪辑为整帧的最低值（`scene_fps`，这三型是 60：58 / 29 / 6 帧），导入 glTF 前设置，导出的 FBX `TimeMode` 为 60 fps，关键帧末点 0.9667 / 0.4833 / 0.1 s。`skinned_defs.json` 记 `fps`，装配器在导入后核对每条剪辑的长度。
 - **螃蟹与地面【实测，离线】**：`placement.v2.json` 的 120 只螃蟹（`position` = 静态模型 AABB 中心）对接触地形 `.katerrain`：静态底面相对地面，71 只在 ±3 cm 内，9 只低于 3 cm 以上（最低 −6.9 cm），其余在家具/其他道具上；按运动类，hop 中位 −1.4 cm、路径类 −1.75 cm、游走类 +0.3…+1 cm。静态模型的底部即原作数据里的位置，蒙皮模型的 bind 底部由装配器按 bounds 中心对齐到同一高度（蒙皮 bind 包围盒中心相对其原点偏 −0.6 cm / 0 / +0.9 cm，对齐后抵消），所以"蒙皮 pivot 偏移"与"原作埋地"都不是大面积埋地的原因。动画姿态相对 bind 最低点：type_480 抬高 1.1–1.2 cm，type_481 下降 0–1.0 cm，type_482 下降 2.1–4.3 cm。接触地形与视觉网格在部分位置不重合（`small_fiddler_crab_056` 处接触面 −1.378，视觉面 −1.133），按"地面高度"测量时取哪一张网格会差到 0.25 m。
 - **路径类的 y【实测】**：路径点落在接触地形上（p23：与地面差 −1.5…+2.7 mm），螃蟹出生中心在路径点之上约一个半高（10 个路径件中 9 个，0.5–1.1 cm 以内）。路径点已换成项目世界；`MotionMath` 只转换原作的中心相对位移 `(0, −b, 0)`，因此中心落在 `point + (0, b, 0)`，宿主与预览都不另行抬升。
 - **局限**：与 noclip 的对比是**姿态级**（现成截图里螃蟹仅约 90 px）。逐姿态对比要起 noclip dev server + 装

@@ -8,7 +8,7 @@ from the previous tip position to this one.  This file pins the reference
 implementation of that sweep; the C# port (``BallShapeMath.TryNeedleSegmentContact``)
 is asserted against the same numbers in the EditMode test
 ``NeedleSegmentTests.cs``, which is what keeps the two implementations from
-drifting (the same discipline ``sweep.py`` <-> ``SweepMath.cs`` already uses).
+drifting.
 
 Run with ``python3 -m unittest discover -s Docs/tests`` from the repo root.
 """

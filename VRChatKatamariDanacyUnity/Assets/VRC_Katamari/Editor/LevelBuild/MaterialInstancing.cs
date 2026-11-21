@@ -104,19 +104,6 @@ namespace VRCKatamari.Editor.LevelBuild
                 && IsEligible(material.shader.name, material.renderQueue);
         }
 
-        /// <summary>
-        /// Turns instancing on for one material asset when it is eligible, and reports whether
-        /// it changed anything. The creation code's entry point for a material it owns (a new
-        /// asset still in memory or an existing one it may write).
-        /// </summary>
-        public static bool EnableIfEligible(Material material)
-        {
-            if (!IsEligible(material) || material.enableInstancing) return false;
-            material.enableInstancing = true;
-            EditorUtility.SetDirty(material);
-            return true;
-        }
-
         /// <summary>What one <see cref="EnableInScene"/> pass did.</summary>
         public sealed class Result
         {

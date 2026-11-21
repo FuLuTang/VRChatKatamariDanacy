@@ -1501,59 +1501,6 @@ namespace VRCKatamari.Editor.LevelBuild
             return declared;
         }
 
-        private static long DeclaredValueUnits(PlacementDocument doc, PropEntry prop)
-        {
-            if (prop.valueUnits >= 1)
-            {
-                return prop.valueUnits;
-            }
-
-            if (doc.defs == null || prop.def == null)
-            {
-                return 0;
-            }
-
-            for (int i = 0; i < doc.defs.Length; i++)
-            {
-                DefEntry entry = doc.defs[i];
-                if (entry != null && string.Equals(entry.id, prop.def, StringComparison.Ordinal))
-                {
-                    return entry.valueUnits;
-                }
-            }
-
-            return 0;
-        }
-
-        /// <summary>
-        /// Item id to declared value, ready for <see cref="PickupFieldSync.SyncFromChildren"/>.
-        /// </summary>
-        /// <remarks>
-        /// One map, built once, passed once. The importer deliberately does not keep a
-        /// second path that writes <c>valueUnits</c> after the sync: that was the U2
-        /// double-write, and it made the sync's write and the declaration disagree whenever
-        /// the read-back guard was skipped.
-        /// </remarks>
-        private static Dictionary<string, long> BuildDeclaredValueUnits(PlacementDocument doc)
-        {
-            var declared = new Dictionary<string, long>(StringComparer.Ordinal);
-            if (doc.props == null)
-            {
-                return declared;
-            }
-
-            for (int i = 0; i < doc.props.Length; i++)
-            {
-                PropEntry prop = doc.props[i];
-                if (prop != null && !string.IsNullOrEmpty(prop.itemId))
-                {
-                    declared[prop.itemId] = DeclaredValueUnits(doc, prop);
-                }
-            }
-
-            return declared;
-        }
-
         /// <summary>
         /// Item id to the per-item volume factor k the level declares.
         /// </summary>
@@ -4015,13 +3962,6 @@ namespace VRCKatamari.Editor.LevelBuild
             }
         }
 
-        /// <summary>The scene a level document declares, wherever the level lives.</summary>
-        private static string ReadSceneOf(string placementPath)
-        {
-            string directory = Path.GetDirectoryName(placementPath);
-            return directory == null ? null : LevelPaths.DeclaredSceneOf(directory);
-        }
-
         private static string ResolveLevelsFolder()
         {
             return LevelPaths.LevelsFolder();
@@ -4132,22 +4072,6 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.PropFoldersCreated++;
             }
             return folder.transform;
-        }
-
-        private static Transform FindManagedChild(string name)
-        {
-            Scene scene = EditorSceneManager.GetActiveScene();
-            GameObject[] roots = scene.GetRootGameObjects();
-            for (int i = 0; i < roots.Length; i++)
-            {
-                if (string.Equals(roots[i].name, ManagedRootName, StringComparison.Ordinal))
-                {
-                    Transform child = FindChild(roots[i].transform, name);
-                    return child;
-                }
-            }
-
-            return null;
         }
 
         private static Transform FindChild(Transform parent, string name)

@@ -42,7 +42,7 @@ Blender 模型脚本 ──► manifest.collision.boxes ──┬──► Unity
 
 ### 2.1 (a) 球挡路 —— **不用碰撞体，且不能改用碰撞体**
 
-【代码事实】球是纯 kinematic：全仓没有 `Rigidbody` / `CharacterController`，位置只由 `SweepMath` 写（`KatamariBallMotor.StepBall`）。挡路今天由 `PickupFieldHost.UpdateBlockingProps` 用 `propBounds` 建轴对齐盒，经 `motor.SetBlockingBoxes` 追加进扫掠。宿主头注释明写「not from a `BoxCollider` and not from the visual mesh」。
+【代码事实】球是纯 kinematic：全仓没有 `Rigidbody` / `CharacterController`，位置只由接触求解写（`KatamariBallMotor.StepContactV2`）。挡路今天由 `PickupFieldHost.UpdateBlockingProps` 用 `propBounds` 建轴对齐盒，经 `motor.SetBlockingBoxes` 追加进扫掠。宿主头注释明写「not from a `BoxCollider` and not from the visual mesh」。
 
 所以「球挡路」这个消费者的输入是**玩法体积**，不是碰撞体。为什么不能反过来让它读碰撞体：一旦挡路盒取决于「这件有没有挂 collider」，同一件道具的物理行为就会随场景接线而变，而吸收门永远只看 `propBounds`，两者立刻可以漂移（`BLOCKING_PROPS_PLAN` §0.6 的原话）。
 

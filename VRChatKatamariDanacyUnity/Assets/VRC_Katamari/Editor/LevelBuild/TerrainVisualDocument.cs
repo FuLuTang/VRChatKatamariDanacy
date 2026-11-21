@@ -67,16 +67,6 @@ namespace VRCKatamari.Editor.LevelBuild
         public TerrainVisualPart[] Parts = new TerrainVisualPart[0];
         public TerrainVisualMaterial[] Materials = new TerrainVisualMaterial[0];
 
-        public TerrainVisualMaterial FindMaterial(string id)
-        {
-            for (int i = 0; i < Materials.Length; i++)
-            {
-                if (string.Equals(Materials[i].Id, id, StringComparison.Ordinal)) return Materials[i];
-            }
-
-            return null;
-        }
-
         /// <summary>
         /// Parse and shape-check the block. <paramref name="error"/> carries the
         /// <c>[terrain_visual*]</c> tag of the first problem; the geometry itself is not read.

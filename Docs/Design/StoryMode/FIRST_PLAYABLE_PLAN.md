@@ -6,7 +6,7 @@
 
 ## 0. 先给结论
 
-1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）和桌面适配器 `DesktopMoveInput` 外没有别的驱动来源。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中；作为对照 `Labs/StationPlatform/StationPlatformLab.unity` 有 1 个），也没有 `Interact` 处理，所以点球不可能入座。
+1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）和桌面适配器 `DesktopMoveInput` 外没有别的驱动来源。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中），也没有 `Interact` 处理，所以点球不可能入座。
 2. **半埋不是物理问题，是视觉没缩。** CpuSkirmish 的 `BallVisual` 用内置 1 m 球（mesh 10207，`Labs/CpuSkirmish/CpuSkirmish.unity:832`），`localScale` 恒为 1（`:778`）；motor 把球心放在 y≈0.15（`:449`），地面顶面在 y=0（Ground y=−0.2、scale y=0.4，`:579-580`）。于是 1 m 球有 0.35 m（半径的 70%）在地面以下。motor 从不写 scale（`KatamariBallMotor.cs:931-940` 只写 position/rotation），host 也“从不 resize 球”（`CpuSkirmishBootstrap.cs:16`）；把视觉球缩到语义直径的场景看着是对的。
 3. **方块不粘是没接，不是坏了。** 吸附后方块被 `SetActive(false)` 直接藏掉（`Labs/CpuSkirmish/PlaygroundProp.cs:164-169`）；motor 只提供 absorbed-event ring（`KatamariBallMotor.cs:280`、`:1523-1531`）。宿主代码已经写了（`Runtime/Pickup/PickupFieldHost.cs`，用 `AttachmentMath` 把被吸物件挂到球的附着根），缺的只是场景接线：`AttachmentRoot` 与道具行还没有接（§3）。
 
@@ -15,7 +15,7 @@
 **已有（文档 + 实验证据）**
 - 约定关系：Station + 独立 FollowRig；FollowRig“绝不成为滚动 Mesh 的孩子”（`Docs/02_TECHNICAL_CONTRACTS.md:28`）；“FollowRig 挂到 Station/玩家参考系；本层只给位置 + yaw”（`Docs/Design/BallMotor/README.md:169`）；坐姿用 Station 的 Disable Station Exit 处理退出（`Docs/01_GAME_DESIGN.md:63`）；摄像机不随球滚转（`:137-141`）。
 - StationPlatform 实验（PC 桌面）证明了：可入座；坐姿 Jump 不退座、长按只计一次；退出按钮恢复 JumpImpulse；入座后交互提示关闭（D1 PASS，用户目视）。见 `Docs/Evidence/StationPlatform/README.md:5`、`:23-28`。桌面交互是准星对准后**鼠标左键**，E 无效（`:28`）。
-- 载人机制本身很简单：实验里 Station 是 `StationCarrier` 的子物体（`Labs/StationPlatform/StationPlatformLab.unity:187`），driver 每帧移动 carrier（`Labs/StationPlatform/StationLabDriver.cs:54-59`），玩家就跟着走；`Interact` 里调 `station.UseStation(player)`（`:70-75`）。
+- 载人机制本身很简单：实验里 Station 是 `StationCarrier` 的子物体，driver 每帧移动 carrier，玩家就跟着走（该实验场景已并入 `Runtime/Riding/BallRideStation`）；`Interact` 里调 `station.UseStation(player)`（`:70-75`）。
 - 输入接缝：`SetMoveAxes(forward, turn, lateral)` 落到 `debugForward/Turn/Lateral`（`KatamariBallMotor.cs:965-970`、`:140-144`），`StepInput` 用 `(lateral, forward)` 组 `Vector2` 走 ControlIntent（`:663-682`），turn 直接进 BallMotion，±1 = ±110°/s（`Runtime/Motion/BallMotionMath.cs:155-167`）。ControlIntent 层不读设备（`Docs/Design/ControlIntent/README.md:9`），设备读取属于适配器。
 
 **没接**
@@ -25,7 +25,7 @@
 
 **最小正确接线**
 - 新 `Runtime/Input/DesktopMoveInput.cs`（UdonSharpBehaviour，独占 GameObject，`BehaviourSyncMode.None`）：只做设备→三轴。`InputMoveVertical` 存 forward，`InputMoveHorizontal` 存 turn（A 负、D 正），`OnStationExited`/`OnPlayerRespawn`/`OnDisable` 清零后 `SetMoveAxes(0,0,0)`。**不要**把设备读取写进 motor。
-- 新 `Runtime/Riding/BallRideStation.cs`：`Interact` 未入座则 `station.UseStation(localPlayer)`；`OnStationEntered` 标记 seated 并可驱动；`OnStationExited` 复位。退出另用一个世界内按钮的 `Interact` → `station.ExitStation(localPlayer)`（与 `StationLabExitButton.cs` 同形，但作为产品行为重写，不引用 Labs 代码）。
+- 新 `Runtime/Riding/BallRideStation.cs`：`Interact` 未入座则 `station.UseStation(localPlayer)`；`OnStationEntered` 标记 seated 并可驱动；`OnStationExited` 复位。退出另用一个世界内按钮的 `Interact` → `station.ExitStation(localPlayer)`（作为产品行为编写，不引用 Labs 代码）。
 - 场景：`RideRoot` 接到 motor 的 `followRigRoot`（motor 每帧写它的 position/yaw，`KatamariBallMotor.cs:1026-1032`），Station 作为 `RideRoot` 子物体，朝向球的前进方向。**别把两套偏移叠起来**：FollowRig 的帧本身就是「球心后方 0.75 + 2.2·r m、上方 0.55 + 2.4·r m」（见 `Docs/Design/BallMotor/README.md` 的「跟随架」），所以 rig 根就是取景眼点，Station 的 `localPosition` 从 `(0, 0, 0)` 起，只做坐姿视点补偿；再叠一层位移会叠成约 4 m 后退。`followRigRoot` 必须真的接上，否则这段完全不生效。VRCStation 打开 Disable Station Exit（`Docs/01_GAME_DESIGN.md:63`），退出只走世界内按钮。
 - 为什么不用 FollowRig 直接带人：它只输出 position + yaw（`Runtime/BallLayers/FollowRig/FollowRigMath.cs:74`），没有能力移动玩家；能把玩家带走的只有 Station。文档也是这个分工（`Docs/Design/BallMotor/README.md:164`）。
 - 装配约束按**项目惯例**：`KatamariBallMotor` 独占 `MotorHost`，新增的输入/骑球/宿主/剧情 Behaviour 也各自独占对象。理由是工程性的（职责边界清楚、自检一眼可验、重建层级不会留下旧副本），**不是**引擎限制——同物体挂多个 UdonSharpBehaviour 是官方支持的，旧说法（“同物体第二个脚本会被引擎关掉”）已撤回（`Docs/Design/BallMotor/README.md` 的「装配约束」）。真正的同物体硬约束是同步模式：多个 UdonBehaviour 会回落到其中最严格的那个，本项目行为都是 `BehaviourSyncMode.None`，所以别把需要 Manual/Continuous 的行为与它们同挂。例外：`BallRideStation` 必须与 VRCStation + 交互 Collider 同物体，因为 `Interact` 与 `OnStationEntered/Exited` 只送到那个物体（§1“骑球”段）。
@@ -33,7 +33,7 @@
 ## 2. 球贴地（不是半埋）与“碰撞”是什么意思
 
 **已有**
-- 球心=中心：每步 Sweep → GroundContact；空代理时支撑高度=核心半径，球心被放到 `planeOffset + support`（`Runtime/BallLayers/GroundContact/GroundContactMath.cs:89-111`）。地面是一条解析平面（`KatamariBallMotor.cs:86-87`），host 用 `AddPlane` 注册（`:1087-1101`）。
+- 球心=中心：每步 Sweep → GroundContact；空代理时支撑高度=核心半径，球心被放到 `planeOffset + support`（当时的 `GroundContactMath`）。地面是一条解析平面（`KatamariBallMotor.cs:86-87`），host 用 `AddPlane` 注册（`:1087-1101`）。
 - 三个尺寸分开：核心半径 / 碰撞半径 / 语义直径（`KatamariBallMotor.cs:1363-1376`）。默认起始语义直径 0.29974 m、碰撞半径 0.14987 m（`Docs/Design/BallMotor/README.md:130`），所以球心 y≈0.15 本身是对的。
 - 正确做法：`ballVisual.localScale = diameter`，球心 y 随半径变化。
 

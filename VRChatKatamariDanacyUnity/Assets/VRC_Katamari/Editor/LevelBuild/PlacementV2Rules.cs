@@ -425,16 +425,6 @@ namespace VRCKatamari.Editor.LevelBuild
         public const string ProxySourceAabbFallback = "aabb-fallback";
         public const string ProxySourceManual = "manual";
 
-        /// <summary>The three states a solid's <c>shape</c> may take (§4).</summary>
-        public static bool IsShape(string value)
-        {
-            if (value == null) return false;
-            string shape = value.Trim();
-            return string.Equals(shape, ShapeBox, StringComparison.Ordinal) ||
-                   string.Equals(shape, ShapeProxy, StringComparison.Ordinal) ||
-                   string.Equals(shape, ShapePlane, StringComparison.Ordinal);
-        }
-
         public static bool IsProxySource(string value)
         {
             if (value == null) return false;

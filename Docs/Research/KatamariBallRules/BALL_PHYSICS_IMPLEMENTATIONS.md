@@ -41,10 +41,10 @@
 
 | 层 | 一句话（覆盖什么 / 结论 / 缺什么） |
 |---|---|
-| [`GroundContact/`](../../Design/BallLayers/GroundContact/README.md) | 支持高度求解器：吃核心半径 + 旋转 + 代理点，输出贴地后的球心；有单步升降夹紧（`max_lift_per_step` / `max_drop_per_step`）。**结论：能表达"球芯被凸起顶高"，但输入永远是一张平面 **。缺：多面体/台阶/边缘/下坠。 |
-| [`GroundContact/Research/SOURCE_EVIDENCE.md`](../../Design/BallLayers/GroundContact/Research/SOURCE_EVIDENCE.md) | **本仓库最诚实的证据台账**：明确记着"没有取得原作源码"、"US7402104B2 只是历史专利，不证明新版沿用"，并逐条记下当年 HTTP 结果（Google Patents 200、USPTO PDF 403、GitHub 搜索 0）。**它自己承认只读了聚合页书目，没有读专利正文。** 本文 §2.1 补上了这一课。 |
+| `GroundContact/`（该层已随 v1 位置权威在 1db240f 移除） | 支持高度求解器：吃核心半径 + 旋转 + 代理点，输出贴地后的球心；有单步升降夹紧（`max_lift_per_step` / `max_drop_per_step`）。**结论：能表达"球芯被凸起顶高"，但输入永远是一张平面 **。缺：多面体/台阶/边缘/下坠。 |
+| [`CONTACT_SOURCE_EVIDENCE.md`](CONTACT_SOURCE_EVIDENCE.md) | **本仓库最诚实的证据台账**：明确记着"没有取得原作源码"、"US7402104B2 只是历史专利，不证明新版沿用"，并逐条记下当年 HTTP 结果（Google Patents 200、USPTO PDF 403、GitHub 搜索 0）。**它自己承认只读了聚合页书目，没有读专利正文。** 本文 §2.1 补上了这一课。 |
 | [`RadialProxy/`](../../Design/BallLayers/RadialProxy/README.md) | 16 个 Fibonacci 方向 + 每方向一个"端点支持长度" + 最多 4 个长物件（各 8 个 AABB 角点）；已有"吸附只重算外半球、移除按幸存端点重算（不是历史 max）"的正确设计。**结论：B 阶段（驱动接地高度）已接线，C 阶段（进碰撞/PVP）刻意没做。** 方向数已由 32 改为 16（原作滚动模型 16+4，专利证据；32 曾是 provisional），且方向表只是摘要、物理用端点云，所以物理行为不变。缺：不支持"中段凸起"（稀疏采样漏峰值，文件自己也写了）。 |
-| [`Sweep/`](../../Design/BallLayers/Sweep/README.md) | 球 vs 平面 + 轴对齐盒的连续扫掠（TOI），带接触缓冲（容量 4）、去法向速度、`stuck`/`blocked` 信号。**结论：只去法向分量、不做摩擦/反弹**（明标 PROVISIONAL）。缺：任意网格、角点/边接触、多步迭代。 |
+| `Sweep/`（该层已随 v1 位置权威在 1db240f 移除） | 球 vs 平面 + 轴对齐盒的连续扫掠（TOI），带接触缓冲（容量 4）、去法向速度、`stuck`/`blocked` 信号。**结论：只去法向分量、不做摩擦/反弹**（明标 PROVISIONAL）。缺：任意网格、角点/边接触、多步迭代。 |
 | [`Attachment/`](../../Design/BallLayers/Attachment/README.md) / [`SizeModel/`](../../Design/BallLayers/SizeModel/README.md) / [`VisualRoll/`](../../Design/BallLayers/VisualRoll/README.md) / [`FollowRig/`](../../Design/BallLayers/FollowRig/README.md) / [`RemoteProxy/`](../../Design/BallLayers/RemoteProxy/README.md) | 吸附位姿、体积→三尺寸、无滑滚动、跟随架眼点、远端重建。这五层与"地形"无关，不展开；只提醒 `VisualRoll` 吃的是**实际位移 + 支撑法线**，一旦改成多支撑面，法线来源要跟着换（见 §3.5）。 |
 
 ### 1.4 [`Docs/Design/BallMotor/README.md`](../../Design/BallMotor/README.md)（装配层）
@@ -84,7 +84,7 @@
 
 ### 1.8 仓库里"已有但没人读"的证据缺口（本文补的）
 
-`GroundContact/Research/SOURCE_EVIDENCE.md` 明确写着：Google Patents 页 HTTP 200，但**只读了书目**；USPTO PDF 403。也就是说**专利正文在本仓库从未被读过**。本文 §2.1 读了 US7402104B2 的说明书与权利要求（经 Google Patents 与同族 JP4316334B2 英文机翻），下面的数字都是从那里面抠出来的。
+`CONTACT_SOURCE_EVIDENCE.md` 明确写着：Google Patents 页 HTTP 200，但**只读了书目**；USPTO PDF 403。也就是说**专利正文在本仓库从未被读过**。本文 §2.1 读了 US7402104B2 的说明书与权利要求（经 Google Patents 与同族 JP4316334B2 英文机翻），下面的数字都是从那里面抠出来的。
 
 ---
 
@@ -317,7 +317,7 @@
 1. **Udon 到底暴露哪些 `Physics` 静态方法**——三份二手资料互相矛盾，只有 Unity 里的 `Class Exposure Tree` 能给答案。这是本文**唯一一个"必须由 Unity 操作者补一刀"**的缺口。
 2. **"Udon 每帧能承受多少次物理查询"** 没有公开数字，只能自测。
 3. **原作台阶/坡度/球速的数值**：专利只给"预定坡度""预定速度"这种占位词。
-4. **2025 新版是否沿用专利模型**：没有拆包、没有开发者说明。`GroundContact/Research/SOURCE_EVIDENCE.md` 的警告继续有效。
+4. **2025 新版是否沿用专利模型**：没有拆包、没有开发者说明。`CONTACT_SOURCE_EVIDENCE.md` 的警告继续有效。
 5. **没有找到任何"VRChat 里的块魂"或"带吸附物的 Udon 滚球"公开实现**；最接近的是 Booth 上的铁球转小游戏（只同步位置）。
 6. **Unreal 侧的 Katamari 实现**没找到。
 7. **"吸附物让球颠簸"的定量数据**（升高多少、频率多少）没有任何来源；只能靠 §3.4 格位 4 自己测。
@@ -353,7 +353,7 @@
 ## 附录 B：与仓库内文档的继承关系
 
 - **不重复**：[`ABSORB_SIZE_RATIO.md`](ABSORB_SIZE_RATIO.md) 负责"能吸多大"；本文只补一句"10% 已获专利证实"，不重写它的表格。
-- **升级**：[`GroundContact/Research/SOURCE_EVIDENCE.md`](../../Design/BallLayers/GroundContact/Research/SOURCE_EVIDENCE.md) 里"未读专利正文"的缺口由本文 §2.1 补上；该文件本身不应被改写（它记录的是**当时**的检索结果）。
+- **升级**：[`CONTACT_SOURCE_EVIDENCE.md`](CONTACT_SOURCE_EVIDENCE.md) 里"未读专利正文"的缺口由本文 §2.1 补上；该文件本身不应被改写（它记录的是**当时**的检索结果）。
 - **喂给**：[`Docs/Design/BallMotor/TERRAIN_SUPPORT.md`](../../Design/BallMotor/TERRAIN_SUPPORT.md)（撰写中）——§3.5 是给它的问题清单与倾向，不是替它做决定。
 - **约束**：[`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) §3.3 的"直到 C 阶段通过，PVP 用球形半径"继续有效；本文没有推翻任何一条合同。
 

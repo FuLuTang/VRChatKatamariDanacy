@@ -133,7 +133,7 @@ namespace VRCKatamari.Labs.HubLoop
     /// Entry points, both on this one behaviour. <c>Interact()</c> is the world-space press: the
     /// plan's §3.1 picks in-world <c>Interact</c> buttons for the first pass because the scene has
     /// no <c>EventSystem</c> and the world-space button path has precedent
-    /// (<c>BallRideExitButton</c>, <c>StationLabExitButton</c>: object + collider + behaviour).
+    /// (<c>BallRideExitButton</c>: object + collider + behaviour).
     /// <c>TeleportLocalPlayerToIndex(int)</c> is the seam the later room button / round controller
     /// calls instead of pressing anything. <c>Interact()</c> is a one-line forward to it, so there
     /// is still one implementation of "how a teleport happens".

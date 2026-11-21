@@ -101,7 +101,7 @@
 | F9 | **P1 之前**没有重力、没有切向加速度：`planarVelocity` 是 XZ，`y` 恒 0；「下落」只是 `GroundContactMath` 的 `maxDropPerStep = 0.1` 钳位。**P1 起竖直重力生效**（9.81 m/s²，只在失去支撑时作用；§8.1）。**P3 起切向重力是可配置字段 `rampTangentialGravityScale`，默认 0（= 不存在）** | `BallMotionMath.TryStep`、`maxDropPerStep`、`SupportSurfaceMath.TryApplyRampTangentialGravity`、§8.1 |
 | F10 | 挡路盒由宿主**整批替换**，来源是玩法体积 `propBounds`，谓词是 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limit)`；`limit` 由电机 `GetAbsorbVolumeLimitWorldM3()` 给 | `PickupFieldHost.UpdateBlockingProps`、`SetBlockingBoxes` |
 | F11 | 球的「最低点」由径向壳决定：`RadialProxyShellMath.TryBuildPinTips(coreRadius, protrusionCap, directions, supports, localProxyPoints, out count)`（16 根针的针尖），点是从球心出发的**局部偏移**，世界点 = `center + Q·p` | 同上（并行代理在改这一带） |
-| F12 | 全仓运行时代码 **0 处** `Physics.` / `Rigidbody`（唯一 `SphereCollider` 在 `Labs/StationPlatform/StationPlatformLab.unity`） | `grep -rn "Physics\.\|Rigidbody" Runtime/ Labs/` = 0 命中 |
+| F12 | 全仓运行时代码 **0 处** `Physics.` / `Rigidbody` | `grep -rn "Physics\.\|Rigidbody" Runtime/ Labs/` = 0 命中 |
 | F13 | 台阶数据**已经在数据侧**：`scale.max_step_height_over_ball_diameter = 0.25`、`scale.max_route_step_m = 0.05`、`scale.max_traversable_slope_percent = 12.0`；校验器按「台阶高 ≤ 0.25 × 球径」判 `climb_step` | `Docs/Design/Maps/PicnicLawn/layout.json`、`Tools/mapbuild/validate_map.py` |
 | F14 | 但运行时**没有任何一处读 0.25**：`climb_step` 今天只是作者注记（PICNIC §3.5.1、§4.3 G1） | 全文 0 处消费方；本文是第一个 |
 

@@ -7,7 +7,7 @@ namespace VRCKatamari.Tests
     /// <summary>
     /// Integration tests for the radial-proxy shell (the ball's 16 pins): the caller-owned
     /// ledger, the AABB endpoint protocol, the incremental attach/detach, the atomic rebuild
-    /// and the protrusion-clamped pin tips that drive GroundContactMath. Every attached prop
+    /// and the protrusion-clamped pin tips. Every attached prop
     /// is an item (no long-object admission), so the ledger holds hundreds of them.
     /// </summary>
     /// <remarks>

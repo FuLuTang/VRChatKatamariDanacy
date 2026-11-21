@@ -17,7 +17,7 @@
 | 项 | 做法 | 理由 |
 |---|---|---|
 | 位置 | 跟随视角 HUD：视线下方 15°、偏左 12°，距眼 1.4 m（随骑手眼高缩放），圆底名义视角 7° | VR 没有屏幕角落；按 Meta 规范「要读的面板放视线下方 10–20°、1.2–1.5 m」，偏左呼应原作左下角 |
-| 跟随 | `CatchNameMath.HeadYaw`、`StepAnchorYaw` 和 `TryEvaluateHudPlacement`：只跟头部偏航，死区 27°，0.4 s 约消去 95% 角差 | 物品名面板自行计算跟随和眼前布局；有效仰角为 (−90°, 90°) |
+| 跟随 | `CatchNameMath.HeadYaw`、`StepAnchorYaw` 和 `TryEvaluateHudPlacement`：只跟头部偏航，死区 27°，0.4 s 约消去 95% 角差 | 有效仰角为 (−90°, 90°) |
 | 朝向 | `CatchNameMath.FacingRotation(yaw, elevation)`：面板正对眼点（含俯仰） | 在视线下方时面板上缘朝人倾，读起来不斜 |
 | 小模型 | 被吸物件网格的缩小副本：4 个预建槽位借用原物件的 `sharedMesh/sharedMaterials`，按包围盒居中、最长边缩到圆底直径的 0.75 倍，前倾 20°，−60°/s 自转 | 见下节 |
 | 名字计时 | 2/30 s 一个字，打完停 3.5 s 后隐去；模型留到下一件 | 原作帧数按 30 fps 换算（基准帧率是推断） |

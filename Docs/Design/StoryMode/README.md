@@ -64,7 +64,7 @@
 
 ## 骑球
 
-> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1、§7 S2 与 §8 的风险 1。
+> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1、§7 S2。
 
 ### 三个脚本
 
@@ -73,7 +73,6 @@
 | `Runtime/Riding/BallRideStation.cs` | 与 VRCStation 同物体的骑乘宿主：`TrySeatLocalPlayer()` → `station.UseStation(localPlayer)`；本地球员入座/离座时开关 ride 闸门、球上点击球的提示、骑乘者面板；按住跳跃键 `exitHoldSeconds`（1.5 s）或面板按钮 → `RequestExit()`：先把 exit location 放到球旁可站立地面，再 `ExitStation`；`IsLocalPlayerSeated()` 给探针读 | 不移动 rig/球、不写 motor（只读球心、半径、朝向）、不抢账本/回合状态、不同步任何变量 |
 | `Runtime/Riding/BallSeatInteract.cs` | 球上的点击球：挂 `ballPhysicsRoot` 下的单位球 trigger，按 `RideViewMath.SeatTriggerRadius` 随球缩放；`Interact` → `BallRideStation.TrySeatLocalPlayer()` | 不持有 seated 状态 |
 | `Runtime/Riding/BallRideExitButton.cs` | 骑乘者面板上的下车按钮：点两次（3 s 内）→ `BallRideStation.RequestExit()` | 不持有 seated 状态、不碰 motor；状态复位由 `BallRideStation.OnStationExited` 一处负责 |
-| `Labs/StationPlatform/SeatedAxisProbe.cs` | 只为回答计划风险 1 的只读探针：每个 `InputMoveVertical`/`InputMoveHorizontal`/`InputJump` 打一行 `[seated-axis]`，带 `seated=` | 不是产品代码，没有任何别的文件引用它；答案写进本文后连文件、`.meta`、组件一起删 |
 
 三个都 `BehaviourSyncMode.None`，没有 static、属性、struct、接口、泛型、LINQ 或每帧分配。
 
@@ -98,24 +97,9 @@
 
 `DesktopMoveInput` 只认设备，谁按都转成球轴，所以“只有坐着才能开”必须由骑乘宿主把关：`Start()` 先把自己那把闸门关上（站着的人不能遥控球），`OnStationEntered`（本地球员）打开，`OnStationExited` 再关上。闸门是 `DesktopMoveInput.SetRideGate(bool)`（`Runtime/Input/DesktopMoveInput.cs:77`），关的时候适配器会把两轴清零并再推一次零，球会刹车。
 
-`OnPlayerRespawn` 也清一次：复活可能把人留在座位里而不发 `OnStationExited`，那样交互会永久禁用、再也坐不上去。实验的 driver 同样这么做（`StationLabDriver.OnPlayerRespawn`），这里只是照抄这条保险。
+`OnPlayerRespawn` 也清一次：复活可能把人留在座位里而不发 `OnStationExited`，那样交互会永久禁用、再也坐不上去。
 
 **与回合控制器的分工**：`StoryRoundController` 不再共用这把开关，它只关自己的 `SetRoundGate(bool)`（`Runtime/Story/StoryRoundController.cs` 到点时调 `false`）。两把闸门互不影响，所以到点后再入座也不会把输入重新打开；细节见 S1 的“输入闸门”。
-
-### 5 分钟 Build & Test 探针（计划风险 1）
-
-要回答的只有一句：**坐着的时候 VRChat 还把 `InputMove*` 发给 Udon 吗？**
-
-1. 在骑球场景加一个空物体（例如 `SeatAxisProbe`），**独占**挂 `SeatedAxisProbe`，把 `ride` 拖成那个 `BallRideStation`。别的都不用接线。
-2. 用户在 Editor 里点 Build & Test，桌面客户端进世界。
-3. 准星对着球按**鼠标左键**入座（桌面交互是左键，E 无效）；日志应出现 `[ride] seated entered`。
-4. 坐着别动退出：按住 W 约 2 秒，松开；按 S 约 2 秒；再按 A、D 各约 2 秒。
-5. 读日志：客户端日志 `%USERPROFILE%\AppData\LocalLow\VRChat\VRChat\output_log_*.txt`（T04 两轮读的就是这个路径），搜 `[seated-axis]`；若你的客户端把 Udon 的 `Debug.Log` 显示在界面里的 Log 面板，也可以直接看。判定：
-   - 出现 `seated=True` 且 `value` 非 0 的行 → 轴在坐姿下仍到达，风险 1 不存在，“坐着开”成立。顺手点退出按钮，确认 `[ride] seated exited` 且下球后能走。
-   - 只有 `seated=False` 的行 → 坐姿下轴不来。先做一步排查：把 Player Mobility 改成 Mobile 再测一遍，用来区分“坐姿不送轴”和“移动被禁所以不送轴”；仍然没有就照风险 1 记失败并考虑回退方案。
-   - 连 `[seated-axis] probe ready` 都没有 → 探针没挂上/脚本没进构建，不是轴的问题。
-
-探针的日志量有上限：值变化各打一行，另外每个轴在非零期间最多每 0.25 s 一行（桌面键盘只发 −1/0/1，实际等于每次按键一行），所以五分钟的测试不会把日志刷爆。
 
 ## 吸附宿主
 
@@ -341,7 +325,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 - **中途离座：回合照常跑。** 离开是玩家的选择，暂停会把计时变成玩家可随意停的资源。输入本来就被骑乘闸门关掉（适配器清零两轴、球刹车），所以离座后计时继续、球不走，到点照样出结果卡。再坐回去只是重新开骑乘闸门（`NotifyRiderSeated()` 在 Running 被忽略），不会重开回合。
 - **`NotifyRiderSeated()` 在 Result：什么也不做。** 重试只能按结果卡上的按钮：`BeginRound()` 单独跑不会复位球、账本行、回合 id 和道具，坐下就重开等于“新回合配旧球”；`RequestRetry()` 才是先 motor 复位、再道具复位、最后 `BeginRound()` 的那条路。Running/Presenting 同样忽略，否则坐下会静默重开计时。
 - **`startOnLoad = true`** 保留旧行为，给没有 Station、没有人可坐的无头/键盘实验；有 Station 的场景必须保持 `false`。
-- **站不接 `roundController` 时**照样能坐、能开关骑乘闸门、能显示提示（StationPlatform 实验就是这样）；但场景里有 `StoryRoundController` 就必须把站上的 `roundController` 指过去，否则控制器永远停在 Idle、回合闸门一直关，表现为“坐上去也开不动”。
+- **站不接 `roundController` 时**照样能坐、能开关骑乘闸门、能显示提示；但场景里有 `StoryRoundController` 就必须把站上的 `roundController` 指过去，否则控制器永远停在 Idle、回合闸门一直关，表现为“坐上去也开不动”。
 - 提示行有**自己的一条 Text**（`startPromptText`），只在 Idle 显示；没接这条提示行时退回**剩余行**，并把剩余行清空以免显示一条没开始的倒计时。结果文字（`StoryResultPresenter.resultText`，卡上的 TMP）不再承载提示，只放「呈给国王」与结算内容——它随结果卡一起在 Idle 隐藏。
 
 ### 场景怎么接（Unity 操作者）
@@ -536,8 +520,8 @@ prop_bench_01@size=1.25
 
 以下行为没有 Play Mode / 真机记录（Hub 闭环自己的限制见 [HUB_ROOM](<HUB_ROOM.md>) §11）：
 
-1. **坐姿下桌面轴是否仍送达 Udon**：由「5 分钟 Build & Test 探针」回答；Player Mobility = Immobilize 下 `InputJump` 是否送达同样没有实测。桌面 WASD 的符号（A 是 −1 还是 +1）官方文档没写，代码按“A 负、D 正”映射。
-2. **Station 回调必须与 VRCStation 同物体**：依据是实验场景布局与 StationPlatform 的 PC 实测，不是 VRChat 文档原文。
+1. **坐姿下桌面轴**：Editor Play 里入座后球被驱动滚动（[2026-11-16 Play 观测](../../Evidence/BallPresentation/2026-11-16_owner_play_log/summary.md)），真实桌面客户端没有单独记录；Player Mobility = Immobilize 下 `InputJump` 是否送达同样没有实测。桌面 WASD 的符号（A 是 −1 还是 +1）官方文档没写，代码按“A 负、D 正”映射。
+2. **Station 回调必须与 VRCStation 同物体**：依据是首个 Station 原型的 PC 实测（[Station 证据](../../Evidence/StationPlatform/README.md)），不是 VRChat 文档原文。
 3. **点击距离**：座位在 rig 根上，准星到球的 Collider 至少是 `back`（0.5 m 球 1.85 m 起、1.43 m 球 2.32 m）；超出桌面交互距离就点不到，处理是减小 `eyeBaseBackMeters`/`eyeBackPerRadius` 或加大 Collider。
 4. **菜单与按住输入**：官方只写打开菜单会释放按住的按钮输入，轴是否补发 0 未说明；motor 有 `SetMenuOpen` 接缝，输入适配器没有用它。
 5. **已经坐在站里进世界**（例如复活回座位）时没有“加载时已在座”的路径：站只在 `OnStationEntered` 通知，会停在 Idle 且骑乘闸门关着，要离座再坐一次。

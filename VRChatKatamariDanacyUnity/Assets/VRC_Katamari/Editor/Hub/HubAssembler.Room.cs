@@ -61,7 +61,6 @@ namespace VRCKatamari.Editor.Hub
         public const string RoomLightsName = "HubRoomLights";
         /// <summary>The event every panel Button sends (SendCustomEvent argument).</summary>
         public const string PressEvent = "Press";
-        public const string CharsetRelativePath = "Tools/hubart/hub_panel_charset.txt";
         internal const string LegacyPanelName = "HubLevelPanel";
         internal const string ArtMaterialFolder = "Assets/VRC_Katamari/Art/Hub/Materials";
         internal const float AnchorToleranceM = 0.02f;

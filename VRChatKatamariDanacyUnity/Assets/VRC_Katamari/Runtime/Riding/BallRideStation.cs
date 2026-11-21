@@ -20,13 +20,10 @@ namespace VRCKatamari.Riding
     /// delivered to the behaviour on the GameObject of the collider that was hit,
     /// and VRChat delivers OnStationEntered/OnStationExited to the behaviours on the
     /// station's own GameObject. Both halves therefore have to share one object:
-    /// the VRCStation, the interact collider and this behaviour. That is exactly the
-    /// layout the StationPlatform lab used and PC-tested - its <c>Station</c> object
-    /// carries the VRCStation, the BoxCollider and <c>StationLabDriver</c>
-    /// (Labs/StationPlatform/StationPlatformLab.unity:198 station, :277 collider,
-    /// :157 driver). That station object is a child of the ball's follow-rig root,
-    /// so the seated player is carried by the motor's rig frame instead of by this
-    /// script. Sharing an object is legal and this behaviour requires it; the project
+    /// the VRCStation, the interact collider and this behaviour (PC-tested on the
+    /// first station prototype, Docs/Evidence/StationPlatform/README.md). The station
+    /// object is a child of the ball's follow-rig root, so the seated player is carried
+    /// by the motor's rig frame instead of by this script. Sharing an object is legal and this behaviour requires it; the project
     /// convention of one behaviour per object covers the others (clear ownership, a
     /// readable self-check), and the engine does not disable a second behaviour on
     /// the same object (Docs/Design/BallMotor/README.md, assembly constraints).
@@ -55,8 +52,8 @@ namespace VRCKatamari.Riding
     /// own notes say why).
     /// </para>
     /// <para>
-    /// The prompt: <c>DisableInteractive = true</c> while seated is how the lab
-    /// removed the "sit" outline while the crosshair still pointed at the vehicle
+    /// The prompt: <c>DisableInteractive = true</c> while seated removes the "sit"
+    /// outline while the crosshair still points at the seat
     /// (Docs/Evidence/StationPlatform/README.md, D1 PASS on PC; API basis in
     /// fix_seated_prompt.md). The sphere the player clicks to sit is
     /// <see cref="BallSeatInteract"/>, on the ball; this behaviour only turns its prompt
@@ -128,8 +125,7 @@ namespace VRCKatamari.Riding
 
         // Optional. The story round this seat starts: the first local sit-down in Idle
         // calls NotifyRiderSeated, which begins the clock. Left empty the station still
-        // seats, gates input and prompts exactly as before (the StationPlatform lab has
-        // no round controller). A scene that has a StoryRoundController must wire this:
+        // seats, gates input and prompts. A scene that has a StoryRoundController must wire this:
         // that controller waits in Idle with its own gate closed until a sit-down
         // arrives, so an unwired station means a round that never starts.
         [SerializeField] private StoryRoundController roundController;
@@ -215,7 +211,7 @@ namespace VRCKatamari.Riding
         private const string ExitHintIdle = "按住跳跃键下车";
 
         // VRChat's default VRCWorld prefab uses 3; the API defaults to 0.
-        // Station Platform Lab read back 3 (Docs/Evidence/StationPlatform/pc_results.md).
+        // The first station prototype read back 3 (Docs/Evidence/StationPlatform/pc_results.md).
         private const float DefaultStandingJumpImpulse = 3f;
 
         private void Start()

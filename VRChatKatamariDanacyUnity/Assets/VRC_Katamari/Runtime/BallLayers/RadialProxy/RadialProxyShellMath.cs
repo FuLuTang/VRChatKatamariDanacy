@@ -435,7 +435,7 @@ namespace VRCKatamari.BallLayers
         /// The atomic whole-ledger rebuild: <see cref="RadialProxyMath.TryRebuild"/>
         /// validates every item, key and endpoint before writing either the support
         /// table or the candidate list. Supports are solved with a zero core floor
-        /// (the table stores endpoint maxima; GroundContact adds the current core),
+        /// (the table stores endpoint maxima; the reader adds the current core),
         /// so the result does not depend on the core radius and a bank only needs
         /// this call to re-establish the invariant after a discontinuity.
         /// </remarks>

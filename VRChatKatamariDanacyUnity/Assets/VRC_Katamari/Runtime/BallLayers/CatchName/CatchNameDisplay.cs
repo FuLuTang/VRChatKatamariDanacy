@@ -11,7 +11,7 @@ namespace VRCKatamari.BallLayers
 {
     /// <summary>
     /// 本地骑乘 HUD：显示刚吸到的那一件（原作左下角圆框：慢转小模型 + 物件名）。
-    /// 放在视线下方偏左，跟随方式与推进箭头相同（只跟头部 yaw、死区、平滑追上）。
+    /// 放在视线下方偏左，只跟头部 yaw，带死区并平滑追上。
     /// </summary>
     /// <remarks>
     /// 小模型是被吸物件网格的缩小副本：预先摆好的 MeshFilter/MeshRenderer 槽位借用原物件的

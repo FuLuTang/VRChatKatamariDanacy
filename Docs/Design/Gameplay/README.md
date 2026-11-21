@@ -39,7 +39,7 @@ python3 Docs/Design/Gameplay/simulate.py --out Docs/Design/Gameplay/reports
 
 - [`PicnicLawn/README.md` §2](../Maps/PicnicLawn/README.md)：物件拾取门槛按档 s `0.08–0.30` / m `0.32–0.95` / l `1.00–1.95` m；§9 的尺寸门写“球径 < 1.05 m 挡死、≥ 1.25 m 可吸走长凳”。
 - [`02_TECHNICAL_CONTRACTS.md` §1/§4](../../02_TECHNICAL_CONTRACTS.md)：`pickupDiameterWorldM` 是玩法门槛，不是 Mesh 包围盒；半径/直径/门槛分字段。
-- Unity 运行时目前**没有**吸收实现（`Assets/VRC_Katamari/Runtime` 只有 `KatamariMath` 与 `GroundContactMath`），所以模型采用文档门槛，而不是猜一个运行时常量。
+- 运行时的吸收门是 `Runtime/Pickup/PickupAbsorbMath.IsBeyondAbsorbLimit`（原作整毫米 Req 比较）；本离线模型仍用下面的文档门槛近似，两者未对齐。
 
 因此模型用：
 

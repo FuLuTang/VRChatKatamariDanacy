@@ -78,15 +78,6 @@ namespace VRCKatamari.BallLayers
         public const int MaxRampCount = 4;
 
         /// <summary>
-        /// Step-mask refresh gates: semantic-diameter movement and reference-height
-        /// movement that force a recompute. They are PUBLIC because the motor and the
-        /// tests must use the same numbers; they are a frequency gate, not a gameplay
-        /// tolerance.
-        /// </summary>
-        public const float StepMaskDiameterGateM = 0.002f;
-        public const float StepMaskReferenceGateM = 0.005f;
-
-        /// <summary>
         /// A ramp whose normal is closer to horizontal than this cannot answer "which
         /// way is downhill", so it is refused instead of becoming a wall-like floor
         /// (design §8 P3 case 4: <c>n.y &lt;= 0.05</c> is refused).
@@ -164,33 +155,15 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
-        /// The ONE static-box step decision: is this box top within the ball's step
-        /// limit? False means the box stays a wall and stays in the sweep.
+        /// The ONE step decision: is this top within the ball's step limit?
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The motor's sweep mask calls THIS function per box, with the BALL'S BOTTOM as
-        /// the reference, and stores the answer in <c>boxIsSteppable</c>;
-        /// <see cref="TryResolveSupport"/> reads that mask for the static boxes instead of
-        /// calling this again, and the terrain query passes the same ball bottom. The
+        /// The terrain mesh query calls it with the BALL'S BOTTOM as the reference. The
         /// comparison is one subtraction and one inclusive bound
         /// (<c>top - reference &lt;= stepLimit</c>). A band written
         /// as <c>top &lt;= reference + stepLimit</c> is not bit-identical to it, and that
         /// second form was half of the 2026-11-15 C09 divergence.
-        /// </para>
-        /// <para>
-        /// There is deliberately no one-way hysteresis here. A latch can only widen the
-        /// exclusion beyond the support rule, and every box the sweep drops MUST be a box
-        /// the support table can select: a box removed from the sweep that cannot support
-        /// is the "ghost step" that let the 0.30 m ball drive through C09's 0.075 m deck
-        /// (the mask latched while the ball was airborne at spawn, then never released).
-        /// The mask's own refresh gate (5 mm of support movement, 2 mm of diameter) is the
-        /// de-noise, and it is symmetric because both sides read this one function.
-        /// </para>
-        /// <para>
-        /// The minimum-step rule does not live here: it only decides whether a crossing
-        /// grants the large step lift (<see cref="IsStepCrossing"/>), because a 4 mm lip is
-        /// still something the ball must be allowed to enter.
         /// </para>
         /// <para>
         /// Invalid input returns false (the conservative "wall") instead of throwing or
@@ -588,13 +561,6 @@ namespace VRCKatamari.BallLayers
         {
             return surfaceId >= FirstPropSurfaceId &&
                 surfaceId < FirstPropSurfaceId + MaxSupportPropCount;
-        }
-
-        /// <summary>Prop index inside that surface id, or -1 when it is not one.</summary>
-        public static int PropSurfaceIndex(int surfaceId)
-        {
-            if (!IsPropSurfaceId(surfaceId)) return -1;
-            return surfaceId - FirstPropSurfaceId;
         }
 
         /// <summary>

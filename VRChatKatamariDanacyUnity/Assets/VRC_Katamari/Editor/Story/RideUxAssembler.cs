@@ -1799,17 +1799,6 @@ namespace VRCKatamari.Editor.Story
             rect.offsetMax = Vector2.zero;
         }
 
-        private static void Reparent(GameObject child, Transform parent, Counters c, bool first)
-        {
-            if (child == null || child.transform.parent == parent) return;
-            Undo.SetTransformParent(child.transform, parent, "Move onto the rider's card");
-            child.transform.localPosition = Vector3.zero;
-            child.transform.localRotation = Quaternion.identity;
-            child.transform.localScale = Vector3.one;
-            if (first) child.transform.SetAsFirstSibling();
-            c.Changed++;
-        }
-
         // ---------------------------------------------------------- serialized access ---
 
         private static bool SetFloat(SerializedObject so, string field, float value, Counters c)

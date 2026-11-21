@@ -4,7 +4,7 @@
 
 ## 研究与项目规则边界
 
-- 未取得原版源码；US7402104B2 仅为历史专利公开，不能证明新版采用。官方产品资料不含径向支持算法；GitHub Ruby/Gosu 资源是独立 2D 实验而非原版源码。详见 [`GroundContact/Research/SOURCE_EVIDENCE.md`](../GroundContact/Research/SOURCE_EVIDENCE.md)。
+- 未取得原版源码；US7402104B2 仅为历史专利公开，不能证明新版采用。官方产品资料不含径向支持算法；GitHub Ruby/Gosu 资源是独立 2D 实验而非原版源码。详见 [`CONTACT_SOURCE_EVIDENCE.md`](../../../Research/KatamariBallRules/CONTACT_SOURCE_EVIDENCE.md)。
 - 项目 `Docs/02_TECHNICAL_CONTRACTS.md` §3.2 写有方向采样、每对象端点、max 支持、移除重算/账本重建。本层实现这些是项目自定义近似，不代表反编译或还原原作。
 - Unity 左手坐标与 Cross 规则已对照官方资料；Python host Hamilton quaternion 不是 Unity 相等性主张。C# 测试里的方向箭头对拍（`AngleAxis(+90°, +Y)` 下 +Z 落轴、world/local 往返）是显式 adapter 的方向事实。
 

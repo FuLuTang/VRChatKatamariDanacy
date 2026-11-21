@@ -17,7 +17,6 @@ namespace VRCKatamari.Editor.LevelBuild
             public int Extra;
             public string[] MissingIds;
             public string[] ExtraIds;
-            public bool HasGap => Missing > Tolerance || Extra > Tolerance;
         }
 
         // A duplicate is an extra even when it numerically cancels a missing instance.

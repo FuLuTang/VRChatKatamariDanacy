@@ -481,7 +481,7 @@ namespace VRCKatamari.Story
 
         // ---- Facts (read-only; the round reports them, it does not grade them) ----
 
-        /// <summary>The quest type this level sets.</summary>
+        /// <summary>The clear type this level sets (the original CLEAR_TYPE A/B/F).</summary>
         /// <remarks>
         /// Shared with whoever reports the result, so it can tell which of the two frozen
         /// measurements to look at without a second copy of the level's goal.

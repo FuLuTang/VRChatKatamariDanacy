@@ -184,13 +184,6 @@ namespace VRCKatamari.Editor.LevelBuild
             return Kind == LevelJsonKind.String ? StringValue : null;
         }
 
-        public bool AsBool()
-        {
-            if (Kind == LevelJsonKind.Bool) return BoolValue;
-            if (Kind == LevelJsonKind.Number) return NumberValue != 0.0;
-            return false;
-        }
-
         public double AsDouble()
         {
             return Kind == LevelJsonKind.Number ? NumberValue : 0.0;
@@ -542,23 +535,6 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return result;
-        }
-
-        /// <summary>Reads an array of integers (zone ids, index buffers, and so on).</summary>
-        public static bool TryInts(LevelJsonNode node, out int[] values)
-        {
-            values = null;
-            if (node == null || node.Kind != LevelJsonKind.Array) return false;
-            var result = new int[node.Count];
-            for (int i = 0; i < node.Count; i++)
-            {
-                LevelJsonNode item = node.At(i);
-                if (item == null || item.Kind != LevelJsonKind.Number) return false;
-                result[i] = item.AsInt();
-            }
-
-            values = result;
-            return true;
         }
 
         public static bool IsFinite(double value)

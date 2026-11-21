@@ -75,7 +75,7 @@ namespace VRCKatamari.Story
         public const int StarsMax = 3;
 
         /// <summary>
-        /// Evaluates a reach_target_diameter round: stars for a settled diameter.
+        /// Evaluates a type A round (<see cref="StoryGoalType.A"/>): stars for a settled diameter.
         /// </summary>
         /// <remarks>
         /// diameterM is the settled ball collision diameter in metres (the quantity
@@ -133,8 +133,8 @@ namespace VRCKatamari.Story
         }
 
         /// <summary>
-        /// Evaluates a collect_category_count round: stars for a settled attachment
-        /// count inside the quest's category.
+        /// Evaluates a type B round (<see cref="StoryGoalType.B"/>): stars for a settled count of
+        /// confirmed attachments of the level's objective items.
         /// </summary>
         /// <remarks>
         /// count is the settled count of confirmed attachments in the level's

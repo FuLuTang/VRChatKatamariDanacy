@@ -404,6 +404,14 @@ class McpSession:
 def open_session(args: argparse.Namespace) -> McpSession:
     session = McpSession(args.profile, args.timeout)
     session.open()
+    # The instance choice lives in the MCP session, and every invocation opens a new one,
+    # so a separate `call set_active_instance` is forgotten by the next command. With
+    # several editors connected, select the instance inside this same session first.
+    instance = getattr(args, "instance", None)
+    if instance:
+        result = session.call_tool("set_active_instance", {"instance": instance})
+        if result.get("isError"):
+            raise CliError(f"set_active_instance {instance} failed: {json.dumps(result, ensure_ascii=False)}")
     return session
 
 
@@ -574,7 +582,7 @@ def build_parser() -> argparse.ArgumentParser:
                 "  mcp_cli.py --server browser schema browser_tabs\n"
                 "  mcp_cli.py --server browser call browser_tabs '{\"action\":\"list\"}'\n"
                 "  mcp_cli.py tunnel down --all\n"
-                "env: MCP_SERVER, MCP_PORT, MCP_SSH_HOST, MCP_TIMEOUT, MCP_IMAGE_DIR"))
+                "env: MCP_SERVER, MCP_PORT, MCP_SSH_HOST, MCP_TIMEOUT, MCP_IMAGE_DIR, MCP_UNITY_INSTANCE"))
     parser.add_argument("--server", choices=sorted(PROFILES),
                         default=os.environ.get("MCP_SERVER", "unity").strip().lower(),
                         help="server profile (default unity, or MCP_SERVER)")
@@ -584,6 +592,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f"SSH host alias (default {SSH_HOST})")
     parser.add_argument("--timeout", type=float, default=TIMEOUT,
                         help=f"per-request timeout seconds (default {TIMEOUT:g})")
+    parser.add_argument("--instance", default=os.environ.get("MCP_UNITY_INSTANCE") or None,
+                        help="Unity instance (Name@hash or hash prefix) to select in this "
+                             "invocation's session when several editors are connected "
+                             "(or MCP_UNITY_INSTANCE)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("tunnel", help="manage the SSH port forward")

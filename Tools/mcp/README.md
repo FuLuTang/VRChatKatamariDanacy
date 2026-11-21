@@ -88,6 +88,9 @@ python3 mcp_cli.py --server browser call browser_take_screenshot --save-images /
 | `MCP_SSH_HOST` | `pc114514` | SSH 别名 |
 | `MCP_TIMEOUT` | `120` | 单次请求超时（秒），也可用 `--timeout` |
 | `MCP_IMAGE_DIR` | `/tmp/mcp-images` | `call` 保存图片的默认目录 |
+| `MCP_UNITY_INSTANCE` | 空 | 同 `--instance`：连了多个 Unity Editor 时，在本次调用的会话里先选中这个实例（`Name@hash`） |
+
+多个 Editor 同时连着 MCP 时，所有调用都会报 `Multiple Unity instances`。每次 `mcp_cli.py` 调用都是一个新会话，单独 `call set_active_instance` 的选择到下一条命令就丢了，所以要用 `--instance VRChatKatamariDanacyUnity@<hash>`（或设环境变量），让选择和本次调用在同一会话里。实例列表见报错信息里的 `available_instances`。
 
 ## browser profile 的两个坑
 

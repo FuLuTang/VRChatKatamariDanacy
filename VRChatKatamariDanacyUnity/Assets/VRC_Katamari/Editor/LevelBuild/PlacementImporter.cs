@@ -9,6 +9,7 @@ using UnityEngine.SceneManagement;
 using UdonSharp;
 using UdonSharpEditor;
 using VRCKatamari.BallContact;
+using VRCKatamari.BallMotor;
 using VRCKatamari.Editor.Pickup;
 using VRCKatamari.Pickup;
 using VRCKatamari.Story;
@@ -3798,6 +3799,11 @@ namespace VRCKatamari.Editor.LevelBuild
                 kinds.GetArrayElementAtIndex(i).stringValue = kindList[i];
             }
 
+            // The host registers only through its own Update, which returns silently while
+            // `motor` is empty: link it before the proxy is copied (PlacementImporter.ArenaMotor.cs).
+            KatamariBallMotor arenaMotor = WireArenaMotor(serialized.FindProperty(ArenaMotorField),
+                UnityEngine.Object.FindObjectsOfType<KatamariBallMotor>(true), report);
+
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(host);
             if (!hasGround)
@@ -3815,6 +3821,14 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Error("CopyProxyToUdon threw for LevelArenaHost: " + exception.Message +
                              ". The arena fields are set on the proxy but not on the backing " +
                              "UdonBehaviour; run the import again once the compile has finished");
+            }
+
+            if (arenaMotor != null)
+            {
+                string referencePath;
+                HandleSharedArenaHosts(host, arenaMotor,
+                    UnityEngine.Object.FindObjectsOfType<LevelArenaHost>(true),
+                    LevelPaths.IsReferenceScene(out referencePath), report);
             }
 
             report.ArenaWired = true;

@@ -126,7 +126,7 @@ GRID_KEYS = ("cellM", "origin", "cellsX", "cellsZ")
 SEGMENT_KEYS = ("id", "firstIndex", "indexCount", "material")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes",
-                  "collider", "proxySource", "parts", "hitOnAreaNo")
+                  "collider", "proxySource", "parts", "hitOnAreaNo", "def", "visible")
 #: ``shape`` values: a box (the motor's OBB) or a fitted proxy (``collider`` in local space,
 #: ``size`` kept as the support surface's AABB).  A proxy solid may also carry ``parts``:
 #: 2..4 local boxes the static table receives instead of one box around the proxy.
@@ -457,7 +457,7 @@ def validate(document, path=None, manifests=None, sidecar_bytes_=None, strict=Fa
     else:
         report.err("[terrain_mesh] terrain: expected an object, got %r"
                    % (type(terrain).__name__,))
-    _check_structures(document, meta, report)
+    _check_structures(document, meta, report, catalog)
     _check_activity(document, meta, report, lowest_y)
     _check_defs(document, report, catalog)
     motions, paths = _check_motions_paths(document, report)
@@ -1279,7 +1279,25 @@ def static_obb_count(solids, area_no=None):
     return total
 
 
-def _check_structures(document, meta, report):
+def _check_solid_display(solid, where, report, catalog):
+    """``def`` (display model) and ``visible`` (draw it at all); neither touches contact."""
+    if "def" in solid:
+        name = solid["def"]
+        if not isinstance(name, str) or not name.strip():
+            report.err("[structure_display] %s.def: expected a declared def id, got %r"
+                       % (where, name))
+        elif catalog is not None and name not in catalog:
+            report.err("[structure_display] %s.def: expected an id declared in defs[], got %r"
+                       % (where, name))
+        elif solid.get("visible") is False:
+            report.err("[structure_display] %s.def: expected nothing when visible is false "
+                       "(an invisible solid draws no model), got %r" % (where, name))
+    if "visible" in solid and not isinstance(solid["visible"], bool):
+        report.err("[structure_display] %s.visible: expected true or false, got %r"
+                   % (where, solid["visible"]))
+
+
+def _check_structures(document, meta, report, catalog=None):
     structures = document.get("structures")
     if not isinstance(structures, dict):
         report.err("[structure_role] structures: expected an object with 'solids', got %r"
@@ -1299,6 +1317,7 @@ def _check_structures(document, meta, report):
             continue
         _unknown(report, solid, STRUCTURE_KEYS, "structures")
         _check_area_no(solid, "hitOnAreaNo", -1, where, report)
+        _check_solid_display(solid, where, report, catalog)
         solid_id = solid.get("id")
         if not isinstance(solid_id, str) or not solid_id.strip():
             report.err("[structure_role] %s.id: expected a non-empty string, got %r"

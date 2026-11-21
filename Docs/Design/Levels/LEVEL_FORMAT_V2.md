@@ -312,6 +312,8 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `collision` | `box`／`none`；`none` 表示纯视觉标记 |
 | `support` | 是否可当支撑面（`collision:"none"` 必须 `support:false`）。**`shape:"proxy"` 时支撑面仍取 `size` 盒的顶面**，见下 |
 | `curve` | 仅 `curve_ramp`：`radius_m`/`arc_deg`/`segments`/`bend`/`width_m`/`thickness_m`（沿用今天） |
+| `def` | 可选，字符串，指向 `defs[].id`。**只管显示**：导入器把该 def 的模型（`defs[].model`）按逐轴比例拉到 `size` 并摆在固体中心，同时隐藏占位方块；模型不带碰撞、不进拾取场、不参与支撑。`size` 已含原作的实例缩放（例：WLK vs_2 的 72 m 木柱 `size=[8.9,72,19.7]` 来自实例缩放 ×68 ×554 ×5.8），所以模型不另有缩放字段。def 必须在 `defs[]` 里声明；找不到模型是 `[model_missing]` 错误，占位方块照画（不会因为缺模型而变成隐形） |
+| `visible` | 可选，布尔，缺省 `true`。`false` = 什么都不画（占位方块也不画），只留碰撞和支撑——原作里的隐形碰撞墙（WLK `DUMMYHIT06_A`）。与 `def` 互斥 |
 
 **`shape:"proxy"`：接触用代理、支撑用盒顶面（2026-11-16 追加，owner 口径「碰撞体必须跟视觉形状，按型给代理，不用 AABB」）。** 参考关卡的大件（树、招牌、睡着的妈妈…）原来用 AABB 当固体，一棵树的盒子把整个树冠包进去，螃蟹贴着树根站就被判「嵌进固体 60 cm」——那不是原作的摆放事实，是**我们的代理太粗**。所以：
 
@@ -322,6 +324,8 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 - **电机静态表只认 OBB**：导入器（`PlacementV2Rules.TrySolidContactBox`）把盒/球/胶囊/凸包代理都装成它的局部 AABB 一个盒，再把盒顶抬到 `size` 顶（支撑面），逐件打 note。
 - **`parts`：稀疏件拆成几个盒（2026-11-19）。** 凸包占自身 AABB 不到 0.6 的件，单盒会在空处造墙（晒衣架凸包占 0.30，单盒是 1.43 m × 2 m 的实墙，原作关卡碰撞在盒内地面以上没有三角）。生成器（`ref_v2_from_extract.def_parts` → `collider_proxy.solid_parts`）对这类件从**模型三角网**（不是凸包：一根立杆加横跨全宽的底脚，其凸包本身就是整片楔形）自顶向下切分：每轮在所有盒 × 3 轴 × 15 个等分切位里选去掉空体积最多的一刀，穿过切面的三角精确裁成两段，所以相邻盒无缝；去掉的空体积 < 整体 AABB 的 2% 或已有 4 盒即停；盒每轴至少 1 cm，向外取整到 0.1 mm；按低角 (y, x, z) 排序。确定性：同一网格同一输出。导入器给这类固体挂 `parts.length` 个 `BoxCollider`（按文档顺序），全部进 `LevelArenaHost.staticBoxes`；只把**最高的那个盒**的顶抬到 `size` 顶，其余盒保留自身高度。`collider` 原样保留（`spawn_reach` 与编辑器仍用真凸包）。
 - `meta.expected.staticObbs` 只计参与本关球碰撞的固体：每个 1 个，带 `parts` 的记子盒数（`placement_v2.static_obb_count`）。蟹座 35 条固体里有 1 条异区晒衣夹（4 个子盒），所以静态 OBB 从 65 降至 61；容量仍是 256。
+
+**固体的三种显示方式（谁画模型）**：①**同 id 的 prop**（蟹座的 35 个固体）：固体只是碰撞，模型由同 `itemId` 的 prop 画，所以该 prop 也进拾取场（行为见 OPEN_DECISIONS 里 `absorbable:false` 未被运行时强制一条）；要求 `shape:"proxy"`。②**`def`**（本次新增）：固体自己带一个显示模型，不需要 prop，所以不进拾取场、不会被卷入；用于原作里「不可卷入的障碍」（木柱、栅栏、树、气球）。③**两者都没有**：画占位方块（旧行为，初代 V_00 的 35 个固体就是这样）。`visible:false` 把三者都关掉。
 
 **v1 的 `role=boundary` 不再进 `structures`**：它本质是活动范围，迁移到 `activityArea`（§5）。**`role=ground` 也不再进 `structures`**：平地由 `meta.groundY` 兜底，真地形由 `terrain` 表达。转换器遇到无法无损映射的边界（非矩形、非轴对齐）时保留为 `role:"boundary"` 并记 warning，不猜。
 
@@ -1059,6 +1063,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | `[terrain_visual_winding]` | error | 少于一半的三角形与其顶点法线一致（整张网格绕序是反的：背面剔除后只剩「洞」） |
 | `[structure_role]` | error | v2 新文件写 `role:"boundary"`/`"ground"`（迁移产物允许并 warning） |
 | `[structure_proxy]` | error | `shape:"proxy"` 缺 `collider`/`collider` 不合法/`proxySource` 不在枚举/`parts` 不合法；`shape:"box"` 却带 `collider` 或 `parts` |
+| `[structure_display]` | error | `def` 不是非空字符串、不在 `defs[]` 里，或与 `visible:false` 同时出现；`visible` 不是布尔 |
 | `[structure_capacity]` | error | 静态固体 > `caps.staticSolids`（256）或 v2 关闭时 `ramps` >4、`boxes` >8 |
 | `[activity_wall]` | error | 点数 <2、闭合多边形自交、`heightM ≤ 0`、`minBallDiameterM` 不是正数（若出现） |
 | `[activity_wall_gate]` | warning | 门的阈值 ≤ 起始球径（这扇门从第一帧就是开的，多半写错了；要永久墙请省略该键） |

@@ -290,6 +290,37 @@ class StructureTags(Base):
         broken["structures"]["solids"][0]["shape"] = "box"      # box + collider is a mistake
         self.assertIn("[structure_proxy]", self.tags(self.run_validator(broken)))
 
+    def test_a_solid_may_name_a_display_model_or_hide_itself(self):
+        """``def`` points at defs[] and ``visible`` is a bool; neither changes contact."""
+        solid = {"id": "post", "kind": "reference", "role": "box", "shape": "box",
+                 "center": [0.0, 1.0, 0.0], "size": [0.6, 2.0, 0.6],
+                 "rotationQuat": [0.0, 0.0, 0.0, 1.0], "collision": "box",
+                 "absorbable": False, "support": False, "proxySource": "manual"}
+        self.doc["structures"]["solids"] = [solid]
+        self.doc["meta"]["expected"]["structureCount"] = 1
+        self.doc["meta"]["expected"]["staticObbs"] = 1
+        declared = self.doc["defs"][0]["id"]
+        shown = copy.deepcopy(self.doc)
+        shown["structures"]["solids"][0]["def"] = declared
+        report = self.run_validator(shown)
+        self.assertEqual(report.errors, [], "\n".join(report.errors))
+        hidden = copy.deepcopy(self.doc)
+        hidden["structures"]["solids"][0]["visible"] = False
+        report = self.run_validator(hidden)
+        self.assertEqual(report.errors, [], "\n".join(report.errors))
+        unknown = copy.deepcopy(shown)
+        unknown["structures"]["solids"][0]["def"] = "no_such_def"
+        self.assertIn("[structure_display]", self.tags(self.run_validator(unknown)))
+        both = copy.deepcopy(shown)
+        both["structures"]["solids"][0]["visible"] = False
+        self.assertIn("[structure_display]", self.tags(self.run_validator(both)))
+        typed = copy.deepcopy(self.doc)
+        typed["structures"]["solids"][0]["visible"] = "no"
+        self.assertIn("[structure_display]", self.tags(self.run_validator(typed)))
+        blank = copy.deepcopy(self.doc)
+        blank["structures"]["solids"][0]["def"] = ""
+        self.assertIn("[structure_display]", self.tags(self.run_validator(blank)))
+
     def test_proxy_parts_count_as_static_obbs_and_are_checked(self):
         # A sparse proxy solid hands the static table its parts instead of one box: the
         # expected OBB total counts the parts, and each part must stay inside the size box.

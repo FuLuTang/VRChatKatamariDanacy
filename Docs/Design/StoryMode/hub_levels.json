@@ -15,7 +15,9 @@
         "_ref_cancer",
         "story_01_bench_size",
         "physics_test_field",
-        "terrain_contact_lab"
+        "terrain_contact_lab",
+        "_ref_wlk_vs2",
+        "_ref_vs00"
       ]
     }
   ],
@@ -175,6 +177,74 @@
           0.0
         ],
         "headingDeg": 0
+      }
+    },
+    {
+      "id": "_ref_wlk_vs2",
+      "name": "对战图：海边小镇",
+      "scenes": [
+        "RefWlkVs2",
+        "AllMapsHub"
+      ],
+      "content": "LevelContent/_ref_wlk_vs2",
+      "roundFromPlacement": false,
+      "kind": "freeRoam",
+      "allowAbort": true,
+      "source": {
+        "scene": "Assets/_RefUnlicensed/Scenes/RefWlkVs2.unity",
+        "takeRoots": [
+          "LevelContent/_ref_wlk_vs2"
+        ]
+      },
+      "island": {
+        "offset": [
+          2341,
+          0,
+          -2082
+        ]
+      },
+      "start": {
+        "center": [
+          -1133.807,
+          12.70018,
+          880.385
+        ],
+        "headingDeg": 0,
+        "diameterM": 1.5
+      }
+    },
+    {
+      "id": "_ref_vs00",
+      "name": "对战图：初代圆台",
+      "scenes": [
+        "RefVs00",
+        "AllMapsHub"
+      ],
+      "content": "LevelContent/_ref_vs00",
+      "roundFromPlacement": false,
+      "kind": "freeRoam",
+      "allowAbort": true,
+      "source": {
+        "scene": "Assets/_RefUnlicensed/Scenes/RefVs00.unity",
+        "takeRoots": [
+          "LevelContent/_ref_vs00"
+        ]
+      },
+      "island": {
+        "offset": [
+          -1200,
+          0,
+          -1200
+        ]
+      },
+      "start": {
+        "center": [
+          0.0,
+          -0.15,
+          1.0
+        ],
+        "headingDeg": 0,
+        "diameterM": 0.05
       }
     }
   ]

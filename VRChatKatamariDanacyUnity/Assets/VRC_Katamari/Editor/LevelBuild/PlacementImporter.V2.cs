@@ -339,6 +339,8 @@ namespace VRCKatamari.Editor.LevelBuild
                     contactPartSizes = hasContact ? FlattenParts(contact.Parts, false) : null,
                     bodyIsProp = hasContact && string.Equals(solid.Shape, "proxy", StringComparison.Ordinal) &&
                                  propIds.Contains(solid.Id),
+                    displayDef = solid.Def,
+                    visible = solid.Visible,
                     curve = solid.Curve == null
                         ? null
                         : new CurveEntry

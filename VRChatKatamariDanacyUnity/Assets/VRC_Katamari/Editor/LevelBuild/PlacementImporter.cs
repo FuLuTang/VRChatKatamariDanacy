@@ -185,6 +185,8 @@ namespace VRCKatamari.Editor.LevelBuild
         // The visible child under a ground/boundary marker. The marker itself stays bare (see
         // the class remark), so this name is the only handle the tool has on the body.
         private const string StructureVisualName = "Visual";
+        // The display model of a box solid with a `def` (a child of the solid's cube).
+        private const string StructureModelName = "Model";
 
         // Unity names a primitive cube's built-in material "Default-Material" (older projects
         // also ship "Default-Diffuse"). A body still carrying one has no material decision of
@@ -468,6 +470,18 @@ namespace VRCKatamari.Editor.LevelBuild
             /// are all such pairs); a solid without a prop keeps its placeholder body.
             /// </summary>
             public bool bodyIsProp;
+            /// <summary>
+            /// v2's optional <c>def</c>: the def whose model is drawn at this solid's pose
+            /// (display only; the model never takes part in contact or in the pickup field). The
+            /// importer then hides the placeholder cube and instantiates the model as a
+            /// <c>Model</c> child. Empty = none named.
+            /// </summary>
+            public string displayDef;
+            /// <summary>
+            /// v2's <c>visible</c> (default true). False: nothing is drawn for the solid, not
+            /// even the placeholder cube; the box collider and the arena registration stay.
+            /// </summary>
+            public bool visible = true;
         }
 
         /// <summary>
@@ -2443,6 +2457,17 @@ namespace VRCKatamari.Editor.LevelBuild
             return created;
         }
 
+        /// <summary>
+        /// Whether a box/ramp solid keeps its placeholder cube drawn: only when nothing else
+        /// shows it (no same-id prop, no <c>def</c> to display) and it is not declared
+        /// <c>visible:false</c>. The cube's <see cref="BoxCollider"/> is never touched by this.
+        /// </summary>
+        internal static bool PlaceholderCubeShown(StructureEntry structure)
+        {
+            return structure.visible && !structure.bodyIsProp &&
+                   string.IsNullOrEmpty(structure.displayDef);
+        }
+
         private static bool KindMatches(GameObject instance, StructureEntry structure)
         {
             bool isMarker = instance.GetComponent<Renderer>() == null;
@@ -2509,11 +2534,12 @@ namespace VRCKatamari.Editor.LevelBuild
                 ? CollidersMatch(colliders, targetCenters, targetSizes)
                 : colliders.Length == 0;
 
-            // A solid whose model is a prop is collision only: the cube must not be drawn over
-            // the model (an ochre box 3.4 x 4.1 x 2.8 m around a tree). A marker or curve parent
-            // has no Renderer, so there is nothing to compare.
+            // The placeholder cube is drawn only for a solid that has nothing else to show: not
+            // when a prop carries the model (an ochre box 3.4 x 4.1 x 2.8 m around a tree), not
+            // when a def is named for display, not when the solid is declared invisible. A marker
+            // or curve parent has no Renderer, so there is nothing to compare.
             Renderer body = instance.GetComponent<Renderer>();
-            bool bodyMatches = body == null || body.enabled == !structure.bodyIsProp;
+            bool bodyMatches = body == null || body.enabled == PlaceholderCubeShown(structure);
 
             if (poseMatches && colliderMatches && bodyMatches)
             {
@@ -2523,7 +2549,7 @@ namespace VRCKatamari.Editor.LevelBuild
             if (!bodyMatches)
             {
                 Undo.RecordObject(body, UndoLabel);
-                body.enabled = !structure.bodyIsProp;
+                body.enabled = PlaceholderCubeShown(structure);
             }
 
             if (!poseMatches)
@@ -2982,6 +3008,24 @@ namespace VRCKatamari.Editor.LevelBuild
                         continue;   // collision only: the prop carries the model, the cube is hidden
                     }
 
+                    // A display def: the model is a Model child, the cube is hidden. An invisible
+                    // solid draws nothing and has no stale Model child.
+                    bool modelChanged;
+                    if (!EnsureStructureModel(doc, structure, instance.gameObject, report, out modelChanged))
+                    {
+                        ok = false;
+                    }
+
+                    if (modelChanged && preexisting)
+                    {
+                        bodiesUpdated++;
+                    }
+
+                    if (!PlaceholderCubeShown(structure))
+                    {
+                        continue;
+                    }
+
                     // A box/ramp body is the object itself, so only its material is this pass's
                     // business: the pose and the collider belong to the box/ramp path.
                     bool dressed = EnsureStructureMaterial(instance.GetComponent<Renderer>(),
@@ -3004,6 +3048,127 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return ok;
+        }
+
+        /// <summary>
+        /// The child pose that makes a model of extent <paramref name="modelSize"/> and mesh
+        /// centre <paramref name="modelCentre"/> (both in the model's own units) fill the unit
+        /// cube it is parented to: scale = 1 / size per axis, position moves the mesh centre to
+        /// the cube's centre.
+        /// </summary>
+        internal static void FitModelToUnitCube(Vector3 modelSize, Vector3 modelCentre,
+            out Vector3 scale, out Vector3 position)
+        {
+            scale = new Vector3(1f / modelSize.x, 1f / modelSize.y, 1f / modelSize.z);
+            position = -Vector3.Scale(modelCentre, scale);
+        }
+
+        /// <summary>
+        /// Brings a box/ramp solid's <c>Model</c> child to what the document says: the model of
+        /// <c>def</c> (display only) fitted to the solid's size, or nothing.
+        /// </summary>
+        /// <remarks>
+        /// The solid object is a unit cube scaled to <c>size</c>, so the model, a child, is scaled
+        /// by 1 / its own size per axis: its world extent then equals <c>size</c> (the authored
+        /// size already contains the original's instance scale, which for the reference level's
+        /// 72 m pillars is x68 y554 z5.8). The model is an FBX centred on its AABB, so it sits at
+        /// the cube's centre. It carries no collider: contact stays the cube's box.
+        /// A named model that is missing is an error ([model_missing], never a fallback) and the
+        /// placeholder cube is shown again so the solid is not invisible by accident.
+        /// </remarks>
+        private static bool EnsureStructureModel(PlacementDocument doc, StructureEntry structure,
+            GameObject solid, PlacementImportReport report, out bool changed)
+        {
+            changed = false;
+            Transform existing = FindChild(solid.transform, StructureModelName);
+            bool wanted = structure.visible && !string.IsNullOrEmpty(structure.displayDef);
+            if (!wanted)
+            {
+                if (existing != null)
+                {
+                    Undo.DestroyObjectImmediate(existing.gameObject);
+                    changed = true;
+                }
+
+                return true;
+            }
+
+            string declared = DeclaredModelOf(doc, structure.displayDef);
+            string path = ResolvePropModelPath(structure.displayDef, declared);
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            MeshFilter assetFilter = asset == null ? null : asset.GetComponent<MeshFilter>();
+            if (asset == null || assetFilter == null || assetFilter.sharedMesh == null)
+            {
+                report.Error(structure.id + " [model_missing]: def '" + structure.displayDef +
+                             "' (display model of a structure) has no usable model at '" + path +
+                             "'; the placeholder cube stays visible");
+                Renderer cube = solid.GetComponent<Renderer>();
+                if (cube != null && !cube.enabled)
+                {
+                    Undo.RecordObject(cube, UndoLabel);
+                    cube.enabled = true;
+                }
+
+                return false;
+            }
+
+            Vector3 localSize = Vector3.Scale(assetFilter.sharedMesh.bounds.size,
+                asset.transform.localScale);
+            Vector3 localCentre = Vector3.Scale(assetFilter.sharedMesh.bounds.center,
+                asset.transform.localScale);
+            if (!(localSize.x > 1e-6f) || !(localSize.y > 1e-6f) || !(localSize.z > 1e-6f))
+            {
+                report.Error(structure.id + " [model_missing]: the model '" + path +
+                             "' has a degenerate size " + Format(localSize));
+                return false;
+            }
+
+            Vector3 scale;
+            Vector3 position;
+            FitModelToUnitCube(localSize, localCentre, out scale, out position);
+
+            GameObject current = existing == null ? null : existing.gameObject;
+            if (current != null &&
+                PrefabUtility.GetCorrespondingObjectFromSource(current) != asset)
+            {
+                Undo.DestroyObjectImmediate(current);
+                current = null;
+                changed = true;
+            }
+
+            if (current == null)
+            {
+                current = PrefabUtility.InstantiatePrefab(asset, solid.transform) as GameObject;
+                if (current == null)
+                {
+                    report.Error(structure.id + ": could not instantiate " + path);
+                    return false;
+                }
+
+                Undo.RegisterCreatedObjectUndo(current, UndoLabel);
+                current.name = StructureModelName;
+                changed = true;
+            }
+
+            Transform model = current.transform;
+            if (Vector3.Distance(model.localPosition, position) > PositionToleranceM ||
+                Quaternion.Angle(model.localRotation, Quaternion.identity) > 0.01f ||
+                Vector3.Distance(model.localScale, scale) > 1e-5f)
+            {
+                Undo.RecordObject(model, UndoLabel);
+                model.localPosition = position;
+                model.localRotation = Quaternion.identity;
+                model.localScale = scale;
+                changed = true;
+            }
+
+            foreach (Collider collider in current.GetComponentsInChildren<Collider>(true))
+            {
+                Undo.DestroyObjectImmediate(collider);
+                changed = true;
+            }
+
+            return true;
         }
 
         /// <summary>

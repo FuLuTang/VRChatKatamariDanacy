@@ -73,6 +73,14 @@ namespace VRCKatamari.Editor.Story
             {
                 Report("host.levelButtons is empty: the level cards are not wired", ref problems);
             }
+            // A hub scene must show one card per level its hub lists (hub_levels.json), not a
+            // fixed number: the count follows the list.
+            int expectedCards = ExpectedCardCount(host.gameObject.scene.name);
+            if (expectedCards >= 0 && buttons != expectedCards)
+            {
+                Report("the room has " + buttons + " level card(s) but hub '" + host.gameObject.scene.name
+                    + "' lists " + expectedCards + " level(s) in hub_levels.json", ref problems);
+            }
 
             if (hubCenter != null)
             {
@@ -487,6 +495,16 @@ namespace VRCKatamari.Editor.Story
             object value;
             return backing != null && UdonVariableAccess.TryRead(owner, field, out value)
                 && (value as VRC.Udon.UdonBehaviour) == backing;
+        }
+
+        // The card count the catalogue asks of this scene; -1 when it is not a hub scene or the
+        // catalogue cannot be read (then there is nothing to compare with).
+        private static int ExpectedCardCount(string sceneName)
+        {
+            var errors = new System.Collections.Generic.List<string>();
+            HubLevelCatalog.CatalogFile catalog;
+            if (!HubLevelCatalog.TryLoad(out catalog, errors)) return -1;
+            return HubLevelCatalog.ExpectedCardCount(catalog, sceneName);
         }
 
         private static void Report(string message, ref int problems)

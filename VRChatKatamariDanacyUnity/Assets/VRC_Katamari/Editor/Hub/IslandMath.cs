@@ -27,10 +27,18 @@ namespace VRCKatamari.Editor.Hub
     /// them, so it is refused instead (<see cref="IsOffsetValid"/>).
     /// </para>
     /// <para>
-    /// Why 1000 m and 1300 m. Islands further apart than the default far clip plane (1000 m)
-    /// cannot see each other; float spacing at 1300 m is about 1.2e-4 m, far below the
-    /// ball's 0.005 m contact skin. Both are the working values of the all-maps design, not
-    /// measured limits.
+    /// Why 1000 m and 1300 m. Islands further apart than the camera far clip plane (1000 m,
+    /// the base scene's cameras) cannot see each other; float spacing at 1300 m is about
+    /// 1.2e-4 m, far below the ball's 0.005 m contact skin. Both are the working values of
+    /// the all-maps design, not measured limits, and neither comes from an Udon limit.
+    /// </para>
+    /// <para>
+    /// What the two numbers are measured on. The island's play area: its colliders and
+    /// renderers outside any <c>TerrainVisual</c> folder (<see cref="IsBackdropPath"/>). The
+    /// drawn backdrop (sky shell, distant buildings, mountains, sea) is reported separately.
+    /// It cannot clash with another island because only the current level's island is
+    /// switched on (<c>LevelSwitchHost</c> deactivates the shell, and the backdrop is inside
+    /// it), and it is far beyond float-precision trouble only visually, never for contact.
     /// </para>
     /// </remarks>
     public static class IslandMath
@@ -80,6 +88,25 @@ namespace VRCKatamari.Editor.Hub
                 return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Whether a hierarchy path (<c>Root/Child/...</c>) runs through a folder called
+        /// <paramref name="backdropFolderName"/>. Everything below such a folder is scenery
+        /// that is only drawn (a level's sky shell, its distant buildings and mountains): it
+        /// does not decide where the island stands, so its bounds are reported on their own
+        /// and left out of the island's play-area bounds. A name that only contains the folder
+        /// name (<c>TerrainVisualX</c>) does not count.
+        /// </summary>
+        public static bool IsBackdropPath(string hierarchyPath, string backdropFolderName)
+        {
+            if (string.IsNullOrEmpty(hierarchyPath) || string.IsNullOrEmpty(backdropFolderName)) return false;
+            string[] parts = hierarchyPath.Split('/');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (string.Equals(parts[i], backdropFolderName, StringComparison.Ordinal)) return true;
+            }
+            return false;
         }
 
         /// <summary>Component-wise <c>a + b</c> of two 3-vectors; null when either is not 3 numbers.</summary>

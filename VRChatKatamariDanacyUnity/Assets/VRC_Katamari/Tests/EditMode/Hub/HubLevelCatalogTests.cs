@@ -302,7 +302,7 @@ namespace VRCKatamari.Tests
         // ------------------------------------------------------------------ the real list
 
         [Test]
-        public void TheCommittedListParsesAndHasTheFourMapHub()
+        public void TheCommittedListParsesAndHasTheSixMapHub()
         {
             string path = FindRepoFile("Docs/Design/StoryMode/hub_levels.json");
             if (path == null) Assert.Ignore("Docs/Design/StoryMode/hub_levels.json is not reachable from here");
@@ -312,12 +312,36 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1, ((Array)Field(catalog, "hubs")).Length);
             object hub = Hub(catalog, 0);
             CollectionAssert.AreEqual(
-                new[] { "_ref_cancer", "story_01_bench_size", "physics_test_field", "terrain_contact_lab" },
+                new[]
+                {
+                    "_ref_cancer", "story_01_bench_size", "physics_test_field", "terrain_contact_lab",
+                    "_ref_wlk_vs2", "_ref_vs00",
+                },
                 (string[])Field(hub, "levels"));
-            Assert.AreEqual(4, ((Array)Field(catalog, "levels")).Length);
+            Assert.AreEqual(6, ((Array)Field(catalog, "levels")).Length);
+            Assert.AreEqual(6, CallExpectedCardCount(catalog, "AllMapsHub"));
+        }
+
+        [Test]
+        public void TheCardCountFollowsTheHubListAndIsUnknownForOtherScenes()
+        {
+            object catalog = ParseOk(MultiLevelJson(), true);
+
+            Assert.AreEqual(2, CallExpectedCardCount(catalog, "AllMapsHub"));
+            Assert.AreEqual(-1, CallExpectedCardCount(catalog, "StoryMode"));
+            Assert.AreEqual(-1, CallExpectedCardCount(catalog, ""));
+            Assert.AreEqual(-1, CallExpectedCardCount(null, "AllMapsHub"));
         }
 
         // ------------------------------------------------------------------ helpers
+
+        private int CallExpectedCardCount(object catalog, string sceneName)
+        {
+            System.Reflection.MethodInfo method = catalogType.GetMethod("ExpectedCardCount",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            Assert.IsNotNull(method, "HubLevelCatalog.ExpectedCardCount not found");
+            return (int)method.Invoke(null, new[] { catalog, sceneName });
+        }
 
         private static string MultiLevelJson()
         {

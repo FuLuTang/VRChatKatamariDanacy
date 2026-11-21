@@ -195,6 +195,41 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void TheSixIslandsOfTheAllMapsHubAreFarEnoughApartAndInRange()
+        {
+            // Play-area bounds (collision + structures + props, backdrop excluded) moved by the
+            // list's offsets. Cancer is the new-rule reading; vs_2 at (2341, 0, -2082) and
+            // vs_00 at (-1200, 0, -1200).
+            float[][] mins =
+            {
+                new[] { -26.4f, -3f, -25.2f },        // cancer
+                new[] { -20f, 0f, -1220f },           // picnic
+                new[] { -1216f, 0f, -42f },           // physics test field
+                new[] { -40f, -1.8f, 1160f },         // terrain lab
+                new[] { 1192f, 0f, -8f },             // hub room
+                new[] { 1139.6f, -17.2f, -1244.9f },  // vs_2
+                new[] { -1203.6f, -0.7f, -1203.6f },  // vs_00
+            };
+            float[][] maxs =
+            {
+                new[] { 32.7f, 14f, 47.9f },
+                new[] { 4f, 9f, -1196f },
+                new[] { -1184f, 2f, 19f },
+                new[] { 40f, 1.2f, 1240f },
+                new[] { 1208f, 4f, 8f },
+                new[] { 1259.5f, 57.7f, -1154.8f },
+                new[] { -1196.4f, 12.5f, -1196.4f },
+            };
+
+            object[] args = { mins, maxs, 1000f, 0, 0, 0f };
+            Assert.IsFalse((bool)Invoke("FindTooClosePair", args), "pair " + args[3] + "," + args[4] + " gap " + args[5]);
+            for (int i = 0; i < mins.Length; i++)
+            {
+                Assert.IsTrue((bool)Invoke("IsWithinCoordinateRange", new object[] { mins[i], maxs[i], 1300f }), "island " + i);
+            }
+        }
+
+        [Test]
         public void AClosePairIsReportedWithItsIndicesAndGap()
         {
             // Second island 400 m from the first on x.
@@ -230,6 +265,37 @@ namespace VRCKatamari.Tests
 
             Assert.IsTrue((bool)Invoke("IsWithinCoordinateRange", new object[] { min, max, 1300f }));
             Assert.IsFalse((bool)Invoke("IsWithinCoordinateRange", new object[] { min, max, 1200f }));
+        }
+
+        // ---- backdrop (drawn-only scenery) ----
+
+        [Test]
+        public void ARendererUnderTerrainVisualIsBackdropAndOthersAreNot()
+        {
+            const string folder = "TerrainVisual";
+            Assert.IsTrue((bool)Invoke("IsBackdropPath", new object[]
+                { "Island__ref_wlk_vs2/LevelContent/_ref_wlk_vs2/TerrainRoot/TerrainVisual/wlk_01_sky_10", folder }));
+            Assert.IsFalse((bool)Invoke("IsBackdropPath", new object[]
+                { "Island__ref_wlk_vs2/LevelContent/_ref_wlk_vs2/TerrainRoot/TerrainCollision", folder }));
+            Assert.IsFalse((bool)Invoke("IsBackdropPath", new object[]
+                { "Island__ref_wlk_vs2/LevelContent/_ref_wlk_vs2/Structures/vs2_104", folder }));
+            // only a whole folder name counts, not a longer name that contains it
+            Assert.IsFalse((bool)Invoke("IsBackdropPath", new object[] { "A/TerrainVisualX/B", folder }));
+            Assert.IsFalse((bool)Invoke("IsBackdropPath", new object[] { "", folder }));
+            Assert.IsFalse((bool)Invoke("IsBackdropPath", new object[] { null, folder }));
+        }
+
+        [Test]
+        public void AFarBackdropDoesNotMoveTheIslandsPlayAreaChecks()
+        {
+            // vs_2 at offset (2341, 0, -2082): play area x 1139.6..1259.5, z -1244.9..-1154.8.
+            // Its sky shell would reach 7000 m out; only the play area is judged.
+            var min = new float[] { 1139.6f, -17.2f, -1244.9f };
+            var max = new float[] { 1259.5f, 57.7f, -1154.8f };
+            Assert.IsTrue((bool)Invoke("IsWithinCoordinateRange", new object[] { min, max, 1300f }));
+            var skyMin = new float[] { -2259f, 0f, -4627f };
+            var skyMax = new float[] { 4941f, 1756f, 2463f };
+            Assert.IsFalse((bool)Invoke("IsWithinCoordinateRange", new object[] { skyMin, skyMax, 1300f }));
         }
 
         // ---- duplicates ----

@@ -6,9 +6,9 @@
 
 1. **合集 = 一张场景**，输出 `Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`：以 StoryMode 为底板（球、座位、HUD、大厅、启动器、结果卡），把各源场景的**关卡根**按 XZ 偏移搬进 `Island_<id>` 外壳。它是**产物**，由菜单 `VRC Katamari/Hub/Assemble All-Maps Hub` 每次从零重建，不手改。
 2. **因含原作素材（蟹座），合集场景放 `_RefUnlicensed/`，不进 git、不上传**（AGENTS：参考素材永不入库、不上传）。装配器规定：任一关的源场景在 `_RefUnlicensed/` 下，输出场景也必须在 `_RefUnlicensed/` 下。
-3. 四关：蟹座小院（计时、无星）、野餐第一关（计时）、地图 0 沙盒（自由练习）、地形实验室（自由练习，现有 C23）。**所有关允许中途回大厅**；计时关中途回大厅 = 放弃本局。
+3. 六关：蟹座小院（计时、无星）、野餐第一关（计时）、地图 0 沙盒（自由练习）、地形实验室（自由练习，现有 C23）、对战图：海边小镇（WLK vs_2，自由滚）、对战图：初代圆台（初代 V_00 开局场地 A，自由滚）；两张对战图的对战玩法未做，kind 为 freeRoam，球径由 `start.diameterM` 给。**所有关允许中途回大厅**；计时关中途回大厅 = 放弃本局。
 4. 加一张图 = 按 §1 做好源场景 + 在 [hub_levels.json](<hub_levels.json>) 加一条 + 重跑装配菜单；不改 C# 代码（除非新增了 §4 的世界坐标型字段）。
-5. 大厅房间宽16 m，北墙面板是四张关卡卡片（2×2，uGUI Button）；走动不选关。完整结果卡默认显示8秒后自动回大厅，卡上可提前回或再来一次。布局、取消语义与操作员步骤见 [HUB_ROOM](<HUB_ROOM.md>)。
+5. 大厅房间宽16 m，北墙面板的关卡卡片数 = 合集 `levels` 数（现 6 张，临时布局 3 列 × 2 行，大厅重做时重新设计；uGUI Button）；走动不选关。完整结果卡默认显示8秒后自动回大厅，卡上可提前回或再来一次。布局、取消语义与操作员步骤见 [HUB_ROOM](<HUB_ROOM.md>)。
 
 ## 1. 一张新地图要怎样写
 
@@ -40,7 +40,7 @@
 | level | `arenaFirst` | 先登记的外框宿主路径（源层级路径）；缺省取物理场驱动的 `sandboxFrame`，其后是驱动 `cells` 的顺序，再后是岛下其余 `LevelArenaHost` 按层级顺序 |
 | level | `content` / `entry` | 源场景里的层级路径；有 `island` 且场景里有 `Island_<id>` 外壳时相对外壳解析（见 2.2）；`kind: freeRoam` 可省 `entry` |
 
-### 2.1 当前四关（偏移与源数据，来自 R47 盘点）
+### 2.1 当前六关（偏移与源数据，前四关来自 R47 盘点）
 
 | 关 | 偏移 | takeRoots | 起点 / 球径 | 备注 |
 |---|---|---|---|---|
@@ -48,8 +48,12 @@
 | 野餐第一关 `story_01_bench_size` | (0,0,-1200) | `LevelContent`、`LevelArena`、`LevelEntry`；`leaveBehind: LevelContent/hub` | (-12.5,0.15,-12.5)，默认径 | A 型、到时球径 ≥1.25 m、120 s；大厅子树 `LevelContent/hub`（1200 m 岛）留在底板 |
 | 地图 0 `physics_test_field` | (-1200,0,0) | `LevelContent` | (0,0.15,-39.5) 朝 +Z | 14 个 `LevelArenaHost`，`SANDBOX` 外框先登记；驱动/设定器不搬 |
 | 地形实验室 `terrain_contact_lab` | (0,0,1200) | `LevelContent`、`Ground` | (0,0.15,0) | 只有 C23 一块地形；Ground 80×80、y=-1.5 |
+| 对战图：海边小镇 `_ref_wlk_vs2` | (2341,0,-2082) | `LevelContent/_ref_wlk_vs2` | (-1133.807,12.70,880.385)，1.5 m | freeRoam；作者坐标离原点 ≈1.4 km，所以偏移取 vs_2 可玩区落在 |坐标|≤1300 内；无 kill plane/时限（freeRoam 不读 round 块） |
+| 对战图：初代圆台 `_ref_vs00` | (-1200,0,-1200) | `LevelContent/_ref_vs00` | (0,-0.15,1.0)，0.05 m | freeRoam；场地约 ±3.6 m |
 
 岛间距 ≥1000 m（大厅在 (1200,0,0)）；坐标绝对值 ≤1300，float 间距约 1.2e-4 m，对 0.005 m 接触皮够用。蟹座放原点因为它最挑精度。
+
+**岛边界只算可玩区**：上述两条规则量的是 `IslandImport.TryBounds`——岛壳下除 `TerrainVisual` 外的启用 Renderer 与 Collider（地形碰撞、结构、物件、标记）。`TerrainVisual` 下的远景/天空壳/海面是只画不碰的背景，不计入岛距和坐标范围，单独由 `TryBackdropBounds` 量出，装配日志里有 `island <id>: backdrop bounds …` 一行。理由：1000 m = 相机 far clip，1300 m = float 精度，二者都是工作值；背景随岛壳开关，任一时刻只有当前岛开着（`LevelSwitchHost.SetIsland`），不会和别的岛同时可见。
 
 ### 2.2 解析器与路径解析（`HubLevelCatalog.cs`）
 
@@ -62,7 +66,7 @@
 
 ### 2.3 房间与墙面面板
 
-房间16×8 m，面板相对HubCenter位于(0,1.5,3.7)，宽5 m、四关两行两列。HubSpawn移到(1200,0.1,0.8)，距面板约2.9 m；生成器删除旧HubPads。`room.pad*`与旧宽度纯函数仅保留给现存数据/测试兼容，不再触发选择。
+房间16×8 m，面板相对HubCenter位于(0,1.5,3.7)，宽5 m、关卡卡片按 3 列 × 2 行排（临时布局，大厅重做时重新设计；卡片数以 `hubs[].levels` 为准）。HubSpawn移到(1200,0.1,0.8)，距面板约2.9 m；生成器删除旧HubPads。`room.pad*`与旧宽度纯函数仅保留给现存数据/测试兼容，不再触发选择。
 
 ## 3. 切关接口（运行时，批 A–C）
 

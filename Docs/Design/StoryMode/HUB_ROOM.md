@@ -27,7 +27,7 @@
 
 | 板 / 区 | 内容 | 状态 |
 |---|---|---|
-| 选关板 | 四张关卡卡片（2×2，清单顺序）：编号色块、关名、目标行（限时 + 目标球径/件数，自由练习写「不计时」）、记录行、「开始 →」 | 本轮 |
+| 选关板 | 关卡卡片（3 列 × 2 行，临时布局，大厅重做时重新设计；张数 = 合集 `levels` 数，现 6 张；清单顺序）：编号色块、关名、目标行（限时 + 目标球径/件数，自由练习写「不计时」）、记录行、「开始 →」 | 本轮 |
 | 选关板 · 记录 | 蟹座和野餐：最好／上次（球径 · 总吸附件数，最好先比球径）、已玩局数；地图 0 和地形实验室不记。星级与大厅记录无关 | 本轮（HubRecordBook，PlayerData） |
 | 选关板 · 预览 | 卡片左侧的预览位（现为编号色块） | 后续：各关缩略图需要截图资产；位置与节点已留 |
 | 选关板 · 提示行 / 制作信息 | 怎么开始（桌面左键 / VR 扳机）；底部一行「粉丝制作、与官方无关」 | 本轮 |
@@ -54,6 +54,8 @@
 | 11 | 推进方向箭头 | 关 / 开，默认开 | `PushDirectionCue` 读 `IsPushCueEnabled()`；`vrck.set.pushCue` | 已接，面板有行；箭头固定在球心前上方，随语义球径变大或缩小 |
 | 12 | 显示吸到的东西 | 关 / 开，默认开 | `CatchNameDisplay` 读 `IsCatchNameEnabled()`；`vrck.set.catchName` | 已接，面板有行 |
 | 13 | 显示物理（碰撞线框） | 关 / 开，默认关 | `CollisionWireframe` 轮询设置；只本地 | 已接，面板有行 |
+
+碰撞线框图例（`Art/Debug/Mat_CollisionWire_*.mat`，球周围 5 m 或 3 倍球径内）：**橙色（0.93, 0.62, 0.30）= 不可卷入的静态障碍**（`structures.solids` 登记进电机静态 OBB 的盒子：栅栏、木柱、树、气球、隐形碰撞墙 DUMMYHIT 等；关里障碍平时画原作模型，隐形墙平时什么都看不见，开线框后才出现这些橙色盒线）；**品红 = 物件代理**（可吸物件的碰撞代理）；**青色 = 地形碰撞三角**。橙色偏低饱和的暖色，与品红、青色两个冷暖对撞色区分开，一眼能看出「这是挡路的、卷不进去的」。
 | 14 | 球样式（原作球芯皮肤） | 原作编号 No.01–No.29（无 26/27），只在本构建装上的皮肤里循环；默认 No.01；`vrck.set.ballSkin` 存编号 | `HubSettingsHost.ballView` → `BallView.SetSkin`；只换本地球，见 [CORE_SKIN](../BallPresentation/CORE_SKIN.md#切换与存档) | 代码已接，面板 Prefab 待新增一行 |
 
 板上每一行都能调、能保存，不对玩家显示「待接」；哪些还没有消费方只记在本表和 `HubSettingsMath.HasConsumer`（接上一个就把对应 id 改成 true，两处同步）。消费方接法二选一：在 Inspector 里加进 `HubSettingsHost.listeners`（收到 `OnHubSettingsChanged` 自定义事件后读 getter），或在需要用到设置时比较 `GetRevision()`。VR 摇杆用后者：`VrStickMoveInput.settings` 引用本大厅的设置宿主，第一帧有效 VR 输入与修订号变化时读三项，不注册 listener；因此在输入门关闭时调设置或恢复存档，也不会漏掉更新。PlayerData 键 `vrck.set.*`、`vrck.rec.<levelId>.{bestD,bestN,lastD,lastN,plays}` 一经发布不再改名（平台不能删键）。
@@ -88,8 +90,8 @@ Unity 侧（HubAssembler.Room）：
 2. FBX 导入设置：Scale Factor 1、Convert Units 开、Bake Axis Conversion 关（默认值）。
 3. 按 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「字体」生成 `HubPanelSans SDF.asset`（记 Characters missing，应为 0），再按「搭建步骤」建三个 Prefab，并按其第 4 步回读；按「结算卡」建 `Prefabs/Story/RideResultCard.prefab`。
 4. 打开 AllMapsHub 场景，执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（大厅装配后自动跑骑乘装配）。预期 `problems=0`；报告里应有 `hub art anchors: 3 of 3 within 2 cm`；缺 Udon variables 时按已有流程：编译 → 保存 → 重开 → 重建。装配会给缺 U# 程序资产的行为脚本补建 `<Name>.asset` 并编译（报告行 `created U# program assets: …`，什么都不缺时没有这行；也可单独跑 `VRC Katamari/Udon/Create Missing Program Assets`）。碰撞线框、性能诊断、物品名 HUD 的接线由装配完成，不再手工补；报告应有 `[allmaps] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`（宿主数随关卡变化：motor 1 + 每个 PickupFieldHost + 每个 MotionHost）；任何一处没接上都是 `PROBLEM`，场景不保存。连跑两次，第二次 `result: +27 ~135`（与第一次相同：输出每次从基础场景重建），汇总行不变。
-5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期一行 `[hub-check] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`、一行 `[hub-check] result card ok: retry wired, return wired` 和 `0 problem(s), 4 level card(s), 4 level entry/entries, 28 setting arrow(s)`。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`/`HubResultBoard`；`FollowRigRoot/RidePanels/RideResultCard` 是蓝色 Prefab 实例。
-6. Inspector 回读：`LevelCard_0..3` 的 HubStartButton.levelIndex = 0/1/2/3（蟹座、野餐、地图0、地形实验室），Button On Click 一条：目标 = 同物体 UdonBehaviour、函数 SendCustomEvent、参数 `Press`；`SettingRow_NN/Less` delta=-1、`/More` delta=+1、settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput，VrStickMoveInput.settings = HubSettings；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings。
+5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期一行 `[hub-check] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`、一行 `[hub-check] result card ok: retry wired, return wired` 和 `0 problem(s), 6 level card(s), 6 level entry/entries, 28 setting arrow(s)`（卡片数 = `hubs[AllMapsHub].levels` 的长度，检查不再写死；上一版四关里两张 freeRoam 关同样无入口标记，入口条数仍等于关数）。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`/`HubResultBoard`；`FollowRigRoot/RidePanels/RideResultCard` 是蓝色 Prefab 实例。
+6. Inspector 回读：`LevelCard_0..5` 的 HubStartButton.levelIndex = 0..5（蟹座、野餐、地图0、地形实验室、对战图：海边小镇、对战图：初代圆台），Button On Click 一条：目标 = 同物体 UdonBehaviour、函数 SendCustomEvent、参数 `Press`；`SettingRow_NN/Less` delta=-1、`/More` delta=+1、settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput，VrStickMoveInput.settings = HubSettings；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings。
 7. EditMode：HubSettingsMathTests、HubRecordMathTests、HubPanelTextMathTests、HubPanelCharsetTests、HubRoomMathTests 及现有 Hub/Story 测试；报告发现/通过/失败数。
 8. Play（ClientSim）：桌面视角对准面板应出现 UI 指针；鼠标左键点各按钮，日志：点蟹座卡片 `[hub-panel] level card 0 pressed`，随后是 launcher 的开始日志；点设置板语言行 ▶ 两次，三块板与提示行依次变英文、日文，日志 `[hub-settings] vrck.set.language=1/2`；点 VR 操作方式 ▶，日志 `[input] stick mode=simple`，操作表 VR 栏的移动行变成简单模式文案。音乐/提示音等待接项值能改、能保存（行上不显示待接标记）。面板上中日文无方块字。
 9. 跑一局蟹座到 Result：过关只看到时的螃蟹数；下列 `n` 仍是总吸附件数（沿用 `vrck.rec._ref_cancer.*` 存档键和量纲，不将螃蟹数写进旧键）。日志 `[hub-record] level=_ref_cancer d=… n=… best=True plays=1`，回大厅后蟹座卡片显示「最好 / 上次 / 已玩 1」；在 Running 中 Respawn 放弃的一局不记录。重进世界（Build & Test 或上传后）记录与设置仍在。
@@ -98,7 +100,7 @@ Unity 侧（HubAssembler.Room）：
 ### 截图与读数
 
 - 大厅俯视全景（整间房、三块面板、灯光），附 `HubRoomArt` Transform 与锚点报告行。
-- 出生点玩家视角（HubSpawn，眼高约 1.6 m）看选关板：四张卡片完整、不镜像、不截字；另在离选关板 2 m、3 m 各一张；怎么玩板与设置板正面各在 2 m、3 m 各一张。附字体资产名、几个 TMP 的 Font Size（关名 150、设置行 66）、面板根缩放 0.001。
+- 出生点玩家视角（HubSpawn，眼高约 1.6 m）看选关板：六张卡片完整、不镜像、不截字；另在离选关板 2 m、3 m 各一张；怎么玩板与设置板正面各在 2 m、3 m 各一张。附字体资产名、几个 TMP 的 Font Size（关名 150、设置行 66）、面板根缩放 0.001。
 - ClientSim 里鼠标悬停卡片（高亮）与点击后的 Console 日志截图。
 - 切换语言后三块板各一张（英、日）。
 - 结果卡：Scene 视图俯视结算卡（从卡上方往下看，能看到卡根 BoxCollider 线框与两颗按钮的相对位置，确认按钮上没有单独的碰撞体），另一张骑手视角正面（Result 状态，两颗按钮与文字完整）；回大厅后视角同前；回大厅后蟹座卡片的记录行。
@@ -106,7 +108,7 @@ Unity 侧（HubAssembler.Room）：
 
 ## owner VR 复测
 
-在真实客户端戴头显：出生时能读四关名称和目标行，走近两侧板 2–3 m 能读规则、操作表和设置行；激光指向后扳机能点中卡片和设置箭头，改语言/操作方式立即生效，退出重进仍保留；在大厅走动不会误入；扳机每次只启动所指一关。蟹座和野餐各跑一局：完整结果可读8秒、回大厅按钮可提前回、再来一次不会被旧计时拉走；回房后恢复正常身高/移动并可立即选另一关。地图0和地形实验室各按一次回大厅。记录是否看到两次瞬移、是否晕、不缩放/不锁座；有问题附设备、Avatar、日志与截图。
+在真实客户端戴头显：出生时能读六关名称和目标行，走近两侧板 2–3 m 能读规则、操作表和设置行；激光指向后扳机能点中卡片和设置箭头，改语言/操作方式立即生效，退出重进仍保留；在大厅走动不会误入；扳机每次只启动所指一关。蟹座和野餐各跑一局：完整结果可读8秒、回大厅按钮可提前回、再来一次不会被旧计时拉走；回房后恢复正常身高/移动并可立即选另一关。地图0和地形实验室各按一次回大厅。记录是否看到两次瞬移、是否晕、不缩放/不锁座；有问题附设备、Avatar、日志与截图。
 
 ## 未决与验证边界
 

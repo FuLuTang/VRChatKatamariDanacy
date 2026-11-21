@@ -57,26 +57,6 @@ class HubLevelsTest(unittest.TestCase):
         self.assertNotIn("select_picnic_corner", [s["id"] for s in doc["structures"]])
         self.assertEqual(doc["level"]["expected"]["structureCount"], len(doc["structures"]))
 
-    def test_hub_room_is_wide_enough_for_the_pads_of_every_scene(self):
-        # Same formula as HubSelectMath.RoomWidthNeeded (C#, Runtime/Hub): the assembler
-        # measures the floor body's size x against it. The Python side cannot call C#, so
-        # the formula is repeated here and HubSelectMathTests pins the C# values.
-        room = self.data["room"]
-        scenes = {}
-        for lv in self.data["levels"]:
-            for scene in lv["scenes"]:
-                scenes[scene] = scenes.get(scene, 0) + 1
-        doc = json.loads((LEVELS / "hub/placement.json").read_text(encoding="utf-8"))
-        structures = {s["id"]: s for s in doc["structures"]}
-        floor_width = structures["hub_floor"]["size"][0]
-        wall_gap = (structures["boundary_x1"]["center"][0]
-                    - structures["boundary_x0"]["center"][0])
-        for scene, count in scenes.items():
-            needed = (count * room["padSizeM"] + (count - 1) * room["padGapM"]
-                      + 2 * room["marginM"])
-            self.assertGreaterEqual(floor_width, needed, f"{scene}: floor")
-            self.assertGreaterEqual(wall_gap, needed, f"{scene}: walls")
-
     # ---- schema /1 optional fields (all optional; absent = today's single-level behaviour)
 
     def test_optional_level_fields_are_well_typed(self):
@@ -125,11 +105,11 @@ class HubLevelsTest(unittest.TestCase):
                 if "_RefUnlicensed/" in lv.get("source", {}).get("scene", ""):
                     self.assertIn("_RefUnlicensed/", hub["scene"], hub["id"])
 
-    def test_every_all_maps_level_in_a_hub_gets_a_pad(self):
-        # AllMapsHub offers four levels, so the room must fit four pads (>= 14 m).
+    def test_every_all_maps_level_in_a_hub_gets_a_card(self):
+        # The wall board has one card per offered level (LevelCard_0.., Prefabs/Hub/HubBoard_Levels).
         for hub in self.data.get("hubs", []):
             self.assertGreaterEqual(len(hub["levels"]), 1)
-        self.assertEqual(len(self.data["hubs"][0]["levels"]), 4)
+        self.assertEqual(len(self.data["hubs"][0]["levels"]), 6)
 
     def test_levels_do_not_override_the_global_ball_cap(self):
         for level in self.data["levels"]:

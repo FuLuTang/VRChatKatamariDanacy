@@ -1545,6 +1545,35 @@ export class EditorView {
       this.structureObjects.set(structure.id, group);
       this.scene.add(group);
       if (structure.role !== "ground") this.pickTargets.push(group);
+      if (structure.def) this._attachStructureModel(group, structure);
+    }
+  }
+
+  /**
+   * A solid that names a display ``def`` (LEVEL_FORMAT_V2 4) also shows that def's model,
+   * stretched per axis to the solid's size (the size already contains the original's
+   * instance scale).  The translucent box stays as the collision shape; a model that cannot
+   * be loaded leaves just the box.  ``visible:false`` solids have no model: the box is all
+   * there is to see, which is what makes the original's invisible walls findable here.
+   */
+  async _attachStructureModel(group, structure) {
+    try {
+      const prototype = await this.loadDef(structure.def);
+      const box = this.defBoxes.get(structure.def);
+      if (!box) return;
+      const extent = box.getSize(new THREE.Vector3());
+      if (!(extent.x > 1e-6 && extent.y > 1e-6 && extent.z > 1e-6)) return;
+      const model = prototype.clone(true);
+      const size = structure.size;
+      const scale = new THREE.Vector3(size[0] / extent.x, size[1] / extent.y, size[2] / extent.z);
+      const centre = box.getCenter(new THREE.Vector3());
+      model.scale.copy(scale);
+      model.position.set(-centre.x * scale.x, -centre.y * scale.y, -centre.z * scale.z);
+      model.userData.structureModel = true;
+      group.add(model);
+      this.needsRender = true;
+    } catch (error) {
+      console.warn("structure model failed", structure.id, structure.def, error);
     }
   }
 

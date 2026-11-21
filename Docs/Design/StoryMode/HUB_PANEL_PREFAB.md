@@ -81,7 +81,7 @@ HubBoard_Levels            (根，见上)
 │  ├─ Goal                 TMP
 │  ├─ Record               TMP
 │  └─ Start                TMP
-├─ LevelCard_1 … LevelCard_3（同 LevelCard_0）
+├─ LevelCard_1 … LevelCard_5（同 LevelCard_0）
 ```
 
 板级文字：
@@ -96,26 +96,32 @@ HubBoard_Levels            (根，见上)
 
 | 物体 | pos | size | 卡片底色（Image） | Preview 色块 |
 |---|---|---|---|---|
-| LevelCard_0 | (-1550, 260) | 2950 × 900 | Orange | Leaf |
-| LevelCard_1 | (1550, 260) | 2950 × 900 | Lemon | Grape |
-| LevelCard_2 | (-1550, -680) | 2950 × 900 | Sky | Tomato |
-| LevelCard_3 | (1550, -680) | 2950 × 900 | Leaf | Navy |
+| LevelCard_0 | (-2150, 260) | 2000 × 900 | Orange | Leaf |
+| LevelCard_1 | (0, 260) | 2000 × 900 | Lemon | Grape |
+| LevelCard_2 | (2150, 260) | 2000 × 900 | Sky | Tomato |
+| LevelCard_3 | (-2150, -680) | 2000 × 900 | Leaf | Navy |
+| LevelCard_4 | (0, -680) | 2000 × 900 | Orange | Sky |
+| LevelCard_5 | (2150, -680) | 2000 × 900 | Lemon | Leaf |
 
-卡片 Image：圆角 140 → multiplier 0.0714，Raycast Target **开**。`HubStartButton` 字段：`launcher` 留空、`levelIndex` = 卡片序号（0–3），两者装配器都会写；Prefab 里先填序号。卡片多于场景提供的关卡时，装配器把多余卡片设为不激活。
+**临时布局**：6 张卡片排成 3 列 × 2 行，大厅按方向一重做面板时会重新设计，这里只保证 6 关都能点。推算：板 6400 × 2700；三列 3 × 2000 + 2 × 150（缝）= 6300，左右各留 50；两行保持原 2×2 的行心 260 / −680 与卡高 900，所以与 Text_Prompt（y 830，高 200）和 Text_Credits（y −1235，高 110）的相对位置不变（行 1 占 −190…710，行 2 占 −1130…−230，缝 40）。卡片宽从 2950 缩到 2000，卡内子物体按下表重排；板不用加宽。
 
-卡片子物体（pos 相对卡片中心）：
+卡片 Image：圆角 140 → multiplier 0.0714，Raycast Target **开**。`HubStartButton` 字段：`launcher` 留空、`levelIndex` = 卡片序号（0–5），两者装配器都会写；Prefab 里先填序号。卡片多于场景提供的关卡时，装配器把多余卡片设为不激活。
+
+卡片子物体（pos 相对卡片中心；3 列 × 2 行临时尺寸，宽 2000）：
 
 | 物体 | 类型 | pos | size | 内容 |
 |---|---|---|---|---|
-| Inner | Image | (0, 0) | 2870 × 820 | White，圆角 100 → 0.1 |
-| PreviewFrame | Image | (-1050, 0) | 780 × 780 | 与卡片底色相同，圆角 60 → 0.1667 |
-| Preview | Image | (-1050, 0) | 720 × 720 | Preview 色块，圆角 40 → 0.25 |
-| StartPill | Image | (1120, 280) | 560 × 220 | Tomato，圆角 110 → 0.0909 |
-| Number | TMP | (-1050, 0) | 720 × 720 | 字号 360，居中，白；文字 = 序号+1（装配器写） |
-| Name | TMP | (100, 260) | 1400 × 260 | 字号 150，左对齐 |
-| Goal | TMP | (420, 20) | 2040 × 180 | 字号 90，左对齐 |
-| Record | TMP | (420, -260) | 2040 × 320 | 字号 82，左对齐 |
-| Start | TMP | (1120, 280) | 560 × 220 | 字号 100，居中，白 |
+| Inner | Image | (0, 0) | 1920 × 820 | White，圆角 100 → 0.1 |
+| PreviewFrame | Image | (-650, 0) | 660 × 660 | 与卡片底色相同，圆角 60 → 0.1667 |
+| Preview | Image | (-650, 0) | 600 × 600 | Preview 色块，圆角 40 → 0.25 |
+| StartPill | Image | (610, -340) | 520 × 150 | Tomato，圆角 75 → 0.0909 |
+| Number | TMP | (-650, 0) | 600 × 600 | 字号 250，居中，白；文字 = 序号+1（装配器写） |
+| Name | TMP | (330, 250) | 1240 × 240 | 字号 105，左对齐 |
+| Goal | TMP | (330, 40) | 1240 × 160 | 字号 62，左对齐 |
+| Record | TMP | (330, -150) | 1240 × 200 | 字号 56，左对齐 |
+| Start | TMP | (610, -340) | 520 × 150 | 字号 72，居中，白 |
+
+字号按宽度比 2000/2950 ≈ 0.68 缩小；「对战图：海边小镇」8 字 × 105 ≈ 840 < 1240，不会换行。
 
 ## HubBoard_Help
 

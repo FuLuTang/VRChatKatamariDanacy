@@ -681,6 +681,26 @@ namespace VRCKatamari.Editor.Hub
             return null;
         }
 
+        /// <summary>
+        /// How many level cards the wall board of the hub scene named <paramref name="sceneName"/>
+        /// must show: the length of that hub's <c>levels</c> list. -1 when no hub outputs a scene
+        /// of that name (a single-level scene has no such expectation).
+        /// </summary>
+        public static int ExpectedCardCount(CatalogFile catalog, string sceneName)
+        {
+            if (catalog == null || catalog.hubs == null || string.IsNullOrEmpty(sceneName)) return -1;
+            for (int i = 0; i < catalog.hubs.Length; i++)
+            {
+                HubEntry hub = catalog.hubs[i];
+                if (hub == null || hub.levels == null) continue;
+                if (string.Equals(SceneNameOf(hub.scene), sceneName, StringComparison.Ordinal))
+                {
+                    return hub.levels.Length;
+                }
+            }
+            return -1;
+        }
+
         /// <summary>The scene name of a scene asset path: its file name without the extension.</summary>
         public static string SceneNameOf(string scenePath)
         {

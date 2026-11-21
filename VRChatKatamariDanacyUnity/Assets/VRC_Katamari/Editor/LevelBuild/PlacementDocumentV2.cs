@@ -264,6 +264,17 @@ namespace VRCKatamari.Editor.LevelBuild
         /// </summary>
         public string ProxySource;
         /// <summary>
+        /// Optional <c>def</c>: the <c>defs[].id</c> whose model is DRAWN at this solid's pose
+        /// (display only: no contact, no support, no pickup row). Null = no model named.
+        /// </summary>
+        public string Def;
+        /// <summary>
+        /// Optional <c>visible</c> (default true): false draws nothing for this solid, not even
+        /// the placeholder cube (an invisible wall such as the original's DUMMYHIT). Contact and
+        /// support are unchanged.
+        /// </summary>
+        public bool Visible = true;
+        /// <summary>
         /// Optional <c>parts</c> of a <c>shape:"proxy"</c> solid: 2..4 boxes, local to
         /// <see cref="Center"/> + <see cref="RotationQuat"/>, that the static table receives
         /// INSTEAD of one box around <see cref="Collider"/> (§4). Null when absent: the solid
@@ -562,7 +573,7 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             "id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
             "collision", "absorbable", "support", "meets", "material", "notes", "collider",
-            "proxySource", "parts", "hitOnAreaNo"
+            "proxySource", "parts", "hitOnAreaNo", "def", "visible"
         };
 
         private static readonly string[] CurveKeys =
@@ -1056,6 +1067,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 };
                 solid.Curve = ReadCurve(item.Get("curve"), result, document, i);
                 solid.ProxySource = item.GetString("proxySource");
+                solid.Def = item.Has("def") ? item.GetString("def") : null;
+                solid.Visible = item.GetBool("visible", true);
                 solid.Collider = ReadCollider(item.Get("collider"), result, document,
                     "structures.solids[" + i + "].collider");
                 solid.Parts = ReadSolidParts(item.Get("parts"), result, document,
@@ -1598,10 +1611,35 @@ namespace VRCKatamari.Editor.LevelBuild
                 {
                     result.Errors.Add("[structure_role] solid id '" + solid.Id + "' is duplicated");
                 }
+
+                if (solid.Def != null)
+                {
+                    if (solid.Def.Length == 0 || FindDef(document, solid.Def) == null)
+                    {
+                        result.Errors.Add("[structure_display] solid '" + solid.Id + "'.def '" +
+                                          solid.Def + "' is not declared in defs[]");
+                    }
+                    else if (!solid.Visible)
+                    {
+                        result.Errors.Add("[structure_display] solid '" + solid.Id +
+                                          "' names a def but is not visible");
+                    }
+                }
             }
         }
 
         // ------------------------------------------------------------------ helpers ---
+
+        private static PlacementV2Def FindDef(PlacementV2Document document, string id)
+        {
+            if (document == null || document.Defs == null) return null;
+            for (int i = 0; i < document.Defs.Length; i++)
+            {
+                PlacementV2Def def = document.Defs[i];
+                if (def != null && string.Equals(def.Id, id, StringComparison.Ordinal)) return def;
+            }
+            return null;
+        }
 
         private static int ReadAreaNo(LevelJsonNode node, string key, string path, int minimum,
             PlacementV2ReadResult result)

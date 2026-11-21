@@ -590,27 +590,52 @@ namespace VRCKatamari.Editor.Hub
         // ------------------------------------------------------------ bounds ---
 
         /// <summary>
-        /// The world bounds of the active, enabled renderers and colliders below
-        /// <paramref name="root"/>; false when there are none.
+        /// The world bounds of the island's play area: the active, enabled renderers and
+        /// colliders below <paramref name="root"/> that are NOT inside a <c>TerrainVisual</c>
+        /// folder; false when there are none. The drawn backdrop is measured separately
+        /// (<see cref="TryBackdropBounds"/>) and does not count toward island spacing or the
+        /// coordinate range (<see cref="IslandMath"/>).
         /// </summary>
         public static bool TryBounds(Transform root, out float[] min, out float[] max)
+        {
+            return TryBoundsOf(root, false, out min, out max);
+        }
+
+        /// <summary>
+        /// The world bounds of the drawn backdrop below <paramref name="root"/>: the active,
+        /// enabled renderers inside a <c>TerrainVisual</c> folder (a level's ground surface,
+        /// distant buildings, mountains, sea and sky shell). False when there are none.
+        /// </summary>
+        public static bool TryBackdropBounds(Transform root, out float[] min, out float[] max)
+        {
+            return TryBoundsOf(root, true, out min, out max);
+        }
+
+        private static bool TryBoundsOf(Transform root, bool backdrop, out float[] min,
+            out float[] max)
         {
             min = null;
             max = null;
             if (root == null) return false;
+            string folder = TerrainMeshImporter.TerrainVisualName;
             bool any = false;
             Bounds total = new Bounds();
             Renderer[] renderers = root.GetComponentsInChildren<Renderer>(false);
             for (int i = 0; i < renderers.Length; i++)
             {
                 if (!renderers[i].enabled) continue;
+                if (IslandMath.IsBackdropPath(PathOf(renderers[i].transform), folder) != backdrop) continue;
                 Encapsulate(ref total, ref any, renderers[i].bounds);
             }
-            Collider[] colliders = root.GetComponentsInChildren<Collider>(false);
-            for (int i = 0; i < colliders.Length; i++)
+            if (!backdrop)
             {
-                if (!colliders[i].enabled) continue;
-                Encapsulate(ref total, ref any, colliders[i].bounds);
+                Collider[] colliders = root.GetComponentsInChildren<Collider>(false);
+                for (int i = 0; i < colliders.Length; i++)
+                {
+                    if (!colliders[i].enabled) continue;
+                    if (IslandMath.IsBackdropPath(PathOf(colliders[i].transform), folder)) continue;
+                    Encapsulate(ref total, ref any, colliders[i].bounds);
+                }
             }
             if (!any) return false;
             min = new[] { total.min.x, total.min.y, total.min.z };
@@ -797,6 +822,19 @@ namespace VRCKatamari.Editor.Hub
                         + "' does not have deferRegistration=true in its Udon variables after the"
                         + " proxy copy (see the diag line)");
                 }
+            }
+
+            // The drawn backdrop (TerrainVisual) is left out of the island's play-area bounds;
+            // it is reported here so the numbers stay findable.
+            float[] backdropMin;
+            float[] backdropMax;
+            if (TryBackdropBounds(shell, out backdropMin, out backdropMax))
+            {
+                result.Lines.Add("backdrop bounds " + IslandMath.Format(backdropMin) + ".."
+                    + IslandMath.Format(backdropMax) + " x " + IslandMath.Num(backdropMin[0]) + ".."
+                    + IslandMath.Num(backdropMax[0]) + " z " + IslandMath.Num(backdropMin[2]) + ".."
+                    + IslandMath.Num(backdropMax[2]) + " (drawn only; not counted toward island"
+                    + " spacing or the coordinate range)");
             }
 
             EditorSceneManager.MarkSceneDirty(output);

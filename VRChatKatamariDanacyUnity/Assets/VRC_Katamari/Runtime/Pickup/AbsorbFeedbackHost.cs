@@ -45,13 +45,6 @@ namespace VRCKatamari.Pickup
         private int hapticPulseCount;
         private int lastLoggedConfirmed;
 
-        public int GetConfirmedCount() { return confirmedCount; }
-        public int GetRollInPlayedCount() { return rollInPlayedCount; }
-        public int GetScreamPlayedCount() { return screamPlayedCount; }
-        public int GetScreamDuplicateCount() { return screamDuplicateCount; }
-        public int GetScreamPoolDropCount() { return screamPoolDropCount; }
-        public int GetHapticPulseCount() { return hapticPulseCount; }
-
         public void RecordConfirmed(int screamId, float relativeSize)
         {
             if (!IsRiding()) return;

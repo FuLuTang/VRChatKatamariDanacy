@@ -89,7 +89,6 @@ namespace VRCKatamari.Pickup
 
         private float accumulator;
         private int repairedParents;
-        private int landedCount;
         private bool loggedReady;
 
         /// <summary>Read-only: the prop is in free fall right now (motion hosts must not drive it).</summary>
@@ -110,24 +109,6 @@ namespace VRCKatamari.Pickup
         public int GetFallingCount()
         {
             return fallingCount;
-        }
-
-        /// <summary>Props waiting for their next support re-check.</summary>
-        public int GetPendingCount()
-        {
-            return queueCount;
-        }
-
-        /// <summary>Props that have landed since the field was last reset.</summary>
-        public int GetLandedCount()
-        {
-            return landedCount;
-        }
-
-        /// <summary>Parent-column entries the sanitizer had to repair (0 for clean data).</summary>
-        public int GetRepairedParentCount()
-        {
-            return repairedParents;
         }
 
         /// <summary>
@@ -177,7 +158,6 @@ namespace VRCKatamari.Pickup
             }
             queueCount = 0;
             fallingCount = 0;
-            landedCount = 0;
             accumulator = 0f;
         }
 
@@ -413,7 +393,6 @@ namespace VRCKatamari.Pickup
             {
                 state[i] = PropFallMath.StateSettled;
                 velocityY[i] = 0f;
-                landedCount = landedCount + 1;
                 // A settled prop is a normal prop again; its own children (if still
                 // standing on it) were queued when it began to fall and are re-judged against
                 // its new, lower top as supporters.

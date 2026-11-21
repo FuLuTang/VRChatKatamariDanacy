@@ -788,26 +788,6 @@ namespace VRCKatamari.Pickup
             return propCount;
         }
 
-        /// <summary>Rows in the optional <c>propLocalBounds</c> column (0 when absent).</summary>
-        public int GetPropLocalBoundsRowCount()
-        {
-            if (propLocalBounds == null) return 0;
-            return propLocalBounds.Length;
-        }
-
-        /// <summary>Rows in the optional collider-proxy kind column (0 when absent).</summary>
-        public int GetPropProxyRowCount()
-        {
-            if (propProxyKinds == null) return 0;
-            return propProxyKinds.Length;
-        }
-
-        /// <summary>The authored proxy kind for one row (-1 = no block / OBB fallback).</summary>
-        public int GetPropProxyKind(int index)
-        {
-            return ProxyKindAt(index);
-        }
-
         /// <summary>Declared proxies that had to fall back to the OBB on the last scan.</summary>
         public int GetPropProxyFallbackRows()
         {
@@ -1513,30 +1493,6 @@ namespace VRCKatamari.Pickup
             nearPruneReachM = pruneReachM;
             nearValid = true;
             if (profile) BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.PickupScan, scanStart);
-        }
-
-        /// <summary>Static rows found through grid cells (0 when the grid is off).</summary>
-        public int GetGridRowCount()
-        {
-            return gridMemberCount;
-        }
-
-        /// <summary>Rows scanned every time: mobile rows plus big static rows.</summary>
-        public int GetLinearRowCount()
-        {
-            return linearCount;
-        }
-
-        /// <summary>Rows read live every scan (the propMobile column, marks and drift finds).</summary>
-        public int GetMobileRowCount()
-        {
-            return mobileRowCount;
-        }
-
-        /// <summary>Free rows the last gather handed to the stages (diagnostic).</summary>
-        public int GetNearRowCount()
-        {
-            return nearCount;
         }
 
         /// <summary>

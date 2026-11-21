@@ -501,12 +501,6 @@ namespace VRCKatamari.Story
             return targetCount;
         }
 
-        /// <summary>How many times the per-level kill plane has fired this attempt.</summary>
-        public int GetKillCount()
-        {
-            return killCount;
-        }
-
         /// <summary>The settled collision diameter in metres.</summary>
         public float GetResultDiameterM()
         {

@@ -605,10 +605,6 @@ namespace VRCKatamari.BallMotor
         private int absorbGapLogged;
         private int traceLinesLogged;
 
-        private float traceLastBoxDistance;
-        private float traceLastContactLimit;
-        private float traceLastBallZ;
-        private int traceLastOutcome;
         private int rejectDiagnosticsLogged;
 
         private string[] rejectEventItemIds;
@@ -755,7 +751,6 @@ namespace VRCKatamari.BallMotor
         private int propObbRefusalCount;
         private string propObbRefusalReason;
         private int propProxyCount;
-        private int propProxyOverflowCount;
         private int propProxyRefusalCount;
         private string propProxyRefusalReason;
 
@@ -985,10 +980,6 @@ namespace VRCKatamari.BallMotor
             absorbedEventRingCount = 0;
 
             traceLinesLogged = 0;
-            traceLastBoxDistance = 0f;
-            traceLastContactLimit = 0f;
-            traceLastBallZ = 0f;
-            traceLastOutcome = 0;
 
             rejectEventItemIds = new string[RejectEventCapacity];
             rejectEventReasons = new int[RejectEventCapacity];
@@ -1624,7 +1615,6 @@ namespace VRCKatamari.BallMotor
             propProxyFaceB = new int[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
             propProxyFaceC = new int[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
             propProxyCount = 0;
-            propProxyOverflowCount = 0;
             propProxyRefusalCount = 0;
             propProxyRefusalReason = "";
             // One scratch slot per entry of the LOGICAL table (static prefix + prop
@@ -3284,10 +3274,6 @@ namespace VRCKatamari.BallMotor
                     && traceLinesLogged < TraceLineLimit)
                 {
                     traceLinesLogged = traceLinesLogged + 1;
-                    traceLastBoxDistance = boxDistance;
-                    traceLastContactLimit = pendingContactLimits[i];
-                    traceLastBallZ = center.z;
-                    traceLastOutcome = (int)outcome;
                 }
                 if (!pendingAccepted[i])
                 {
@@ -3712,12 +3698,6 @@ namespace VRCKatamari.BallMotor
             return DashMath.IsSpinning(dashState, semanticDiameterWorldM);
         }
 
-        /// <summary>Seconds the current charge has been held (0 when not charging).</summary>
-        public float GetDashChargeSeconds()
-        {
-            return DashMath.ChargeSeconds(dashState);
-        }
-
         /// <summary>The hold time this ball's size needs for a full charge, seconds.</summary>
         public float GetDashChargeRequiredSeconds()
         {
@@ -3728,23 +3708,6 @@ namespace VRCKatamari.BallMotor
         public bool IsDashing()
         {
             return DashMath.IsDashing(dashState);
-        }
-
-        /// <summary>
-        /// 冲刺期间的出射倍率（弱冲刺已乘 0.67），其他时候为 1。
-        /// </summary>
-        public float GetDashSpeedScale()
-        {
-            float speed;
-            float acceleration;
-            DashMath.DriveScales(dashState, semanticDiameterWorldM, out speed, out acceleration);
-            return DashMath.LaunchSpeedScale(dashState, speed);
-        }
-
-        /// <summary>冲刺剩余寿命，按 30 Hz 折算为秒（0–3 s）。</summary>
-        public float GetDashEnergySeconds()
-        {
-            return DashMath.EnergySeconds(dashState);
         }
 
         /// <summary>Whether the huff is running (all charge input refused, 8 s).</summary>
@@ -4849,7 +4812,6 @@ namespace VRCKatamari.BallMotor
             }
             if (count > MaxPropObbCount)
             {
-                propProxyOverflowCount = propProxyOverflowCount + 1;
                 RefusePropProxies("prop proxy capacity 12 exceeded");
                 return false;
             }
@@ -5023,18 +4985,6 @@ namespace VRCKatamari.BallMotor
         public int GetPropProxiesCount()
         {
             return propProxyCount;
-        }
-
-        /// <summary>Prop proxy capacity (12).</summary>
-        public int GetPropProxiesCapacity()
-        {
-            return MaxPropObbCount;
-        }
-
-        /// <summary>Proxy block overflow refusals (monotonic).</summary>
-        public int GetPropProxyOverflowCount()
-        {
-            return propProxyOverflowCount;
         }
 
         /// <summary>The last proxy refusal as a literal, or "".</summary>
@@ -5488,27 +5438,6 @@ namespace VRCKatamari.BallMotor
         public float GetClimbSpeedMps()
         {
             return climbSpeedWorldMps;
-        }
-
-        /// <summary>
-        /// Top of the face the climb is holding (metres), or 0 when no climb has started.
-        /// The ledge exit compares the ball's bottom against it (TERRAIN_CLIMB 6.3).
-        /// </summary>
-        public float GetClimbTopYWorldM()
-        {
-            return climbTopYWorldM;
-        }
-
-        /// <summary>Normal of the face the climb is holding (unit, from the solid to the ball).</summary>
-        public Vector3 GetClimbSurfaceNormalWorld()
-        {
-            return climbSurfaceNormalWorld;
-        }
-
-        /// <summary>A point on the face the climb is holding.</summary>
-        public Vector3 GetClimbSurfacePointWorld()
-        {
-            return climbSurfacePointWorld;
         }
 
         /// <summary>Cap lock: clears on release or after falling below half the height cap.</summary>
@@ -6048,12 +5977,6 @@ namespace VRCKatamari.BallMotor
             return count;
         }
 
-        /// <summary>Fixed direction count of the shell (16).</summary>
-        public int GetProxyDirectionCount()
-        {
-            return RadialProxyMath.DirectionCount;
-        }
-
         /// <summary>
         /// Current support length along one direction, metres, floored by the core
         /// radius. This is the RAW endpoint maximum (uncapped); the per-step contact
@@ -6564,33 +6487,6 @@ namespace VRCKatamari.BallMotor
             return traceLinesLogged;
         }
 
-        /// <summary>The traced item's box-to-ball-centre distance at its last evaluation (-1 invalid).</summary>
-        public float GetTraceLastBoxDistance()
-        {
-            return traceLastBoxDistance;
-        }
-
-        /// <summary>The limit that distance is compared with: collision radius + contact margin.</summary>
-        public float GetTraceLastContactLimit()
-        {
-            return traceLastContactLimit;
-        }
-
-        public float GetTraceLastBallZ()
-        {
-            return traceLastBallZ;
-        }
-
-        public int GetTraceLastOutcome()
-        {
-            return traceLastOutcome;
-        }
-
-        public string GetDebugTraceItemId()
-        {
-            return debugTraceItemId;
-        }
-
         /// <summary>Item id of the queued candidate at a slot, or "" when out of range.</summary>
         public string GetPendingCandidateItemId(int index)
         {
@@ -6755,11 +6651,6 @@ namespace VRCKatamari.BallMotor
         public int GetRejectEventCount()
         {
             return rejectEventCount;
-        }
-
-        public int GetRejectEventCapacity()
-        {
-            return RejectEventCapacity;
         }
 
         /// <summary>Refusals the 8-slot ring has already evicted.</summary>

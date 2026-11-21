@@ -184,8 +184,6 @@ namespace VRCKatamari.Pickup
         private float statsWindowStart;
         private int statsSteps;
         private int statsWrites;
-        private int lastStatsSteps;
-        private int lastStatsWrites;
 
         // --- Lifecycle ----------------------------------------------------------
 
@@ -280,8 +278,6 @@ namespace VRCKatamari.Pickup
 
             if (logStatsEachSecond && now - statsWindowStart >= 1f)
             {
-                lastStatsSteps = statsSteps;
-                lastStatsWrites = statsWrites;
                 Debug.Log("[MotionHost] last second: steps=" + statsSteps + " writes=" + statsWrites
                     + " active=" + CountMode(ModeActive) + " away=" + CountMode(ModeAway)
                     + " yielded=" + CountMode(ModeYielded) + " culled=" + CountCulled()
@@ -295,12 +291,6 @@ namespace VRCKatamari.Pickup
 
         // --- Public surface (read-only, plus the two ownership calls) ------------
 
-        /// <summary>Rows the host owns (0 until <c>Start</c> succeeded).</summary>
-        public int GetRowCount()
-        {
-            return ready ? rowCount : 0;
-        }
-
         /// <summary>The row of a prop transform, or -1. Linear; for rare calls, not per frame.</summary>
         public int FindRow(Transform prop)
         {
@@ -310,36 +300,6 @@ namespace VRCKatamari.Pickup
                 if (rowTransforms[i] == prop) return i;
             }
             return -1;
-        }
-
-        /// <summary>Rows currently being driven (not away, suspended, yielded, detached or dead).</summary>
-        public int GetActiveCount()
-        {
-            return ready ? CountMode(ModeActive) : 0;
-        }
-
-        /// <summary>Rows the host stopped driving because the prop was absorbed or hidden.</summary>
-        public int GetAwayCount()
-        {
-            return ready ? CountMode(ModeAway) : 0;
-        }
-
-        /// <summary>Rows that stopped because somebody else moved the prop.</summary>
-        public int GetYieldedCount()
-        {
-            return ready ? CountMode(ModeYielded) : 0;
-        }
-
-        /// <summary>Rows frozen by distance culling right now.</summary>
-        public int GetCulledCount()
-        {
-            return ready ? CountCulled() : 0;
-        }
-
-        /// <summary>Rows beyond the near radius right now (they write only on their own steps).</summary>
-        public int GetFarCount()
-        {
-            return ready ? CountFar() : 0;
         }
 
         /// <summary>Rows whose WaitForPlayer gate has fired.</summary>
@@ -352,25 +312,6 @@ namespace VRCKatamari.Pickup
                 if (rowTriggered[i]) count = count + 1;
             }
             return count;
-        }
-
-        /// <summary>Program steps executed in the last completed one-second window (stats on).</summary>
-        public int GetLastStepsPerSecond()
-        {
-            return lastStatsSteps;
-        }
-
-        /// <summary>Transform writes in the last completed one-second window (stats on).</summary>
-        public int GetLastWritesPerSecond()
-        {
-            return lastStatsWrites;
-        }
-
-        /// <summary>True when the row's WaitForPlayer gate has fired (latched until reset).</summary>
-        public bool IsRowTriggered(int row)
-        {
-            if (!ready || row < 0 || row >= rowCount) return false;
-            return rowTriggered[row];
         }
 
         /// <summary>

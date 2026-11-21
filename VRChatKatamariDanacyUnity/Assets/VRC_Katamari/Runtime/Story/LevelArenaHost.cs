@@ -440,12 +440,6 @@ namespace VRCKatamari.Story
             return registeredObbCount;
         }
 
-        /// <summary>Static OBBs this setup tried to register (0 outside the v2 OBB path).</summary>
-        public int GetObbAttemptCount()
-        {
-            return obbAttemptCount;
-        }
-
         /// <summary>Static OBB registrations the motor refused this setup.</summary>
         public int GetObbRefusalCount()
         {

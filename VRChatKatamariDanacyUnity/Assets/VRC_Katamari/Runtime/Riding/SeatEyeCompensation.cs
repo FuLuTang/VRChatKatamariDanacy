@@ -335,13 +335,6 @@ namespace VRCKatamari.Riding
             }
         }
 
-        /// <summary>The measured seated eye height above the seat, in metres.</summary>
-        /// <remarks>Diagnostic seam for a lab probe or an acceptance run; gameplay never reads it.</remarks>
-        public float GetMeasuredEyeAboveSeatMeters()
-        {
-            return measuredEyeAboveSeatMeters;
-        }
-
         /// <summary>The offset currently written to the seat, in the rig frame.</summary>
         public Vector3 GetSeatOffsetMeters()
         {
@@ -352,15 +345,6 @@ namespace VRCKatamari.Riding
         public float GetUncompensatedMeters()
         {
             return uncompensatedMeters;
-        }
-
-        /// <summary>
-        /// The head-to-eye-point distance measured when the glide locked, in metres; the
-        /// number an acceptance run checks against ~0.
-        /// </summary>
-        public float GetLastEyeErrorMeters()
-        {
-            return lastEyeErrorMeters;
         }
 
         /// <summary>The state machine's current state, for a lab probe (0 idle, 4 locked).</summary>

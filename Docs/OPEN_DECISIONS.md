@@ -200,7 +200,7 @@
 - **未入座时可正常跳跃，滚球时短按 Jump 不下车（owner 2026-11-19）** — 座位已能禁止默认退座，无需禁用玩家的跳跃；仍可按住 Jump 1.5 秒主动下车，见[防退座与退出](01_GAME_DESIGN.md#防退座与退出)。
 - **VR 冲刺只用左扳机，不支持双摇杆交替摇（owner 2026-11-19）** — 原作的 gacha 计数折算成按住时长。
 - **体积回收曲线按新版做（owner 2026-11-19）** — 采用 WLK REROLL+ 数据里的回收比曲线；拿到数据前维持全局 0.8。
-- **过关按原作类型与参数判定（owner 2026-11-20）** — 过关独立于评分；蟹座按初代 REROLL 的 B 型，420 秒到时以确认捕获数 ≥10 判定，80 cm 不参与过关。B 类具体对象仍待查证，暂按六种本关蟹类定义筛选。见[剧情模式](Design/StoryMode/README.md)与[合集关卡清单](Design/StoryMode/ALL_MAPS_HUB.md#21-当前四关偏移与源数据来自-r47-盘点)。
+- **过关按原作类型与参数判定（owner 2026-11-20）** — 过关独立于评分；蟹座按初代 REROLL 的 B 型，420 秒到时以确认捕获数 ≥10 判定，80 cm 不参与过关。B 类计数对象是原生库任务表白名单里的六种蟹（共 133 只），没有配对条件，见[原作放置格式 §1](Research/KatamariBallRules/ORIGINAL_PLACEMENT_FORMATS.md)。见[剧情模式](Design/StoryMode/README.md)与[合集关卡清单](Design/StoryMode/ALL_MAPS_HUB.md#21-当前四关偏移与源数据来自-r47-盘点)。
 - **蟹座异区物件不与球碰撞（owner 2026-11-20）** — 照初代 `hitOnAreaNo`，晒衣夹虽有模型却不是本关障碍，不再用静态盒挡球；见[区域碰撞格式](Design/Levels/LEVEL_FORMAT_V2.md#物件的活动区域号)。
 - **球皮肤可切换（owner 2026-11-20）** — 原作 27 个球芯全部装上，玩家在设置板「球样式」行切换，默认 core_01，选择存 PlayerData `vrck.set.ballSkin`（存原作编号）；本批只换本地球，远端球的皮肤同步留待后续。见 [核皮肤](Design/BallPresentation/CORE_SKIN.md)。
 - **透明叶子照初代 REROLL（owner 2026-11-20）** — 参考道具的 MASK 材质按 REROLL `CustomStandard` 做：硬裁切阈值 0.5、贴图关闭 mipmap（REROLL 只采 mip0），远处叶子不再被 mip 平均掉；远处像素闪烁与 REROLL 相同。见 [参考道具材质的透明模式](Design/StoryMode/ALL_MAPS_HUB.md#614-参考道具材质的透明模式)。

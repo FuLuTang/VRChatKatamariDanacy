@@ -1027,6 +1027,8 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 
 路径/sha256 规则同 §8.3；PNG 贴图放 `terrain/textures/`，JSON 里逐张钉 sha256。跨语言黄金字节（一个三角形）在 Python 与 C# 两边的测试里是同一串十六进制。参考关卡的侧车与 PNG 在 `_ref_*` 目录里，被 `.gitignore` 排除（贴图是 UNLICENSED 原作素材）。
 
+参考关卡的原作放置格式（初代 `.mono.bytes`、WLK `LocData`）与换算见 [ORIGINAL_PLACEMENT_FORMATS](../../Research/KatamariBallRules/ORIGINAL_PLACEMENT_FORMATS.md)。`.katvisual` 的材质 id 必须按贴图名稳定命名（`m_<贴图名>`），不能按出现顺序编号，否则增删部件会让 id 错位；导入器只增改不删，改 id 后要先清掉旧的 `wlk_` 子对象与旧材质。
+
 ---
 
 ## 9. 校验器：错误码与键白名单

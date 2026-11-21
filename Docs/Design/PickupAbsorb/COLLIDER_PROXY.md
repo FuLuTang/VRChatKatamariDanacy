@@ -1,8 +1,5 @@
 # 道具碰撞代理（COLLIDER PROXY）
 
-> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
-
-
 > 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15（2026-11-16 增补运行期实现）。
 > 运行期落点、序列化字段与场景 diff 见 [COLLIDER_PROXY_RUNTIME.md](COLLIDER_PROXY_RUNTIME.md)；C# 编译/EditMode/PlayMode **仍未验证**。
 > 写入范围：本文件新建；`Tools/levelbuild/collider_proxy.py`（新）、`Tools/levelbuild/placement_core.py`（只加可选字段）、`Tools/levelbuild/blender/fit_collider_proxy.py`（新）、`Docs/tests/levelbuild/test_collider_proxy.py`（新）、[collider_proxy_report.md](collider_proxy_report.md) 与 [collider_proxy.csv](collider_proxy.csv)。
@@ -20,7 +17,7 @@
 | **碰撞形状（本文）** | `defs[].collider` → 将来烘焙成世界空间代理 | 球接触 v2（将来）、玩家胶囊（将来） | **新增可选块** |
 | 玩法体积 | `propLocalBounds`（自身尺寸）、`propBounds`（世界包围盒），场景平行数组 | 吸收门、reach 与挡路门读自身尺寸，挡路盒形状读世界包围盒 | **不动** |
 
-- 「挡不挡」仍然是 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(propBounds[i], limit)`，与吸收门同一个函数；`propBounds` 仍是 AABB 体积。**本块不参与吸收判定**，也不许回写 `propBounds`。
+- 「挡不挡」仍然是吸收门自己的谓词（`PickupAbsorbMath.IsBeyondAbsorbLimit`），与吸收门同一个函数；`propBounds` 仍是 AABB 体积。**本块不参与吸收判定**，也不许回写 `propBounds`。
 - `PARITY_AUDIT` 的 `G13`（原作 `Volume = k·bbox`，默认 k=0.70）是**体积口径**的问题，属于吸收门；本文不碰它，也不把碰撞代理的实体体积当成吸收体积。一个道具可以「玩法体积含空腔、碰撞体不含」，这是 [COLLIDER_LAYER](COLLIDER_LAYER.md) §1 已经写明的同构。
 - 一个 def 只有一份 `collider`，该 def 的所有实例共用；它描述的是**模型局部空间**里的形状，Unity 侧按每件实例的世界位置/旋转烘焙一次。
 
@@ -156,7 +153,7 @@
 ## 5. 与 COLLIDER_LAYER / G13 的边界
 
 - 本块**不**决定「玩家能不能走过去」：COLLIDER_LAYER §3.1 的判据是「空腔净宽 vs 释放球径」，那张表里 13 个 def / 52 件判为「不需要碰撞体」。本文只回答「需要碰撞体时，形状是什么」；要不要给某件挂碰撞体仍是 §10-1 的决定。
-- 本块**不**改变挡路门：「挡不挡」仍由 `propBounds` 的体积门决定；将来若把同一份代理喂给 `SetBlockingBoxes`，读的也是**代理数据**，不是运行期 `Collider`（COLLIDER_LAYER §7.1 的不变量）。
+- 本块**不**改变挡路门：「挡不挡」仍由 `propBounds` 的体积门决定；代理形状走 `SetPropProxies`（`propProxyContactEnabled` 打开时），读的是**代理数据**，不是运行期 `Collider`（COLLIDER_LAYER §7.1 的不变量）。
 - `G13` 的 `k·bbox` 是**吸收体积**；本块的 `volume_ratio` 是**碰撞形状 vs 凸包**。两个体积不是同一个量，不能互相换算，也不能用一个去校准另一个。
 
 ## 6. 电机侧契约（只写设计，不改 C#）
@@ -380,7 +377,7 @@ source ~/tools/blender-env.sh
 python3 Tools/levelbuild/collider_proxy.py \
     --points-dir /home/fulutang/KatamariRef/meta/collider_proxy/points \
     --csv Docs/Design/PickupAbsorb/collider_proxy.csv \
-    --json /tmp/collider_proxy_blocks.json
+    --json .work/collider_proxy_blocks.json
 
 # 3) 测试与规划门
 python3 -m unittest discover -s Docs/tests

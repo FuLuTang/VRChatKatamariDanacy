@@ -16,11 +16,11 @@
 
 | 候选 | 判定 | 依据 |
 |---|---|---|
-| A. 扩建 PicnicLawn（例如剧情第一关切的西侧 6 区） | **不先做** | 全图 38 个障碍面（`Docs/Design/Maps/PicnicLawn/README.md:74`）远超 8 平面 + 8 盒（`Runtime/BallMotor/KatamariBallMotor.cs:235-236`）；西侧就有毯缘坡、0.14 m 树根丘、0.26 m 花圃台（同文件 `:337-339`），运动层只有一张解析地面（`KatamariBallMotor.cs:86-89`，`Docs/02_TECHNICAL_CONTRACTS.md:54`）；它是四人对称 PvP 图，改几何会动 PvP 设计；Unity 侧是从零重建的生成器（`Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md:91`）。 |
+| A. 扩建 PicnicLawn（例如剧情第一关切的西侧 6 区） | **不先做** | 全图 38 个障碍面（`Docs/Design/Maps/PicnicLawn/README.md:74`）远超 8 平面 + 8 盒（`Runtime/BallMotor/KatamariBallMotor.cs:235-236`）；西侧就有毯缘坡、0.14 m 树根丘、0.26 m 花圃台（同文件 `:337-339`），运动层只有一张解析地面（`KatamariBallMotor.cs:86-89`，`Docs/02_TECHNICAL_CONTRACTS.md:54`）；它是四人对称 PvP 图，改几何会动 PvP 设计；Unity 侧是从零重建的生成器。 |
 | B. 新开「时代」主题区（对应 2025 作的时间旅行轴，§1.1、§1.3） | **不先做** | 仓库里没有时间旅行剧情的任何设计决定（只有调研）；没有任何时代主题素材，全部要新找或新建。主题可以以后只靠国王委托文案带出，不影响几何（本项目选择）。 |
 | **C. 新单人区域「野餐一角」，复用野餐物件 id** | **推荐** | 素材面与野餐目录重合（`Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 的 seed/acorn/pebble/bottle_cap/paper_scrap/toy_ball/napkin/watering_can 已建模并导入）；能在现有运行时上限内设计；剧情第一关的规则（1.25 m / 120 s，`Docs/Design/GameModes/Levels/story_01_bench_size.json:22`）与地图无关，可直接改挂到新图；做完的经验（门、密度、扫描成本）原样回流 PicnicLawn（T21）。 |
 
-C 不是 FIRST_PLAYABLE 的 20×20 m 切片（`FIRST_PLAYABLE_PLAN.md:94`），也不替代 [关卡内容计划](<../StoryMode/LEVEL_CONTENT_PLAN.md>) 给切片排的 110 件 / 412 单位：切片是无门、无地标的平场，且 ★★★ 1.60 m（519.5 单位）在切片里结构性不可达（该文 §0.4）。本图是它的下一步：有尺寸带、门、地标，★★★ 可达（§2.2）。切片里的接线（输入、骑球、宿主、回合）与命名/kind 约定（该文 §4.2）全部沿用。
+C 不是 20×20 m 的平地切片，也不替代 [关卡内容计划](<../StoryMode/LEVEL_CONTENT_PLAN.md>) 给切片排的 110 件 / 412 单位：切片是无门、无地标的平场，且 ★★★ 1.60 m（519.5 单位）在切片里结构性不可达（该文 §0.4）。本图是它的下一步：有尺寸带、门、地标，★★★ 可达（§2.2）。切片里的接线（输入、骑球、宿主、回合）与命名/kind 约定（该文 §4.2）全部沿用。
 
 ## 2. 区域布局
 
@@ -46,7 +46,7 @@ C 不是 FIRST_PLAYABLE 的 20×20 m 切片（`FIRST_PLAYABLE_PLAN.md:94`），�
 - **单位从哪来**：沿用 PicnicLawn 的占位权重 s=1、m=4/5、l=16/20（同 README §12），全部是 ≥1 的整数，满足决定 (j)（`Docs/OPEN_DECISIONS.md:57`）。场景里真正写进宿主的值来自同步工具的 (kind, 档) 值表（`Editor/Pickup/PickupFieldSync.cs:39-41`），所以目录的占位值必须与那张表一致，由 R1 的校验器对账。
 - **尺寸节点**（按电机标定 `KatamariBallMotor.cs:95-106`：0.30 m = 3.439 单位、体积线性，即 `u(D) ≈ 3.439 × ((D/0.30)³ − 1)`）：0.55 m ≈ 18、0.95 m ≈ 106、1.25 m ≈ 246、1.45 m ≈ 385、1.60 m ≈ 518 单位。
   - 口袋 30 单位 → 约 0.64 m：t1 打开时口袋已吃完，余量 1.7×。
-  - 口袋 + 毯 220 单位 → 约 1.21 m；再吃草地的 s/m 就过 1.25 m（剧情第一关 ★ = 全图 32%，满足切片计划「达标 ≤ 总单位 65%」，`FIRST_PLAYABLE_PLAN.md:132`）。
+  - 口袋 + 毯 220 单位 → 约 1.21 m；再吃草地的 s/m 就过 1.25 m（剧情第一关 ★ = 全图 32%，满足切片计划「达标 ≤ 总单位 65%」）。
   - ★★ 1.45 m = 全图 50%，★★★ 1.60 m = 67%；吃满 768 单位约 1.82 m，到不了 2.20 m 封顶（本项目选择：区域图留成长余地给后面的关）。
 - **密度按区核算**（P3）：上表是每区件数 ÷ 每区面积；原作只公开「单区 145 件 / 一关 30 件 / 校舍 63 件」，没有面积（§7 第 7 条），所以这里的每 m² 数是本项目自定，必须在 R8 灰盒实测。
 - **可卷比例**（P6）：175 件可卷 vs 8 个碰撞固定物（≈96%）。原作接近全可卷（§2.4，S-M16）；我们只把边界、地标、门框留成固定物，理由是电机的 8 盒上限，不是美术。
@@ -113,7 +113,7 @@ C 不是 FIRST_PLAYABLE 的 20×20 m 切片（`FIRST_PLAYABLE_PLAN.md:94`），�
 | G3 | 障碍上限 8 平面 + 8 盒，超出静默丢弃并 latch（`KatamariBallMotor.cs:235-236`、`:1289-1321`），地面占 1 个平面 | 第一版按 §2.3 账本设计在上限内；校验器加「碰撞物 ≤ 上限」检查（G10）。扩容或空间分块留到 PicnicLawn | 不挡（已绕开） |
 | G4 | **门吃掉后挡路盒不会消失**：电机只有 `ClearObstacles()`（`:1323-1328`），没有删单个；宿主也没有「某 id 是否已附着」的读数（公开方法只有总数/按 kind 计数，`PickupFieldHost.cs:322-331`） | 宿主加 `IsAttached(itemId)` getter；新 `Runtime/Maps/MapObstacleHost.cs`（独占物体）持有平面/盒列表和门 id，门附着后 `ClearObstacles()` 再重注册其余；`ResetField`（`:276`）重试时全部重注册 | **挡**（门是本图的咽喉） |
 | G5 | 没有坡与台阶：一张解析地面（`KatamariBallMotor.cs:86-89`），坡道/台阶「还需实现和测试」（`Docs/02_TECHNICAL_CONTRACTS.md:54`） | 第一版全平；毯面等贴地件 ≤0.02 m（低于 `max_route_step_m` 0.05，`Tools/mapbuild/validate_map.py:107`）；不用 `climb` 门 | 不挡（已绕开）；P8 延后 |
-| G6 | 可卷物不是障碍：球只扫掠注册过的平面/盒（`FIRST_PLAYABLE_PLAN.md:42`），吃不动的大件会被「穿过」，没有原作的弹开削球（§1.4，S-M09） | 第一版靠摆放：l 件放在主路两侧成簇，不放在小球必经线上；以后再考虑把被拒的大件临时当盒子 | 不挡；R8 记录观感 |
+| G6 | 吃不动的件是障碍、吃得动的不是：`PickupFieldHost` 每次扫描把当前吃不动的近处道具登记为挡路 OBB（最近优先，一个块 12 槽），吃得动的不挡；没有原作的弹开削球（§1.4，S-M09） | 布局仍按尺寸带摆放：l 件放在主路两侧成簇，不放在小球必经线上 | 不挡；R8 记录观感 |
 | G7 | 扫描成本 O(N)：每 0.05 s 遍历全部道具并读 `Transform.position`（`PickupFieldHost.cs:101`、`:818-842`），Udon 下的耗时**没测过** | 道具在被吸前不动，`Start` 时缓存世界坐标数组；本图 175 件一个宿主；R8 在 Build & Test 里记帧时间 | 不挡；>~250 件前必须先测（本项目选择的门槛） |
 | G8 | 激活半径固定 1.6 m（`PickupFieldHost.cs:102`），而接触距离 = 碰撞半径 + 物件包围半径；1.6 m 球吃 1.5 m 件需要约 2.1 m | 每件激活半径 = 当前碰撞半径 + 该件包围半径 + 0.3 m | 不挡 t0–t2；挡 t3 外缘的手感 |
 | G9 | 附着物大了以后：只保留局部位姿与自身 scale（`Runtime/BallLayers/Attachment/AttachmentMath.cs:24-31`），球芯长大会把早期附着物埋进球里，渲染成本还在；大件附着后伸出球外、会穿墙 | 宿主在长大时把「局部距离 + 自身半径 < 当前核心半径 − 余量」的附着物 `SetActive(false)`；穿墙第一版接受 | 不挡 |
@@ -135,7 +135,7 @@ C 不是 FIRST_PLAYABLE 的 20×20 m 切片（`FIRST_PLAYABLE_PLAN.md:94`），�
 | R6 | 素材：Kenney 验收清单导入（T20 路线）；6 类 Blender 新道具按 props 管线生成 + 清单 + SHA256SUMS | 素材 agent；导入由 Unity 操作者 | 每件 manifest、三角面预算、导入 scale 1 / rotation 0 |
 | R7 | 两段同步，都幂等：① 摆放同步（新，放进 `Editor/MapGreybox/`，与现有载荷 DTO 同处）读 R3 载荷，**按名字增 / 改 / 删**本图场根下的实例，不碰别的对象；② 现有的 `Editor/Pickup/PickupFieldSync.cs`（另一 agent 在写，未提交）从场景回填 `PickupFieldHost` 的并行数组（加 G13） | Unity 操作者运行 | 两段各连跑两次，第二次「0 处变更」；宿主启动日志件数 = 载荷件数；UdonSharp 组件按 `Labs/README.md:41-49` 的序列建 |
 | R8 | 灰盒试玩 `Maps/PicnicCorner/PicnicCorner.unity`（含 PipelineManager、ReferenceCamera，`Labs/README.md:5-33`） | 用户按键 + Unity 操作者读日志 | 记录：G1 打开时刻、各尺寸节点时刻与单位、扫描帧时间、截图验视线；不达标改件数，不改目标 |
-| R9 | 剧情第一关挂到本图：G12；关卡 JSON 改 `map_id`、`spawn_id`、`map_expectations.zones`（口袋 + 毯 + 草地），重钉 `map_snapshot` | 非 Unity agent + Unity 操作者接 `StoryRoundController` | `python3 Docs/Design/GameModes/validate_levels.py` OK；Play Mode 0/1/2/3 星各一次；**Build & Test 由用户点**（`FIRST_PLAYABLE_PLAN.md:100`），结果记 `Docs/Evidence/` |
+| R9 | 剧情第一关挂到本图：G12；关卡 JSON 改 `map_id`、`spawn_id`、`map_expectations.zones`（口袋 + 毯 + 草地），重钉 `map_snapshot` | 非 Unity agent + Unity 操作者接 `StoryRoundController` | `python3 Docs/Design/GameModes/validate_levels.py` OK；Play Mode 0/1/2/3 星各一次；**Build & Test 由用户点**，结果记 `Docs/Evidence/` |
 | R10 | 美术与致谢牌、边界外地标；第二关（水果）用全图 | — | 不阻塞 R9 |
 
 顺序约束：R1→R2→R3→R7；R4、R5 与 R2/R3 并行；R6 只挡 R8 的观感，灰盒可以先用基础体顶替。
@@ -192,6 +192,6 @@ absorb 门的 `collision` 声明 `"plane"` / `"box"`，未声明 = 不进碰撞�
 
 **校验器仍然查不了的（R8 及运行时修复项的证据缺口，不要当 PASS）：** 电机是否真的注册了
 这些平面/盒、overflow 是否发生（G3/G4 没落地）；程序生成的逐件坐标、种子稳定性与件数是否
-真的摊到（G11）；被拒大件穿模/弹开手感（G6）、激活半径（G8）、扫描帧时间（G7）；视线（P4）；
+真的摊到（G11）；吃不动大件的挡路手感（G6）、激活半径（G8）、扫描帧时间（G7）；视线（P4）；
 可吸收性相对球径的运行时行为（决定 (h) 已落地但场景资产仍有 1 m 覆盖）；地形结构声明与
 Unity prefab 实际包围盒是否一致；以及所有可玩性/公平性/性能判断。

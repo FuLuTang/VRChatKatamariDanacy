@@ -59,7 +59,7 @@ bool BallMotionMath.TryStep(forward, turn, lateral, headingDegrees, velocity, de
 - 坐标系与单位：世界坐标，+Y 向上，米与秒；运动只在 XZ 平面。`headingDegrees` 是绕 +Y 的偏航、输出恒在 [0,360)，0 面向 +Z，forward=(sin h, 0, cos h)、横向（右）=(cos h, 0, -sin h)，与 Unity yaw 同向。速度 m/s，`displacement` 是本步的米数。
 - 每步顺序见 `BALL_INERTIA.md` §2：长度型量乘 `sizeScale` → 转向并取模 → 沿**转向后**的朝向分解纵/横速度 → 推力（反推用 braking）→ 纵向 `exp(-friction*dt)`、横向 `exp(-(friction+grip)*dt)` → 侧移输入 → 无前进输入时滚动阻力 → 纵向夹到 `[-0.5cap, cap]`、总速度压到 cap → `p += v*dt`。
 - 垂直运动不在本层：`velocity.y` 不参与计算，`nextVelocity.y` 与 `displacement.y` 恒为 0。重力、坡面 `y>=floor(x)+r`、墙法向去速、卡住计时与越界复位都不在这里；持有垂直速度的调用方自行合并。
-- 不做子步进、不裁剪位移：快球穿薄墙由扫掠层负责（Python `test_fast_sweep...` 的语义），本层必须把整段 `v*dt` 交给它。
+- 不做子步进、不裁剪位移：快球穿薄墙由接触求解的子步与段扫掠负责（`ContactSolveMath`，`MaxSubSteps`），本层必须把整段 `v*dt` 交给它。
 - `sizeScale = D / D0`（当前语义直径 / 起始球径），由调用方算出；本层不做体积↔半径映射（见 `SizeModelMath`）。
 - 与 Python 的差异：非法输入返回 `false` 且不写任何 out（模型抛异常或让 NaN 穿过夹取）；`dt<=0` 拒绝（`dt=0` 会让速度上限在没有时间流逝时夹一次）；`%` 用正模实现；算术由 double 变 float；有限输入但中间量溢出（加速度、阻尼指数、位移长度）同样拒绝而不夹取。
 
@@ -67,7 +67,7 @@ Python 测试 → NUnit 对照：
 
 | Python | NUnit | 说明 |
 |---|---|---|
-| `test_fast_sweep_does_not_tunnel_thin_wall` | `StepTravelIsUnclampedAndReproducible`（部分） | 只验本层给出完整 `v*dt` 且不裁剪；扫掠本身归 `SweepMath`（已有 `SweepTests.cs`） |
+| `test_fast_sweep_does_not_tunnel_thin_wall` | `StepTravelIsUnclampedAndReproducible`（部分） | 只验本层给出完整 `v*dt` 且不裁剪；穿墙防护归接触求解 |
 | `test_slopes_5_to_15_degrees_stay_supported_and_stable` | 未移植 | 坡面支持是垂直方向的事（`y>=floor(x)+r`、`vy` 恒 0），本层没有 `vy` 通道，当前也未实现 |
 | `test_delay_and_fixed_step_are_bounded_and_reproducible` | `StepTravelIsUnclampedAndReproducible` | 定步长累积器归调用方时钟；C# 侧只承诺同一 `dt` 序列可复现 |
 | `test_growth_clamps_and_parameters_remain_legal_at_max` | `InputsAreClampedAndSizeScalesEveryLength` | 半径夹取归 `SizeModelMath`；本层验输入夹取与 `sizeScale` 倍率 |
@@ -78,14 +78,13 @@ Python 测试 → NUnit 对照：
 
 本次只写源码：**没有**在 Unity 里运行 `run_tests`，也没有做 UdonSharp 全量编译（写作者不是 Unity 操作者）。这两项仍需 Unity 侧确认。
 
-### 未来 `BallMotor` 组合层（仅描述，不实现）
+### `BallMotor` 组合层
 
-`BallMotor` 自己持有每帧状态（heading、速度、球心、半径、growth、卡住计时、越界标记）与定步长累积器，各层保持无状态、只返回 `bool`。按下面的顺序串联，每个边界只传这些数据：
+`KatamariBallMotor` 持有每帧状态（heading、速度、球心、半径、growth、卡住计时）与定步长累积器，各层保持无状态、只返回 `bool`。串联顺序与每个边界传什么见 [BallMotor README](../BallMotor/README.md)「每帧顺序」「边界数据」：
 
 - **ControlIntentMath → BallMotionMath**：本步 `dt`、Move2D 轴对（设备量，不是世界方向）、舒适转向边沿（化成 ±1）、当前 heading 与平面速度；朝向基准（相机/rig yaw）由适配层给。
-- **BallMotionMath → GroundContactMath**：新平面速度、本步平面位移、调用方累加后的球心、heading、`dt`、碰撞半径、地面法线与偏移。
-- **GroundContactMath → SweepMath**：修正后的球心、本步剩余位移、碰撞半径、平面/盒障碍数组、接触预算与分离 epsilon。
-- **SweepMath → PickupAbsorbMath**：实际落点、被消耗的位移、接触（点、法线、时刻、障碍索引、穿透深度）、`blocked`/`stuck`、去掉法向分量后的速度。
+- **BallMotionMath → `StepContactV2`（接触求解）**：新平面速度、本步请求位移；接触求解给出最终球心、支撑法线、去掉法向分量后的速度。
+- **接触求解 → PickupAbsorbMath**：最终球心与碰撞半径；吸收判定在位置定稿之后。
 - **PickupAbsorbMath → SizeModelMath**：本步确认的体积增量与当前确认体积（只传账本已确认值，不传远程装饰）。
 - **SizeModelMath → VisualRollMath**：滚动半径、支撑法线、本步确认位移、是否瞬移/不连续。
 - **VisualRollMath → FollowRigMath**：球心世界位置、球半径、水平 yaw 与 7 个眼点系数（4 个几何 + 3 条护栏）；FollowRig 只回位置 + yaw，不回写玩法状态。

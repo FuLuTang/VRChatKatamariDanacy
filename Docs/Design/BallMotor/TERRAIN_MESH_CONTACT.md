@@ -13,9 +13,7 @@
   4 坡 / 256 OBB 的槽位。它的面 id 从 **2000** 起，避开 plane（1000+i）、box、ramp、prop。
 - 地形网格是 `StepContactV2` 的接触源之一（候选三角形经 `TerrainMeshMath` 进 `ContactSolveMath.TryStep`）；
   装配（地形数组、`TerrainFieldHost` 接线）见 `TerrainFieldHost`。
-- 依赖现有 `terrainSupportEnabled`（默认 true）把选中的 `(normal, offset)` 送进
-  `GroundContactMath`；只开 `terrainMeshContactEnabled` 而关 `terrainSupportEnabled` 时，几何被查询但
-  下游仍用原始地面平面（文档化行为，不建议）。
+- 开关只有 `terrainMeshContactEnabled`：打开后地形三角形经 `TerrainMeshMath` 进接触求解，与盒、斜板、道具用同一套接触。
 
 ## 2. 数据契约（导入器必须交给电机）
 

@@ -212,5 +212,5 @@ source ~/tools/blender-env.sh
 python3 Tools/levelbuild/collider_proxy.py \
     --points-dir /home/fulutang/KatamariRef/meta/collider_proxy/points \
     --csv Docs/Design/PickupAbsorb/collider_proxy.csv \
-    --json /tmp/collider_proxy_blocks.json
+    --json .work/collider_proxy_blocks.json
 ```

@@ -1,8 +1,5 @@
 # 道具碰撞体层（COLLIDER LAYER）
 
-> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
-
-
 > 状态：`PROVISIONAL_NOT_TESTED`。
 > 依据：物体建模与碰撞体建模是两层（[OPEN_DECISIONS](../../OPEN_DECISIONS.md) (o)）。
 > 引用约定：`Runtime/…`、`Tests/…`、`Labs/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。**本文不给行号**，一律按符号名引用。
@@ -13,10 +10,10 @@
 |---|---|---|
 | 1 | 碰撞体给谁用 | 只给 **(b) 玩家走路**；球挡路（a）走 `propBounds` 的体积门、不读碰撞体；吸附物（c）今天完全不参与碰撞，`RadialProxyMath` **没有接线**（§2） |
 | 2 | AABB 什么时候够 | 判据不是「体积填充率」，是**空腔净宽 vs 该件释放球径**：`0.30 m ≤ D_gap < D_release` 才必须拆盒（§3） |
-| 3 | 形状表达 | 每件 **0..K 个局部轴对齐盒**，`K ≤ 6`，**有序 = 优先级**；球挡路预算仍是 6 格，装不下时**退到 0 号盒**而不是退到「不挡」（§4） |
+| 3 | 形状表达 | 每件 **0..K 个局部盒**，`K ≤ 6`，**有序 = 优先级**；球挡路的道具块共 12 槽（挡路与支撑共用），装不下时**退到 0 号盒**而不是退到「不挡」（§4） |
 | 4 | 建在哪、怎么进 Unity | Blender 里 `<id>_COL_<n>` 命名的盒对象（**不进渲染网格**）→ 写入 manifest 的 `collision.boxes`（**Unity Y-up**）→ **扩展现有编辑器同步工具 `PickupFieldSync` 读清单并同步 `BoxCollider`**，接进 `propColliders`；**无盒时回退视觉 AABB**（§5，已定 §10-6） |
 | 5 | 静态布景 | **同一套表达、另一套预算**：`AddBox` 只有 8 格且地图校验器按「1 structure = 1 collision 盒」计数，所以布景多盒要动地图契约；**已定：布景只挑主盒，本轮不动地图契约**（§6、§10-4） |
-| 6 | 与挡路接线怎么衔接 | **不返工**：`SetBlockingBoxes` 本来就吃 N 个盒，电机零改动；只改宿主「建盒」那一段，且先以「每件 0 盒 = 今天行为」上线（§7） |
+| 6 | 与挡路接线怎么衔接 | **不返工**：电机的 `SetPropObbs` 本来就吃 N 个 OBB，电机零改动；只改宿主「建盒」那一段，且先以「每件 0 盒 = 今天行为」上线（§7） |
 
 **全文最关键的一句**：玩法体积（自身尺寸 `propLocalBounds`）管「**挡不挡**」（与吸收门同一个函数），碰撞盒管「**挡成什么形状**」。两者分开，所以加碰撞盒**永远不会**改变某个球径下能不能吸——这正是 (o) 三层分离要保的性质。
 
@@ -28,13 +25,13 @@
 | **碰撞体层（本文）** | Blender 盒对象 → manifest `collision.boxes` → 场景 `BoxCollider` | **VRChat 玩家胶囊（PhysX）** | 玩家能不能走过去 | 20–30 cm（绊脚比穿模更糟） |
 | 玩法体积 | 场景 `propLocalBounds`（物件自身尺寸）与 `propBounds`（世界包围盒），宿主平行数组 | 自身尺寸 → 吸收门、reach、挡路门；世界包围盒 → 挡路盒形状 | 能不能吸、够不够近、挡不挡 | 1–2 cm（错一点就变成「空气墙」或「白送」） |
 
-三层不混用的依据是 (o)；挡路盒**只**来自 `propBounds` 是 [BLOCKING_PROPS_PLAN](BLOCKING_PROPS_PLAN.md) §0.6 已经拍过的实现现状，本文**不改它**。
+三层不混用的依据是 (o)；「挡不挡」只由 `propBounds`（吸收门同一谓词）决定，挡路 OBB 的形状来自 `propLocalBounds`，都不读 `Collider`，本文**不改它**（现行实现见 [COLLIDER_PROXY_RUNTIME](COLLIDER_PROXY_RUNTIME.md) §4.1）。
 
 一件道具「多大」只在 `propBounds` 里声明，**不要**用碰撞盒去反推玩法体积：原作本身就把空腔算进包围盒（[ABSORB_SIZE_RATIO](../../Research/KatamariBallRules/ABSORB_SIZE_RATIO.md) S-AR07 的「包围盒含空腔」），而碰撞盒恰恰要把空腔挖掉。**同一个物件，玩法体积含空腔、碰撞体不含，这不是矛盾，是原作同构。**
 
 ```
 Blender 模型脚本 ──► manifest.collision.boxes ──┬──► Unity 场景 BoxCollider ──► 玩家胶囊
-        │                                        └──► (将来) 宿主多盒数组 ──► SetBlockingBoxes ──► SweepMath ──► 球
+        │                                        └──► (将来) 宿主多盒数组 ──► SetPropObbs ──► StepContactV2 ──► 球
         └──► manifest.bounds_m ──► 场景 propBounds ──► 吸收门 / reach / 挡路门（挡不挡）
 ```
 
@@ -42,9 +39,9 @@ Blender 模型脚本 ──► manifest.collision.boxes ──┬──► Unity
 
 ### 2.1 (a) 球挡路 —— **不用碰撞体，且不能改用碰撞体**
 
-【代码事实】球是纯 kinematic：全仓没有 `Rigidbody` / `CharacterController`，位置只由接触求解写（`KatamariBallMotor.StepContactV2`）。挡路今天由 `PickupFieldHost.UpdateBlockingProps` 用 `propBounds` 建轴对齐盒，经 `motor.SetBlockingBoxes` 追加进扫掠。宿主头注释明写「not from a `BoxCollider` and not from the visual mesh」。
+【代码事实】球是纯 kinematic：全仓没有 `Rigidbody` / `CharacterController`，位置只由接触求解写（`KatamariBallMotor.StepContactV2`）。挡路今天由 `PickupFieldHost.UpdatePropObstacles` 用 `propBounds` 判「吸不动」并分挡路/支撑角色，再由 `RefreshPropObbs` 把选中的道具烘成 OBB（`propLocalBounds` 按道具世界旋转，`PropObbBakeMath.TryBakeProp`），经 `motor.SetPropObbs` 进接触求解；选中数据里没有 `BoxCollider`，也不读视觉网格。
 
-所以「球挡路」这个消费者的输入是**玩法体积**，不是碰撞体。为什么不能反过来让它读碰撞体：一旦挡路盒取决于「这件有没有挂 collider」，同一件道具的物理行为就会随场景接线而变，而吸收门永远只看 `propBounds`，两者立刻可以漂移（`BLOCKING_PROPS_PLAN` §0.6 的原话）。
+所以「球挡路」这个消费者的输入是**玩法体积**，不是碰撞体。为什么不能反过来让它读碰撞体：一旦挡路盒取决于「这件有没有挂 collider」，同一件道具的物理行为就会随场景接线而变，而吸收门永远只看 `propBounds`，两者立刻可以漂移。
 
 **但「挡不挡」与「挡成什么形状」可以分开**：将来若要用多盒细化挡路形状，读的也是**同一份 `collision.boxes` 数据**（宿主序列化成数组），**不是**运行期去读 Unity 的 `Collider`。见 §4、§7。
 
@@ -74,19 +71,18 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 【代码事实】三条一起看：
 
-1. 扫掠半径是 `collisionRadiusWorldM`（球芯的碰撞半径），**不含**吸附物（`SweepMath.TrySweepSphere(..., collisionRadiusWorldM, ...)`）。
-2. 接地支撑走 `GroundContactMath.TrySolve(coreRadiusWorldM, proxyRotation, localProxyPoints, ...)`，而 `localProxyPoints` 在 `Start` 里被写成 `new Vector3[0]`，注释是「until it feeds the motor the support height degenerates to the core sphere」。
-3. `RadialProxyMath`（16 方向支持壳；方向数已定，此前 32 为 provisional）**没有任何运行期调用者**：全仓只有 `Tests/EditMode/BallLayers/RadialProxyTests.cs` 调它；`Docs/Design/BallLayers/RadialProxy/README.md` 自己也写「未编译/未作为组件」「只作视觉表示、不参与判定」。
+1. 球身碰撞半径是 `collisionRadiusWorldM`（球芯的碰撞半径），**不含**吸附物。
+2. 吸附物对球的影响走径向代理：`RadialProxyShellMath` 把每件吸附物的 8 个角点合并进 16 根针的支持长度，`StepContactV2` 里 `PrepareNeedleShape` 把针夹到 `[r, r + cap]`，针尖按段扫掠进接触求解（BallMotor README「径向凹凸代理」）。
 
-所以「吸附物改变球的滚动轮廓」是**原作观感 + 项目尚未实现的目标**，不是现状，更不是靠「给道具加碰撞体」能实现的：吸附物挂在 `attachmentRoot` 下、跟着球走，它们的 Unity collider 在吸附瞬间被宿主**主动关掉**（`propColliders[i].enabled = false`），所以连玩家都撞不到。要让它们参与，改的是**球层**（RadialProxy 接进 `GroundContactMath`，以及/或者把外壳接进扫掠），那是另一条线，且属于「吸附物代理」，**不是道具自身的碰撞体**（§10-5）。
+所以「吸附物改变球的滚动轮廓」已经由球层的径向代理实现，不靠「给道具加碰撞体」：吸附物挂在 `attachmentRoot` 下、跟着球走，它们的 Unity collider 在吸附瞬间被宿主**主动关掉**（`propColliders[i].enabled = false`），所以连玩家都撞不到。这条线属于「吸附物代理」，**不是道具自身的碰撞体**。
 
 ### 2.4 一张表收束
 
 | 消费者 | 今天读什么 | 需要多细 | 实现位置 | 碰撞体层参不参与 |
 |---|---|---|---|---|
-| (a) 球挡路 | `propBounds` AABB + 体积门 | 粗（扫掠是保守扩张、无上台阶） | `PickupFieldHost` → `SetBlockingBoxes` → `SweepMath` | **不参与**；将来可选「同一份盒数据」喂多盒，但「挡不挡」仍由 `propBounds` 定 |
+| (a) 球挡路 | `propBounds` 体积门 + `propLocalBounds` 烘成的 OBB | 贴着道具自身的盒 | `PickupFieldHost` → `SetPropObbs` → `StepContactV2` | **不参与**；将来可选「同一份盒数据」喂多盒，但「挡不挡」仍由 `propBounds` 定 |
 | (b) 玩家走路 | 场景 `BoxCollider`（PhysX） | 很粗（20–30 cm 足够） | VRChat 玩家胶囊 + 场景 collider | **唯一的正式消费者** |
-| (c) 吸附物 | 空代理（球芯球） | — | `GroundContactMath`（未接 RadialProxy） | 不参与，也不该参与 |
+| (c) 吸附物 | 径向代理（16 针） | 针尖 | `RadialProxyShellMath` + `StepContactV2` | 不参与，也不该参与 |
 
 ## 3. 问题 2：AABB 什么时候够、什么时候不够
 
@@ -95,7 +91,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 设：
 
 - `V = a·b·c` = 该件 `propBounds` 的三轴积（玩法体积，**含空腔**）；
-- `D_release = (6·V·ratio/π)^(1/3)`，`ratio = absorbVolumeRatio = 10` —— 这就是「球长到多大时这件不再挡路」（即吸收门放行它的球径，与 `PickupAbsorbMath.TryComputeAbsorbVolumeLimit` 同一式子反解）；
+- `D_release = (60·k·V/π)^(1/3)`，`k` 缺省 0.70（`PickupAbsorbMath.DefaultVolumeK`）—— 这就是「球长到多大时这件不再挡路」（吸收门 `Req_mm = floor(1000·cbrt(60·V/π))` 的米制反解；毫米取整的差别在 1 mm 内，这里不计）；
 - `D_gap` = 该件**可穿越空腔的最小净宽**（桌下净空、腿间距减腿宽、把手内径…），无空腔记 0。
 
 **规则：当且仅当 `0.30 m ≤ D_gap < D_release` 时，必须拆成多盒。**
@@ -118,28 +114,28 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 | def | 件 | h (m) | V (m³) | D_release (m) | 会挡球吗（D≥0.30） | 可穿越空腔 | 结论 |
 |---|---:|---:|---:|---:|---|---|---|
-| `seed` | 3 | 0.016 | 0.000014 | 0.065 | 否 | 无 | 不需要 |
-| `acorn` | 2 | 0.050 | 0.000076 | 0.113 | 否 | 无 | 不需要 |
-| `pebble` | 1 | 0.032 | 0.000084 | 0.117 | 否 | 无 | 不需要 |
-| `bottle_cap` | 1 | 0.0145 | 0.000034 | 0.087 | 否 | 无 | 不需要 |
-| `paper_scrap` | 1 | 0.012 | 0.000088 | 0.119 | 否 | 无 | 不需要 |
-| `strawberry` | 8 | 0.040 | 0.000052 | 0.100 | 否 | 无 | 不需要 |
-| `grapes` | 8 | 0.022 | 0.000079 | 0.115 | 否 | 无 | 不需要 |
-| `cookie` | 2 | 0.009 | 0.000045 | 0.095 | 否 | 无 | 不需要 |
-| `orange` | 6 | 0.077 | 0.000495 | 0.212 | 否 | 无 | 不需要 |
-| `apple` | 6 | 0.079 | 0.000492 | 0.211 | 否 | 无 | 不需要 |
-| `pear` | 5 | 0.090 | 0.000265 | 0.172 | 否 | 无 | 不需要 |
-| `banana` | 4 | 0.032 | 0.000391 | 0.195 | 否 | 无 | 不需要 |
-| `napkin` | 5 | 0.028 | 0.002520 | **0.364** | **是**（0.30–0.36 会被挡） | 无（平片） | 不需要（见下） |
-| `watering_can` | 2 | 0.415 | 0.062714 | **1.062** | **是** | 无贯通，但壶嘴边有 ~0.3 m 敞开凹口 | **1 盒：壶身（不含壶嘴）** |
-| `watermelon` | 3 | 0.220 | 0.015840 | **0.671** | **是** | 无（实心椭球） | **AABB** |
-| `toy_ball` | 4 | 0.400 | 0.064000 | **1.069** | **是** | 无（实心球） | **AABB** |
+| `seed` | 3 | 0.016 | 0.000014 | 0.057 | 否 | 无 | 不需要 |
+| `acorn` | 2 | 0.050 | 0.000076 | 0.101 | 否 | 无 | 不需要 |
+| `pebble` | 1 | 0.032 | 0.000084 | 0.104 | 否 | 无 | 不需要 |
+| `bottle_cap` | 1 | 0.0145 | 0.000034 | 0.077 | 否 | 无 | 不需要 |
+| `paper_scrap` | 1 | 0.012 | 0.000088 | 0.106 | 否 | 无 | 不需要 |
+| `strawberry` | 8 | 0.040 | 0.000052 | 0.089 | 否 | 无 | 不需要 |
+| `grapes` | 8 | 0.022 | 0.000079 | 0.102 | 否 | 无 | 不需要 |
+| `cookie` | 2 | 0.009 | 0.000045 | 0.084 | 否 | 无 | 不需要 |
+| `orange` | 6 | 0.077 | 0.000495 | 0.188 | 否 | 无 | 不需要 |
+| `apple` | 6 | 0.079 | 0.000492 | 0.187 | 否 | 无 | 不需要 |
+| `pear` | 5 | 0.090 | 0.000265 | 0.152 | 否 | 无 | 不需要 |
+| `banana` | 4 | 0.032 | 0.000391 | 0.174 | 否 | 无 | 不需要 |
+| `napkin` | 5 | 0.028 | 0.002520 | **0.323** | **是**（0.30–0.32 会被挡） | 无（平片） | 不需要（见下） |
+| `watering_can` | 2 | 0.415 | 0.062714 | **0.943** | **是** | 无贯通，但壶嘴边有 ~0.3 m 敞开凹口 | **1 盒：壶身（不含壶嘴）** |
+| `watermelon` | 3 | 0.220 | 0.015840 | **0.596** | **是** | 无（实心椭球） | **AABB** |
+| `toy_ball` | 4 | 0.400 | 0.064000 | **0.949** | **是** | 无（实心球） | **AABB** |
 
 三条必须解释的判决：
 
 1. **16 个 def 里 13 个（52 件）「不需要」不是偷懒，是两条独立理由同时成立**：① 它们 `D_release < 0.30 m`，起手球就能吃掉，**从来不会挡球**；② 它们最高点 < 0.20 m，玩家应当**踩过去**而不是被 4 cm 的草籽绊住——这类空气墙不挂碰撞体。给它们挂碰撞体的唯一效果是把刚修好的 bug 装回去。**已定：碰撞体只给「身体级大件」做（玩家站立时会被绊到的尺寸），本节这张表就是执行结果。**
-2. **`napkin` 会挡球，但仍然「不需要」碰撞体**：球挡路不读碰撞体（§2.1），而 2.8 cm 的餐巾对走路的人就是一块布。它在球那侧是**已接受的取舍 R1**（`BLOCKING_PROPS_PLAN` §8：低矮件对扫掠就是一面墙，第一版接受）。**两个消费者给出不同答案，是三层分离的正常结果，不是不一致。**
-3. **`banana` 的 AABB 确实够用（无空腔），但它不需要碰撞体**——「AABB 够不够」和「要不要做」是两个问题。简报拿香蕉当「AABB 够用」的例子是对的；本文的判决是「够用，但不必做」。同类的还有 `plate`（还没模型，计划三轴 0.24×0.24×0.025 = 0.00144 m³，`D_release` 0.302 m——0.30 m 的球差 0.6% 吃不到、0.31 m 就吃，仍属于「几乎不挡」）。
+2. **`napkin` 会挡球，但仍然「不需要」碰撞体**：球挡路不读碰撞体（§2.1），而 2.8 cm 的餐巾对走路的人就是一块布。它在球那侧是**已接受的取舍**：吸不动的低矮件对大球仍是一块实体 OBB。**两个消费者给出不同答案，是三层分离的正常结果，不是不一致。**
+3. **`banana` 的 AABB 确实够用（无空腔），但它不需要碰撞体**——「AABB 够不够」和「要不要做」是两个问题。简报拿香蕉当「AABB 够用」的例子是对的；本文的判决是「够用，但不必做」。同类的还有 `plate`（还没模型，计划三轴 0.24×0.24×0.025 = 0.00144 m³，`D_release` 0.268 m——起手球就吃得到，不挡）。
 
 **`watering_can` 为什么不是 `AABB`**：视觉 AABB 是 0.26×0.415×0.58，其中 0.58 那一轴几乎全是壶嘴。整件包一个盒，会在壶嘴**旁边**凭空多出约 0.3 m 的实心区——那正是「空气墙」。壶身单独一个盒（约 0.26×0.30×0.26，具体值等模型脚本量出来）就把这块去掉；壶嘴细（约 5 cm），玩家走过去、球擦过去都不值得为它再花一个盒。
 
@@ -149,13 +145,13 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 | 件 | 三轴 (m) | V (m³) | D_release (m) | D_gap (m) | 判决 |
 |---|---|---:|---:|---:|---|
-| `picnic_table` 野餐桌 | 1.50×0.75×0.72 | 0.810 | 2.49 | ≈0.66（桌下净空） | **拆盒**：桌面板 1 + 4 条腿（腿 < 0.10 m，可省；见下） |
-| `park_bench` 公园长椅 | 1.80×0.55×0.80 | 0.792 | 2.47 | ≈0.42（座下净空）+ 座板与靠背之间 | **拆盒**：座板 + 靠背 + 2 个腿架 ≈ 4 |
-| 椅子（E 档新增） | ~0.50×0.50×0.90 | ~0.225 | ~1.66 | ≈0.42 | **拆盒**：座板 + 靠背 + 4 腿 ≈ 6 |
+| `picnic_table` 野餐桌 | 1.50×0.75×0.72 | 0.810 | 2.21 | ≈0.66（桌下净空） | **拆盒**：桌面板 1 + 4 条腿（腿 < 0.10 m，可省；见下） |
+| `park_bench` 公园长椅 | 1.80×0.55×0.80 | 0.792 | 2.20 | ≈0.42（座下净空）+ 座板与靠背之间 | **拆盒**：座板 + 靠背 + 2 个腿架 ≈ 4 |
+| 椅子（E 档新增） | ~0.50×0.50×0.90 | ~0.225 | ~1.44 | ≈0.42 | **拆盒**：座板 + 靠背 + 4 腿 ≈ 6 |
 | 大树（布景） | 树干 Ø0.25，冠底 ~1.8 | — | — | 冠下 1.8 | 2 盒：树干 + 树冠（冠底低于「最大球顶」时才要第二个） |
 | 遮阳伞（布景） | 伞面 2.2，杆 Ø0.04 | — | — | 伞下 ~1.9 | 1 盒：杆（伞面在球够不到的高度） |
 
-「腿 < 0.10 m 一律省」是一条**设计取舍**：省掉 4 条腿 → 球能从桌下穿过但会擦到腿（视觉穿模约 6 cm 宽）；不省 → 4 个盒吃掉 6 格预算的 2/3，两张桌子同时靠近时必然有一张退化成 1 盒。**第一版选省**，理由见 §4.3 的退化规则。
+「腿 < 0.10 m 一律省」是一条**设计取舍**：省掉 4 条腿 → 球能从桌下穿过但会擦到腿（视觉穿模约 6 cm 宽）；不省 → 4 个盒吃掉道具块 12 槽的 1/3，几张桌子同时靠近时必然有几张退化成 1 盒。**第一版选省**，理由见 §4.3 的退化规则。
 
 ## 4. 问题 3：形状表达
 
@@ -167,21 +163,11 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 - `K ≥ 1`：盒的**顺序即优先级**，`0` 号是「主盒」：**在大球仍会挡路时它必须挡住**。桌子的 0 号盒是桌面板（不是腿），椅子的 0 号盒是座板。理由：预算不够时退化到 0 号盒，丢的只能是「薄腿/靠背的保真度」，不能丢「这件还挡不挡」。
 - 盒必须**包含在视觉 AABB 内**；越界的盒是数据错误（会让挡路盒跑到玩法体积外面，也会让吸收体积低估实体）。
 
-### 4.2 AABB → 世界盒：为什么今天不痛，什么时候会痛
+### 4.2 局部盒 → 世界 OBB
 
-电机与扫掠**只吃世界轴对齐盒**（`SweepMath` 的 `boxMinima/boxMaxima`）。局部盒要按道具的旋转/位置变成世界盒：
+接触求解吃的是真 OBB（`motor.SetPropObbs`：中心、三根轴、半长）。宿主现在对每件被选中的道具，把 `propLocalBounds`（道具自身局部轴上的全长）按道具的世界旋转烘成一个 OBB（`PropObbBakeMath.TryBakeProp`），没有局部列的行退回世界 AABB 并计数（`propObbFallbackRows`）。所以道具摆成 45° 时挡路盒也跟着转，不会像世界 AABB 那样胖 41%。
 
-| 道具旋转 | 世界盒 | 代价 |
-|---|---|---|
-| identity（**今天 110/110**） | 局部盒 + 位置，逐位相等 | 0 |
-| 仅 yaw（绕 Y） | 水平两轴变为 `abs(w·cosθ) + abs(d·sinθ)`，最坏 45° 时 **+41%**；竖直轴不变 | 8 个角点变换，每次扫描每盒 1 次；O(K) |
-| 任意（含 pitch/roll） | 最坏 **+73%**（√3） | 同上 |
-
-今天**全部道具都是 identity 旋转**【序列化实测】，所以「多盒 + 世界 AABB」落地时**一行 OBB 数学都不用写**：世界盒 = 局部盒 + 位置，逐位相等，可离线断言。这也解释了为什么这条迁移现在做最便宜。
-
-顺带一个发现：现有单盒路径**完全忽略旋转**（`BlockingPropMath.TryBoxFromCentreAndExtents(position, propBounds)`，只读位置），所以道具一旦被摆成 45°，现在的挡路盒是「转回去的轴对齐盒」，会**欠覆盖**角部最多 41%。多盒路径顺手把这个问题修掉（代价是过覆盖等价的那 41%），比现在**更**正确，不是更保守。
-
-**不做 OBB 的理由**（否决记录）：把 `SweepMath` 改成球 vs OBB 要重写 TOI、初始穿透、多接触投影、面法线定向四段，而这几段现在各只有一份实现，是全仓最贵的数学。收益只是「少 41% 的过覆盖」，而这个过覆盖已经由 `propBounds` 的 AABB 承担了（`BLOCKING_PROPS_PLAN` R2 已记录并接受）。
+多盒落地时同一条路：每个局部盒（局部空间 min/max）取中心偏移与半长，中心 = 道具位置 + 旋转 × 局部盒中心，三根轴 = 道具世界旋转的三根轴，半长 = 局部盒半长。没有新的碰撞数学，只是烘焙那一段多循环 K 次；0 盒时走现有单盒烘焙。
 
 ### 4.3 K 的上限与预算
 
@@ -189,15 +175,15 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 | 上限 | 值 | 理由 |
 |---|---:|---|
-| `K_authored`（作者可写几个盒） | **≤ 6** | 一件家具最多「面板 1 + 腿/靠背 5」。超过 6 说明该拆成多个道具（或只做主盒），因为一件就能吃光电机的 6 格挡路预算 |
-| `K_blocking`（喂给电机的盒数，每件） | **≤ 6，且全局 6** | 电机 `MaxBlockingBoxCount = 6` 是既有常量，本文不动 |
+| `K_authored`（作者可写几个盒） | **≤ 6** | 一件家具最多「面板 1 + 腿/靠背 5」。超过 6 说明该拆成多个道具（或只做主盒），因为一件就能占去电机道具块 12 槽的一半 |
+| `K_blocking`（喂给电机的盒数，每件） | **≤ 6，且全局 12** | 道具块 `PropObbBakeMath.PropObbCapacity = 12`（挡路与支撑共用），本文不动 |
 | `K_avatar`（场景里挂几个 `BoxCollider`） | 今天 **≤ 1**（`propColliders` 一件一个）；宿主改成整根开关后 **≤ 6** | §2.2 |
 
-**预算耗尽的退化规则（必须按这个写，否则会退化成「不挡」；已定：全局仍 6 格，装不下就退到该件的 0 号主盒）**：
+**预算耗尽的退化规则（必须按这个写，否则会退化成「不挡」；已定：全局仍是道具块 12 槽，装不下就退到该件的 0 号主盒）**：
 
 1. 按「球心到盒」的距离升序选盒，**同一件道具的盒按 0..K 顺序**；
 2. 某件只要被选中，就**至少收它的 0 号盒**；其余盒能装几个装几个；
-3. 全局 6 格装满即止；**不允许**出现「某件本来该挡、却一个盒都没进」的情况——那等于把这件变成可穿过。
+3. 全局 12 槽装满即止；**不允许**出现「某件本来该挡、却一个盒都没进」的情况——那等于把这件变成可穿过。
 
 举例：两张野餐桌同时靠近（各 5 盒）→ 近的那张收 5 盒，远的那张收 1 盒（主盒）。远处的桌子仍然挡住大球，只是小球的桌下通行保真度降级。**这比「远的那张整个穿过去」好得多，也是为什么 0 号盒必须是面板而不是腿。**
 
@@ -295,31 +281,31 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 ### 7.1 不变量（衔接的全部前提）
 
-- 「挡不挡」= `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(propBounds[i], limit)` —— 与吸收门**同一个函数**，一个字不改。
-- 「挡成什么形状」= 盒。今天 1 个（`propBounds`），将来 0..K 个（`collision.boxes`，缺省回退）。
-- 电机 `SetBlockingBoxes(minima, maxima, count)` **本来就接受 N 个盒**，容量 6。**电机零改动**。
-- `BlockingPropMath` 的三个纯函数（`TryBoxFromCentreAndExtents` / `TryDistanceToBox` / `SelectNearest`）**契约不变**，只新增一个「局部盒 → 世界 AABB」的纯函数。
+- 「挡不挡」= 吸收门自己的谓词（`PickupAbsorbMath.IsBeyondAbsorbLimit` / `IsBeyondCachedRequirement`，宿主每次扫描用当前球径判），一个字不改。
+- 「挡成什么形状」= OBB。今天每件 1 个（`propLocalBounds` 烘出），将来 0..K 个（`collision.boxes`，缺省回退）。
+- 电机 `SetPropObbs` 本来就接受 N 个 OBB，容量 12（`PropObbBakeMath.PropObbCapacity`）。**电机零改动**。
+- `BlockingPropMath` 的纯函数（`TryBoxFromCentreAndExtents` / `TryDistanceToBox` / `SelectNearest` / `SelectNearestAmong`）契约不变，选择按盒行工作。
 
 ### 7.2 接口形状（给宿主，不给电机）
 
-宿主新增（序列化，平行数组，与 `propBounds` 同风格）：
+宿主新增（序列化，平行数组，与 `propLocalBounds` 同风格）：
 
 | 字段 | 类型 | 语义 |
 |---|---|---|
-| `propBoxCounts` | `int[propCount]` | 0 = **回退 `propBounds`**（今天的行为）；1..6 = 用下面两个数组里的前 N 个 |
+| `propBoxCounts` | `int[propCount]` | 0 = **回退 `propLocalBounds`**（今天的行为）；1..6 = 用下面两个数组里的前 N 个 |
 | `propBoxMinima` | `Vector3[propCount * MaxBoxesPerProp]` | 局部空间，固定步长（`row * MaxBoxesPerProp + k`），未用槽位为 0 |
 | `propBoxMaxima` | `Vector3[propCount * MaxBoxesPerProp]` | 同上 |
 
-选**固定步长**而不是「计数 + 前缀和」：UdonSharp 里前缀和要一次额外遍历和一处 off-by-one 风险，而 175 件 × 6 × 2 × 12 B ≈ 25 KB 的场景序列化数据完全可接受（`propBounds` 本身已经 175 × 12 B）。若嫌大，把 `MaxBoxesPerProp` 降到 4（175 × 4 × 2 = 5600 个 float）。
+选**固定步长**而不是「计数 + 前缀和」：UdonSharp 里前缀和要一次额外遍历和一处 off-by-one 风险，而场景序列化数据量完全可接受。
 
-选择算法（**只改宿主 `UpdateBlockingProps` 里「建盒 → 选择」那一段**）：
+选择算法（**只改宿主 `RefreshPropObbs` 里「选择 → 烘焙」那一段**）：
 
-1. 逐件：`propBoxCounts[i] == 0` → 用 `propBounds` 建 1 个盒（**现有代码原样**）；否则逐盒用 `TryWorldBoxFromLocal(boxMin[k], boxMax[k], position, rotation, out min, out max)` 建世界盒（identity 旋转时结果必须与局部盒逐位相等，可离线断言）。
-2. 候选数组从「每件一格」变成「每件 `MaxBoxesPerProp` 格」，剪枝仍按**件**的中心距（用 `propBounds` 半对角线，现有逻辑不变），避免为远处道具做任何盒数学。
-3. `SelectNearest` 的 `previousIndices` / 粘性 / 距离全部按**盒行**工作，容量参数仍是 6；行 → 件 = `row / MaxBoxesPerProp`（整数除法），用于「已吸附的件不选」。
-4. 按 §4.3 的退化规则夹到 6 格，写进 `SetBlockingBoxes`。
+1. 逐件：`propBoxCounts[i] == 0` → 走现有单盒烘焙（`PropObbBakeMath.TryBakeProp`，**现有代码原样**）；否则逐盒把局部 min/max 换成中心偏移与半长，按道具世界位姿烘成 OBB。
+2. 候选仍由 `UpdatePropObstacles` 按**件**的中心距剪枝，避免为远处道具做任何盒数学。
+3. `SelectNearestAmong` 的 `previousIndices` / 粘性 / 距离按**盒行**工作，容量取电机的 `GetPropObbsCapacity()`；行 → 件 = `row / MaxBoxesPerProp`。
+4. 按 §4.3 的退化规则夹到容量，写进 `SetPropObbs`。
 
-**不填数据时行为必须逐位不变**——这是验收判据：`propBoxCounts` 全 0 时，`SetBlockingBoxes` 收到的盒与今天**完全相同**（`BlockingPropMathTests` 全部照过）。所以这条改造可以「先合入、后填数据」，不存在中间态。
+**不填数据时行为必须逐位不变**——这是验收判据：`propBoxCounts` 全 0 时，`SetPropObbs` 收到的 OBB 与今天完全相同（`BlockingPropMathTests`、`PropObbBakeMathTests` 全部照过）。所以这条改造可以「先合入、后填数据」，不存在中间态。
 
 ### 7.3 分步迁移（每步独立可验、都可回退）
 
@@ -328,18 +314,18 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 | **S0** | 本文 + 目录列 | 无 | `validate_plan.py` + `Docs/tests` |
 | **S1** | 扩展 `PickupFieldSync`：加 manifest 读取、`collision` 缺失按 `none`、按 `boxes[0]` 幂等生成 `BoxCollider` 并接 `propColliders`，同时保持 `valueUnits` 的声明值写入/回读校验（无声明时保留既有值）；带 4 条 EditMode 测试（§5.3） | 整关首次导入按视觉局部 AABB 建 127 个盒（2026-11-15 已实现）；manifest `collision` 盒细化仍未做 | 测试全绿；连跑两次场景逐位不变（第二次 `created=0`）；`valueUnits` 与声明一致（无声明时一位不变） |
 | **S2** | manifest 增 `collision`：`watering_can` 一条 `authored`，`toy_ball`/`watermelon` 两条 `aabb_fallback`，其余 13 件按「没有 `_COL_` 对象」自动判 `none`；重跑 S1 的同步工具落地 3 个 def / 9 件 = 9 个盒 | 玩家不再穿过 0.4 m 球/西瓜/洒水壶；球行为**不变** | `SHA256SUMS` 更新、`verify_import` 仍 1 个 mesh、场景里每个 `BoxCollider` 与 manifest 对应盒逐个相等、吸掉一件后原地无悬空实体 |
-| **S3** | 宿主加 `propBoxCounts` 等三数组（全 0）+ `TryWorldBoxFromLocal` | 无（逐位不变） | `BlockingPropMathTests` 全绿；Play Mode 球感不变 |
+| **S3** | 宿主加 `propBoxCounts` 等三数组（全 0）+ 多盒烘焙 | 无（逐位不变） | `BlockingPropMathTests`、`PropObbBakeMathTests` 全绿；Play Mode 球感不变 |
 | **S4** | 家具建模时填 `counts ≥ 1`，先只填 1 盒/件 | 桌下可通行 | 0.3 m 球从桌下过、1.0 m 球被桌面挡 |
-| **S5** | 需要时填第 2..6 盒（腿/靠背） | 腿不再穿模 | 6 格预算下的退化规则可观察（`GetBlockingPropCount()`） |
+| **S5** | 需要时填第 2..6 盒（腿/靠背） | 腿不再穿模 | 12 槽预算下的退化规则可观察（宿主的 OBB 计数读数） |
 
-**S3 之后才允许**谈「球挡路改读多盒」；在那之前，球挡路就是 `propBounds` 单盒，任何人说「加了碰撞体所以球会挡住桌子腿」都是错的。
+**S3 之后才允许**谈「球挡路改读多盒」；在那之前，球挡路就是每件一个 OBB，任何人说「加了碰撞体所以球会挡住桌子腿」都是错的。
 
-### 7.4 给挡路接线代理的具体请求（不要我改他的文件）
+### 7.4 对宿主的具体要求
 
-1. **保持** `SetBlockingBoxes` 的「整批替换、N 个盒、容量 6」语义——多盒方案完全靠它。
+1. **保持** `SetPropObbs` 的「整批替换、N 个 OBB、容量 12」语义——多盒方案完全靠它。
 2. **K ≥ 2 时**（家具期）把 `propColliders`（`Collider[]`，一件一个）换成 `propCollisionRoots`（`GameObject[]` 或 `Transform[]`，整根开关），否则一件的第二个盒在吸附后仍是实体。
-3. **不要**在 `UpdateBlockingProps` 里读 `Collider` 或视觉网格——`collision.boxes` 走宿主自己的平行数组。
-4. `MaxBlockingBoxCount = 6` **先不动**；若实测不足，再按 §10-3 抬。
+3. **不要**在 `RefreshPropObbs` 里读 `Collider` 或视觉网格——`collision.boxes` 走宿主自己的平行数组。
+4. 道具块 12 槽**先不动**；若实测不足，再按 §10-3 抬。
 
 ## 8. 数据结构汇总（一页）
 
@@ -361,7 +347,7 @@ manifest（每件，Blender 产出）
   propBoxMinima/Maxima[propCount * 6]      // 局部空间，固定步长
 
 电机（零改动）
-  SetBlockingBoxes(minima, maxima, count)  // 容量 6，整批替换
+  SetPropObbs(...)                         // 容量 12，整批替换
 ```
 
 ## 9. 迁移步骤（要动流水线脚本的话，只写在这里）
@@ -380,9 +366,9 @@ manifest（每件，Blender 产出）
 
 **Unity 侧不在流水线里**：`addCollider: false` 的导入设置保持不变（`Docs/Evidence/AssetImport/README.md` §2），碰撞体是场景里挂的，不是从网格生成的。**Cube 占位的 49 件在换网格时必须同一批把它的立方体 `BoxCollider` 换掉**——否则又会出现「0.9 m 的盒子套 0.3 m 的暖壶」。
 
-## 10. 未决问题（1–4、6、7 已由 Lead 拍板；5 待用户决定）
+## 10. 已定问题
 
-按「什么时候必须定」排序。每一项下面写明了已定结论；只有第 5 条仍未决。
+按「什么时候必须定」排序。每一项下面写明了已定结论。
 
 1. **碰撞体到底给哪些道具做？**（影响 13 个 def / 52 件的判决，也决定要不要一次真人走测）
 
@@ -402,10 +388,10 @@ manifest（每件，Blender 产出）
 
 3. **挡路多盒的预算**（家具期才咬人）
 
-   **已定：选 A ——仍是 6 格，超出时退到该件 0 号主盒。** 理由：退化语义已经写在 §4.3（至少收主盒，绝不让一件变成可穿过），抬常量会改电机与全部 lab 的预算，收益只在两张桌子同时靠近时才看得见。
+   **已定：选 A ——仍是道具块 12 槽，超出时退到该件 0 号主盒。** 理由：退化语义已经写在 §4.3（至少收主盒，绝不让一件变成可穿过），抬常量会改电机与全部 lab 的预算，收益只在两张桌子同时靠近时才看得见。
 
-   - A（已定）：全局仍 6 格，同一件装不下就退到主盒。
-   - B（否）：`MaxBlockingBoxCount` 抬到 12。成本：改电机常量 + 宿主选择缓冲 + 扫掠障碍数最多 +100%。
+   - A（已定）：全局仍 12 槽，同一件装不下就退到主盒。
+   - B（否）：道具块抬到 24 槽。成本：改电机常量 + 宿主选择缓冲 + 近集窗口变大。
    - C（否）：每件只 1 盒，接受桌腿/靠背穿模。成本：观感最差。
 
 4. **静态布景要不要多盒，以及怎么声明**（只有 `layout.json` + `validate_map.py` 的 owner 能改）
@@ -416,13 +402,7 @@ manifest（每件，Blender 产出）
    - B（否，留作将来）：加 `collision_parts` 数组，校验器按 parts 计数（预算仍 8）。
    - C（否）：抬 `MaxBoxCount`。
 
-5. **吸附物要不要改变球的滚动轮廓**（原作观感，本项目未实现）——**待用户决定**。
-
-   这一条**仍未决**，本文不给默认、不给推荐；下面的 A 只是「今天的现状」，不是已选方案。
-
-   - A（现状，不是决定）：不做。吸附物只跟位置走，不参与扫掠/接地。
-   - B：把 `RadialProxyMath` 接进 `GroundContactMath`（球会「踩」在吸附物上）。成本：球层任务；会改变球能钻多窄、能贴多近的手感，需要重验尺寸门与爬坡。
-   - C：把外壳接进扫掠（球会被自己粘的东西卡住）。成本最高，且与「吸收 = 移除」的语义冲突，风险最大。
+5. **吸附物改变球的滚动轮廓**：已由球层的径向代理实现（BallMotor README「径向凹凸代理」），不属于道具碰撞体层。
 
 6. **Unity 侧怎么落：手挂还是生成器**
 
@@ -446,9 +426,9 @@ manifest（每件，Blender 产出）
 **今天能离线做（本文的数字都是这么来的）**
 
 ```python
-# D_release：与吸收门同一式子反解（V 取场景 propBounds 的三轴积）
+# D_release：与吸收门同一式子反解（V 取场景 propBounds 的三轴积，k = 0.70）
 V = 0.062714            # watering_can
-D = (6 * V * 10 / 3.141592653589793) ** (1/3)        # → 1.062
+D = (60 * 0.7 * V / 3.141592653589793) ** (1/3)        # → 0.943
 ```
 
 ```python
@@ -457,12 +437,11 @@ D = (6 * V * 10 / 3.141592653589793) ** (1/3)        # → 1.062
 # 结果：1 种旋转 (0,0,0,1) ×110；空 collider 61 件、非空 49 件
 ```
 
-**必须 Unity**：玩家能否走过 0.20 m 的门槛而不被绊住；`BoxCollider` 挂上后吸附/复位有没有留下悬空实体；1 个 vs 6 个挡路盒的帧时间；旋转道具的世界 AABB 过覆盖手感。
+**必须 Unity**：玩家能否走过 0.20 m 的门槛而不被绊住；`BoxCollider` 挂上后吸附/复位有没有留下悬空实体；1 个 vs 多个挡路盒的帧时间；多盒时近集窗口的帧时间。
 
 ## 12. 不做什么 / 与既有决定的关系
 
-- **不改** `propBounds`、不改体积门、不改 `MaxBlockingBoxCount`、不改 `PickupFieldHost` 的现有行为、不改任何 Blender 脚本、不写运行时代码。
-- **不动** [BLOCKING_PROPS_PLAN](BLOCKING_PROPS_PLAN.md)（§0.6 的「挡路盒只来自 `propBounds`」本文完全保留，只是把「将来的形状细化」写清楚）。
+- **不改** `propBounds`、不改体积门、不改道具块容量、不改 `PickupFieldHost` 的现有行为、不改任何 Blender 脚本、不写运行时代码。
 - **不改** `Docs/Design/StoryMode/PROP_CATALOG.md` 的其它任何列。那 61 行的 `视觉模型文件` / `当前 propBounds` / `体积` / 三列 ✅❌ 由目录 owner 维护，见该文 §0.1 / §1。
 - 与 [OPEN_DECISIONS](../../OPEN_DECISIONS.md) 的关系：(o) 三层分离是本文的前提；(l) 体积门是「挡不挡」的唯一口径；本文只在 (o) 的「碰撞体」那一层里填内容，不新增决定。
 

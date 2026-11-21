@@ -2,9 +2,7 @@
 
 > **2026-11-16 门已改**：吸收尺寸门按原作数字：物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。「全局球径上限与第一关星级带」一节的星级档位件数按旧体积比门（`a·b·c ≤ (π/6)·D³/10`）算出，只作评分模块的参考输入，不是现行口径；现行口径与实现清单见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
-
 > 状态：五个模块的源码与 U# 程序资产都在仓库里；Unity 侧的 Play 证据只有 2026-11-16 的 Hub 闭环 ClientSim 实跑（见文末「主房间闭环」）和 StationPlatform 实验的 PC 实测（[Evidence/StationPlatform](<../../Evidence/StationPlatform/README.md>)），其余运行时行为见文末「已知限制」。
-> 计划与判据见 [第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1–§4、§7 S1–S4。
 
 | 模块 | 文件 | 状态 |
 |---|---|---|
@@ -64,8 +62,6 @@
 
 ## 骑球
 
-> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1、§7 S2。
-
 ### 三个脚本
 
 | 文件 | 职责 | 明确不做 |
@@ -102,8 +98,6 @@
 **与回合控制器的分工**：`StoryRoundController` 不再共用这把开关，它只关自己的 `SetRoundGate(bool)`（`Runtime/Story/StoryRoundController.cs` 到点时调 `false`）。两把闸门互不影响，所以到点后再入座也不会把输入重新打开；细节见 S1 的“输入闸门”。
 
 ## 吸附宿主
-
-> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §3、§7 S3 与 §8 的风险 4。
 
 ### 一个脚本管全部道具
 
@@ -184,8 +178,6 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 ## 剧情回合（S4）
 
-> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4、§7 S4。
-
 ### 一个脚本
 
 | 文件 | 职责 | 明确不做 |
@@ -213,7 +205,7 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 ## 再试一次（S6 剩余的一半：结果卡重试）
 
-> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4「没有重试接缝」与 §7 S6 的后半段；motor 的重置接缝（`TryResetForNewRound`）见 [BallMotor README](<../BallMotor/README.md>) 的「重试（reset）」一节，本节只接调用方与道具复位。
+> motor 的重置接缝（`TryResetForNewRound`）见 [BallMotor README](<../BallMotor/README.md>) 的「重试（reset）」一节，本节只接调用方与道具复位。
 
 ### 三个文件
 

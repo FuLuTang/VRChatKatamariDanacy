@@ -10,7 +10,7 @@
 
 ### 0.1 一句话
 
-把“扫掠 + 台阶掩码 + 支撑表 + 爬墙状态机”四条互不相干的规则，换成**一条规则**：
+球与场景的碰撞只有**一条规则**：
 **球对一组定向盒（OBB）做精确最近点接触；接触法线与竖直的夹角 θ 连续地决定“滚、爬、挡”三件事。**
 
 - **滚**（θ ≤ 45°，`ride`）：球在这张面上滚，位置被推出到相切，水平速度**一分不减**（等于今天坡的手感）。
@@ -25,9 +25,9 @@
 | 今天的失败（审计证据） | 根因 | v2 的机制 | 状态 |
 |---|---|---|---|
 | C05 45° 接缝死锁，所有球径都过不去 | 盒子按半径膨胀成 AABB，球心被挡在台面南面 `r` 处，接缝差 `0.5858r` > `stepLimit 0.5r` ⇒ **θ_max = asin(0.6) = 36.87°** | OBB 最近点：接缝处球与坡面、台面棱**同时相切**，差 = 0；不需要任何 step 预算 | **已推导**（§2.6，参考模型 `test_45_degree_seam_*`） |
-| 2.2 m 球把 0.6 m 台面当墙 | 同一条膨胀 AABB | 棱在球心下方 ⇒ 推挤法线朝上 ⇒ 滚过去；`h < r` 是几何阈值 | **已推导**（§2.5） |
-| 斜面从侧面/下面/球心偏出坡宽时**直接穿过去** | 斜面只当高度场，从不进扫掠 | 坡 = 实体 OBB 板；顶面、侧面、底面都是同一个最近点函数 | **已推导**（§1.5，`test_ramp_side_*`、`test_ramp_underside_*`） |
-| C13 2.20 单帧 0.95 m 垂直跳变 + 卡死传送回 `startCenterWorld` | 台阶掩码的一次性大抬升 + 传送到序列化的旧起点 | 没有台阶掩码；传送目标是“最后稳定点”，不是旧起点 | **设计**（§2.8） |
+| 2.2 m 球把 0.6 m 台面当墙 | 膨胀 AABB | 棱在球心下方 ⇒ 推挤法线朝上 ⇒ 滚过去；`h < r` 是几何阈值 | **已推导**（§2.5） |
+| 斜面从侧面/下面/球心偏出坡宽时**直接穿过去** | 斜面只当高度场 | 坡 = 实体 OBB 板；顶面、侧面、底面都是同一个最近点函数 | **已推导**（§1.5，`test_ramp_side_*`、`test_ramp_underside_*`） |
+| C13 2.20 单帧 0.95 m 垂直跳变 + 卡死传送回 `startCenterWorld` | 传送到序列化的旧起点 | 传送目标是“最后稳定点”，不是旧起点 | **设计**（§2.8） |
 | 完全没有爬墙 | 设计边界（>45° 拒绝注册） | `climb` 通道：`H_cap = k_h·(2r+λL)`，`k_h=1.5`（**我们的 PROVISIONAL**；跨系列核查没有给出原作上限，见 [TERRAIN_CLIMB](TERRAIN_CLIMB.md) §7） | **锚点 + 我方模型**（§3） |
 | 0.35 m 窄坡 + 2.2 m 球：球心在坡宽外 | 足迹不按半径扩张 | 接触是球心到板的最近点，**球可以骑在坡的棱/宽外**，只要球面真的碰到 | **已推导**（§2.5） |
 | 埋进球里的吸附物无策略 | 无代码 | 显示层 cull（整个 AABB 在核心−边距内），数据保留 | **设计**（§4.3） |
@@ -224,8 +224,8 @@ N = clamp( ceil( (|Δ| + (g + a_climb)·dt²) / (κ·r) ), 1, N_max )      κ = 
 **Udon 的真成本是调用，不是 flop**：v2 每步的新增调用是
 `ContactSolve.TryStep(...)`（1 次/子步，**所有障碍在函数内部循环**，不许每条障碍一次 Udon 调用）、
 `ContactSolve.BuildContacts(...)`（1 次/子步）、`ContactSolve.Classify(...)`（1 次/步）、
-爬升 1 次、接触写回 1 次 ⇒ **≤ 8 次/步**。这个数量级与今天的 `TrySweepSphere + TryCollectWallContactNormals + TryRemoveWallNormalVelocity + GroundContactMath×2 + TryResolveSupport` 相同。
-**必须做一次 profiler 实测**（`GetLastStepMicros()`，P4 已有的请求）；在拿到数之前，本文只说“同量级”，不说“更快”。
+爬升 1 次、接触写回 1 次 ⇒ **≤ 8 次/步**。
+**必须做一次 profiler 实测**（`BallPerformanceDiagnostics` 的分段计时）；在拿到数之前，本文不给每步耗时结论。
 
 ---
 
@@ -321,7 +321,7 @@ else:
 - **没有“候选面列表”，没有“激活带”，没有“最高者胜”**。球被谁托着，就是它正在碰的那个面；没碰就是没支撑。
 - **“支撑面掉走”不是一条判据**：接触消失 ⇒ 没支撑 ⇒ 重力；没有 `supportDropTriggerM` / `sameSurface` 抑制 / `maxDropPerStep` 这类补丁。
 - **`GetSupportKind()` 兼容**：0 地面 / 1 盒 / 2 坡（slab）/ 3 道具 / **4 爬升接触** / **5 针尖支撑** / −1 无。测试场读旧值的地方不受影响。
-- **“只有针尖撑着”是合法状态**（§4A.3）：核心球离开地面、针尖还压着坡/台阶时，`supportKind=5`，`supportHeight` 取**针尖处的切平面**：`height = p_tip.y − [n.x(C.x−p_tip.x)+n.z(C.z−p_tip.z)]/n.y`，`support_gap` = 突出量（>0，表示球被撑起来，不是陷进去）；**不要**套用核心接触的 `C.y − dot(n,C−p)/n.y`（对针尖它会把支撑面算到球心高度）。这取代了 v1 的 `GroundContactMath` 代理抬升路径。
+- **“只有针尖撑着”是合法状态**（§4A.3）：核心球离开地面、针尖还压着坡/台阶时，`supportKind=5`，`supportHeight` 取**针尖处的切平面**：`height = p_tip.y − [n.x(C.x−p_tip.x)+n.z(C.z−p_tip.z)]/n.y`，`support_gap` = 突出量（>0，表示球被撑起来，不是陷进去）；**不要**套用核心接触的 `C.y − dot(n,C−p)/n.y`（对针尖它会把支撑面算到球心高度）。
 - **`stepHeightOverBallDiameter` 只留作诊断**：`GetStepHeightLimitWorldM()` 继续返回 `0.25D`（给旧判据读），但它**不参与任何物理**。
 
 **台阶从同一条规则涌现（推导）**：
@@ -1271,7 +1271,7 @@ python3 Docs/tools/validate_plan.py                  # 计划数据
 #   refresh_unity → run_tests（EditMode）→ 测试场 Play Mode 跑 v2 验收表
 ```
 
-**S2 的数值对齐**：把 Python 模型的一组固定输入（面/棱/角/内部/45° 接缝/90° 墙/70° 坡/200 条窗口/12 段弯坡）写成 JSON fixture，C# EditMode 与 Python 各自跑，断言 `|Δ| ≤ 1e-6`。**这是“两份实现不许漂”的唯一机制**（与仓库既有 `sweep.py` ↔ `SweepMath.cs` 的做法一致）。
+**S2 的数值对齐**：把 Python 模型的一组固定输入（面/棱/角/内部/45° 接缝/90° 墙/70° 坡/200 条窗口/12 段弯坡）写成 JSON fixture，C# EditMode 与 Python 各自跑，断言 `|Δ| ≤ 1e-6`。**这是“两份实现不许漂”的唯一机制**（同 `Docs/tests/ball_contact_v2` 与 C# 的对拍做法）。
 
 ### 7.3 v2 的 9 阶段顺序（S3 落地时的目标）
 
@@ -1298,7 +1298,7 @@ S3 涉及 `Runtime/BallMotor/KatamariBallMotor.cs`（v2 区域）、`Runtime/Bal
 
 #### 7.5.1 位置权威与电机改动清单
 
-`StepBall(dt)` 的顺序：阶段 1–2 与 5–9 围着唯一的位置权威：
+`StepBall(dt)` 的顺序：阶段 1–2 与 5–9 围着唯一的位置权威（接触求解）：
 
 ```
 1 StepInput -> 2 BallMotionMath -> StepContactV2 -> 5..9 (含 7.5 长大推挤)
@@ -1599,7 +1599,6 @@ required_speed_with_grip(theta_deg, protrusion, r_core) -> float
 ### 9.4 与其它文档的交叉引用
 
 - 测试场：`Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md`（§6.1 协议、§5.2 判据字典、§5.6 覆盖行与只记录行）
-- 地形支撑：`Docs/Design/BallMotor/TERRAIN_SUPPORT.md`（§4 台阶、§5 斜面——本文 §2.5/§1.5 取代其物理，作者校验保留）
 - 马达契约：`Docs/Design/BallMotor/README.md`（9 阶段顺序；§7.3 给 v2 的目标）
 - 尺寸/吸附：`Docs/Design/PickupAbsorb/README.md`、`Docs/Design/StoryMode/PROP_CATALOG.md`（沙盒道具尺寸）
 - 参考模型：`Docs/Design/BallMotor/contact_v2/contact_v2.py`、`.../shapes.py`、`Docs/tests/ball_contact_v2/test_contact_v2.py`、`.../test_shapes.py`

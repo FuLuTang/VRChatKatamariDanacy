@@ -8,7 +8,7 @@
 > **本文是设计定稿，不是 owner 决定清单**：字段名、代码与本项目的写入方式是提案；凡 owner 已拍板的，逐条标「已定」。
 > 引用约定：`Runtime/…`、`Editor/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；其余相对仓库根。**按符号名与节号引用，不写行号**。
 >
-> 兄弟文档：[LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)（当前格式与工具）、[LEVEL_EDITOR_WEB](../Tools/LEVEL_EDITOR_WEB.md)（网页编辑器）、[TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md)（v1 支撑模型）、[CONTACT_MODEL_V2](../BallMotor/CONTACT_MODEL_V2.md)（接触求解器）、[PHYSICS_TEST_FIELD](../BallMotor/PHYSICS_TEST_FIELD.md)、[COLLIDER_PROXY](../PickupAbsorb/COLLIDER_PROXY.md)、[PROP_BEHAVIOURS §10](../PickupAbsorb/PROP_BEHAVIOURS.md)、[PARITY_AUDIT](../Parity/PARITY_AUDIT.md)、[OPEN_DECISIONS](../../OPEN_DECISIONS.md)。
+> 兄弟文档：[LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)（当前格式与工具）、[LEVEL_EDITOR_WEB](../Tools/LEVEL_EDITOR_WEB.md)（网页编辑器）、[CONTACT_MODEL_V2](../BallMotor/CONTACT_MODEL_V2.md)（接触求解器）、[PHYSICS_TEST_FIELD](../BallMotor/PHYSICS_TEST_FIELD.md)、[COLLIDER_PROXY](../PickupAbsorb/COLLIDER_PROXY.md)、[PROP_BEHAVIOURS §10](../PickupAbsorb/PROP_BEHAVIOURS.md)、[PARITY_AUDIT](../Parity/PARITY_AUDIT.md)、[OPEN_DECISIONS](../../OPEN_DECISIONS.md)。
 
 ---
 
@@ -48,7 +48,7 @@
 |---|---|---|---|---|---|
 | `meta` | 这一关是什么：起始/目标/上限、时限、出生点、场景、容量、源 | — | — | 导入器、回合、编辑器 | `level` 块 |
 | `terrain` | 球脚下的地面/墙/顶是什么形状（三角网 + 碰撞 AABB + 空间网格） | 是 | 否 | `TerrainFieldHost` → 电机支撑/接触 | 一张 `ground` 平面 |
-| `structures` | 建筑、护岸、斜板这类**大件不可吸物**的解析体（OBB/slab/弯坡） | 是 | 否 | 电机静态表 + 扫掠 | `role=box/ramp/curve_ramp` |
+| `structures` | 建筑、护岸、斜板这类**大件不可吸物**的解析体（OBB/slab/弯坡） | 是 | 否 | 电机静态 OBB 表 | `role=box/ramp/curve_ramp` |
 | `activityArea` | 球能去哪、多大才能去、掉出去怎么办 | 是 | 否 | `ActivityAreaHost` | 四面 `boundary` 平面 |
 | `props` | 每件可吸物：是什么、多大、坐哪、朝哪、值多少、怎么动、挂在谁下面 | 否（可动） | 是 | `PickupFieldHost` + 行为宿主 + 账本 | `props[]` + `defs[]` |
 
@@ -56,7 +56,7 @@
 
 ### 1.3 三条硬边界（引擎侧已经定死，研究改不了）
 
-1. **地形不进 v1 的水平扫掠。** 斜面已经是「只支撑、绝不进扫掠」（TERRAIN_SUPPORT）。v2 里**陡峭三角形**会挡球，但那是接触求解器（CONTACT_MODEL_V2 的 θ 分类）的职责，不是把地形塞进 `SweepMath`。在接触 v2 打开之前，需要水平阻挡的地方必须用 `structures` 的 slab 表达。
+1. **地形与结构都走同一套接触求解。** **陡峭三角形**会挡球，那是接触求解器（CONTACT_MODEL_V2 的 θ 分类）的职责；需要水平阻挡的人造结构用 `structures` 的 slab 表达。
 2. **面 id 必须稳定。** 地形的面 id 粒度是 **broad-phase AABB（或 chunk）**，不是三角形；否则每帧 id 都变，`sameSurface` 抑制失效，球在坡上抖着落。
 3. **支撑只取球底以下的面。** 悬垂/隧道一旦存在，「球心附近最高的面」会把天花板当地板。v2 的支撑查询是「`ballBottom + stepLimit` 以下最高的面」，头顶的面单独做推出。
 
@@ -304,7 +304,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 
 | 字段 | 说明 |
 |---|---|
-| `role` | `box`（静态 OBB：扫掠 + 顶面支撑）／`ramp`（只支撑的斜板；接触 v2 后是 slab）／`curve_ramp`（弧展开成 N 段 slab） |
+| `role` | `box`（静态 OBB：挡路 + 顶面支撑）／`ramp`（斜板，slab OBB）／`curve_ramp`（弧展开成 N 段 slab） |
 | `shape` | `box`／`proxy`（**2026-11-16 追加**：接触形状用 `collider` 代理，见下）／`plane`（平面只给 `boundary` 遗留用；v2 新文件不写 `plane`） |
 | `collider` | 仅 `shape:"proxy"`：**局部空间**的接触代理，编码与 `defs[].collider` 完全相同（`box`/`sphere`/`capsule`/`convex` 4–24 点），由 `collider_proxy.fit_proxy` 拟合 |
 | `proxySource` | 仅 `shape:"proxy"`：`def`（取自该 def 的拟合代理）／`aabb-fallback`（**没有代理时**退回 AABB 盒，必须写出来）／`manual` |
@@ -1340,22 +1340,16 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | 阶段 | 做什么 | 不做什么 | 前置 | 退出判据 |
 |---|---|---|---|---|
-| **T0 支撑-only** | `TerrainFieldHost` 读数组；每步在 broad box 内找「球底以下、且不高于球底 + 爬升余量」的最高三角形；把 `(n, offset)` 喂给现有 `GroundContactMath`；面 id = box id | 不做头顶/侧面、不做速度响应、**不挡高于 stepLimit 的台沿**（那要等 T1） | P2 数据导入 | C21「站得住、落到 `y = 面高 + r`」；C24「沿路缘走 10 s 不抖」；地形上 10 s 支撑高度波动 < 1 mm。**阻挡类判据一律留给 T1/T2** |
-| **T1 穿透解算** | 对全部三角形做球-三角形最近点；沿法线推出、去法向速度；2 子步；天花板向下推 | 不做 θ 分类、不做爬升 | T0 | C23 隧道/悬垂：从下面过不被顶起、头顶不穿、站在悬垂上能掉下来；C22 沟底不穿 |
-| **T2 分类 + 连续** | θ 分类（ride ≤45°；climb θ>45° 且法线朝上，带速度门；block 法线不朝上）；swept sphere vs triangle 防隧穿；地形接触并入 CONTACT_MODEL_V2 的求解（flag 打开） | 不做材质摩擦/音效 | T1 + 接触 v2 S3/S5 | 4 档球径矩阵：C21–C24 全绿；2.2 m 球不把 0.6 m 台沿当墙；4 m/s 不穿 0.1 m 薄板 |
+| **T2 分类 + 连续** | θ 分类（ride ≤45°；climb θ>45° 且法线朝上，带速度门；block 法线不朝上）；swept sphere vs triangle 防隧穿；地形接触并入 CONTACT_MODEL_V2 的求解（flag 打开） | 不做材质摩擦/音效 | 接触 v2 S3/S5 | 4 档球径矩阵：C21–C24 全绿；2.2 m 球不把 0.6 m 台沿当墙；4 m/s 不穿 0.1 m 薄板 |
 | **T3 网格 + 流式** | 导入期烘 CSR 网格；chunk 按球位置启用/禁用；>8,192 三角形拆多个关卡/区域 | 不做 LOD 网格 | T2 | 3,456 三角形参考地形每步 ≤48 三角形窄相；chunk 切换无单帧跳变 |
 | **T4 打磨** | 材质 id（坡度/摩擦提示）、诊断计数、成本读数进 `Docs/Evidence/` | 不改玩法 | T3 | profiler 读数与离线模型误差 <20% |
 
-**为什么 T0 先做**：它零改动接进现有电机（`GroundContactMath` 只要 `(n, offset)`），能最快验证「地形数据是通的、面 id 稳、球不抖」；头顶/墙的完整解算要等 T1，因为那需要新的接触结果数组与推出顺序。
+### 13.2 地形出现后的规则
 
-### 13.2 与 v1 规则的冲突处理
-
-| v1 规则 | 地形出现后 | 处理 |
-|---|---|---|
-| 地形不进水平扫掠 | 陡三角形必须挡球 | T0/T1 只做推出（不把地形塞进 `SweepMath`）；T2 用接触求解器统一处理，**仍不进扫掠** |
-| 支撑只取球心附近最高面 | 悬垂下会把天花板当地板 | T0 起改成「球底以下」；T1 起头顶单独推出 |
-| `stepLimit = 0.25D` 决定台阶是墙还是路 | 三角形没有「盒」可标掩码 | T0 保留 `stepLimit` 只做筛选（诊断）；T2 用一条接触驱动的连续爬升：`h<r` 棱滚越、`h<H_cap` 连续爬（`H_cap = 1.5·D`）、`h≥H_cap` 墙，不再用 `stepLimit`（TERRAIN_CLIMB §6） |
-| 面 id 稳定 | 三角形每帧不同 | 面 id = broad box；同一框内三角形共享 |
+- 陡三角形必须挡球：由接触求解统一处理（地形三角形与盒、斜板同一套接触，不单列路径）。
+- 支撑取「球底以下」的接触，悬垂下不会把天花板当地板；头顶接触单独推出。
+- 台阶、坡、墙用一条接触驱动的连续爬升：`h<r` 棱滚越、`h<H_cap` 连续爬（`H_cap = 1.5·D`）、`h≥H_cap` 墙（TERRAIN_CLIMB §6）。
+- 面 id = broad box；同一框内三角形共享。
 
 ### 13.3 每步成本模型（基线：8 平面 / 8 盒 / 4 坡 / 256 OBB）
 
@@ -1366,13 +1360,13 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | v1 基线（1 地面 + 8 平面 + 8 盒投影 + 4 坡 + 6 道具支撑） | — | **≈1.6k** | 上一版估算，未实测 |
 | 地形 broad AABB（以 Cancer 的 68 条为上限示例） | 68 | ≈1.4k | 球-AABB：3 减法 + 3 比较 + 早退 |
 | 地形 chunk 粗筛（≤32） | ≤32 | ≈0.3k | 只在跨 chunk 时 |
-| 地形窄相（T0，无网格） | 2–6 框 × ~51 三角 | **9k–28k** | 有 y 带早退；这是无网格时的上限 |
+| 地形窄相（无网格） | 2–6 框 × ~51 三角 | **9k–28k** | 有 y 带早退；这是无网格时的上限 |
 | 地形窄相（T3，1 m 网格 3×3） | 2–6 框 × 9 格 × 2–4 三角 | **≈2k–6k** | 球心 3×3 格；三角形去重后更少 |
 | 球-三角形最近点 | 每个候选 | ≈90 | 面/棱/角三分支 |
 | 穿透推出 + 去速 | ≤4 接触 | ≈0.4k | 与现有接触同一量级 |
 | 接触 v2 现状（24 近邻 OBB，≤8 接触） | — | ≈4k | 对照：地形 T3 与它同量级 |
 
-**结论**：T0 无网格在 3,456 三角形上可能到 3 万 flops/步（50 Hz ≈ 1.5 Mflops/s），对 Udon 偏高但未必不可；**网格把窄相压到 2–6k，是必做项**，不是优化。流式 chunk 的切换成本（每 0.5 m 或 0.25 s 一次）应摊到 **<100 flops/步**。
+**结论**：无网格在 3,456 三角形上可能到 3 万 flops/步（50 Hz ≈ 1.5 Mflops/s），对 Udon 偏高但未必不可；**网格把窄相压到 2–6k，是必做项**，不是优化。流式 chunk 的切换成本（每 0.5 m 或 0.25 s 一次）应摊到 **<100 flops/步**。
 
 ### 13.4 新测试场格位（PhysicsTestField）
 
@@ -1442,13 +1436,13 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **P0 文档与 schema 冻结** | 本文、`*_KEYS` 草案、错误码表、决定编号索引（§16） | 本文 + 评审 | 字段名不再改 |
 | **P1 校验器 + 转换器** | `placement_core` v2 读写、13 份转换、`check` 0 错、`gate_changes.csv` | 工具 + 测试 | 13 份转换；v2 再转 no-op；`python3 -m unittest discover -s Docs/tests` 全绿 |
 | **P2 Unity 导入（无地形）** | `PlacementImporter` v2：meta/structures/activity/props；地形字段读入但不建网格 | 导入器 + 场景 | 13 份重导入第二次 `+0 ~0 -0`；`volumeMm3`/`Req mm` 回读一致 |
-| **P3 地形数据与视觉** | 侧车读写、`TerrainFieldHost`/`TerrainChunkHost`、Mesh 资产生成、T0 支撑 | 数据 + 组件 | C21/C24 通过；地形上站得住；参考地形 3,456 三角形加载成功 |
-| **P4 地形接触 T1/T2** | 穿透/天花板、θ 分类、连续检测；C22/C23 | 电机地形层 | C21–C24 四档全绿；4 m/s 不穿 0.1 m 板 |
+| **P3 地形数据与视觉** | 侧车读写、`TerrainFieldHost`/`TerrainChunkHost`、Mesh 资产生成、地形支撑 | 数据 + 组件 | C21/C24 通过；地形上站得住；参考地形 3,456 三角形加载成功 |
+| **P4 地形接触** | 穿透/天花板、θ 分类、连续检测；C22/C23 | 电机地形层 | C21–C24 四档全绿；4 m/s 不穿 0.1 m 板 |
 | **P5 行为、运动与规模** | `parent`/`inherit`/`rigidGroup`/`scale` 运行时；子件坠落；`MotionHost`（10/15 Hz 队列 + 相位）；路径 host；共享剪辑/相位桶；4000 分片与空间桶 | 宿主组件 | 90 条父子关系在 Cancer 参考关卡跑通；129 个动件预算 ≤16%（15 Hz）；153 个被动画实例照原作挂 Animator（不做 VAT，2026-11-16）；4000 件合成场景不掉帧目标（先测再定） |
 | **P6 编辑器** | E2–E8 | 编辑器 | 各功能有截图/冒烟；参考关卡只读不变 |
 | **P7 收尾** | 删 v1 读取器；`OPEN_DECISIONS` 状态更新；证据归档 | 清理 | 仓库无 v1 写入路径；全部测试绿 |
 
-**并行约束**：P1 不能与 P2 合并（先证明 JSON 形状稳定，再动 Unity）；P3 的 T0 不能等 P4（支撑-only 是低风险收益）；P5 的 `parent` 运行时必须等 `PROP_KEYS_V2` 与校验器同一批（未知键硬错误）。
+**并行约束**：P1 不能与 P2 合并（先证明 JSON 形状稳定，再动 Unity）；P3 的地形支撑不等 P4；P5 的 `parent` 运行时必须等 `PROP_KEYS_V2` 与校验器同一批（未知键硬错误）。
 
 ---
 
@@ -1460,7 +1454,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 |---|---|---|---|
 | **D-1** | 球径上限 | **全局 400 m**（owner 2026-11-18）；所有地图适用，增长由 `SizeModelMath` 饱和 | `KatamariBallMotor.GlobalMaxBallDiameterM` |
 | **D-2** | 地形存储 | 内联保可读；>512 三角形走 `.katerrain` 侧车并钉 sha256；参考关卡用同一格式 | JSON/侧车、编辑器、导入器 |
-| **D-3** | 地形水平阻挡 | 支撑 + 陡面挡（θ 分类），分阶段：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
+| **D-3** | 地形水平阻挡 | 支撑 + 陡面挡（θ 分类），接触求解统一处理滚/爬分类与爬升；需要硬阻挡的地方用 `structures` slab 补 | 电机、测试场、关卡设计 |
 | **D-4** | 活动区越界 | 硬墙 + 球径门 + 每关 kill plane；玩法范围主要靠地图布局限制；不做软边距 | `activityArea`、电机、关卡设计、HUD |
 | **D-5** | 逐件缩放 | 四层，见 §6.4：①运行时永不缩放；②作者态均匀缩放全允许（含挂接件）；③非均匀 + 有代理只允许无父、static、box/sphere；④非均匀 + 无代理（def 无 `collider`）允许无父、static、`absorbable:false`（原作唯一实例 `sparrow_001`） | props、导入器、吸收门 |
 | **D-6** | zone id | 不透明标签，只做标签/统计（`killPlane.zoneId` 只记诊断）；kill plane 是独立字段、逐关 Y，运行时由回合状态机当重启阈值执行，没有回合状态机的世界退回 `ActivityAreaHost` 兜底 | 地形、活动区、回合状态机、统计 |

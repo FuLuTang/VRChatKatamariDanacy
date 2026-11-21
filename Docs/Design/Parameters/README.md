@@ -434,7 +434,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ### 6.4 结构容量、编译期常量与只属于运行时的标量（不进载荷）
 
-`KatamariBallMotor.MaxPlaneCount = 8` / `MaxBoxCount = 64`（2026-11-16 由 8 提到 64：v2 的 `budget.boxes = 64`，怀旧关 35 条布景固体；盒面 id 仍是 `1+i`，因此斜坡面 id 从 `10+i` 让位到 `FirstRampSurfaceId = 500`（1000+i 已被 v2 解算器的边界平面占用））/ `ContactCapacity = 4` / `PendingCandidateCapacity = 4`、`PlayerCapacity = 1` / `CommitCapacity = 256` / `ClaimCapacity = 8` / `BankRequestCapacity = 8`、`AbsorbedEventCapacity = 16`、`SweepMath.ProjectionPasses = 4`、`RadialProxyMath.DirectionCount = 16` / `MaxExtremeCandidates = 4`。
+`KatamariBallMotor.MaxPlaneCount = 8` / `MaxBoxCount = 64`（2026-11-16 由 8 提到 64：v2 的 `budget.boxes = 64`，怀旧关 35 条布景固体；盒面 id 仍是 `1+i`，因此斜坡面 id 从 `10+i` 让位到 `FirstRampSurfaceId = 500`（1000+i 已被 v2 解算器的边界平面占用））/ `ContactTuning.ContactCapacity = 12` / `PendingCandidateCapacity = 4`、`PlayerCapacity = 1` / `CommitCapacity = 256` / `ClaimCapacity = 8` / `BankRequestCapacity = 8`、`AbsorbedEventCapacity = 16`、`RadialProxyMath.DirectionCount = 16` / `MaxExtremeCandidates = 4`。
 
 理由：这些是**缓冲形状**，改一次要重编译并重建所有预分配数组，不是“调参”。把 `directionSamples` 做成运行时可改的字段，会给出“改了但没生效”的假象。
 

@@ -532,7 +532,7 @@ T21 在 Unity 里要做的（灰盒）：
 
 三条口径后果：
 
-1. **`@size=<米>` 立方体通道在体积门下会把门件写成死件**：`@size=1.25` 把长凳记成 `1.25³ = 1.95 m³`，需要 **2.60 m** 球。正确做法是 `propBounds` 说真话（模型 AABB）+ 挡路盒另立（见 `Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md`、`COLLIDER_LAYER.md`），不是把拾取尺寸压成一个立方体。
+1. **`@size=<米>` 立方体通道在体积门下会把门件写成死件**：`@size=1.25` 把长凳记成 `1.25³ = 1.95 m³`，需要 **2.60 m** 球。正确做法是 `propBounds` 说真话（模型 AABB）+ 挡路 OBB 另立（见 `Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md` §4.1、`COLLIDER_LAYER.md`），不是把拾取尺寸压成一个立方体。
 2. **薄片类（`fallen_leaf` / `cheese_slice` / `cookie` / `paper_scrap`）在体积门下等于沙粒**：0.30 m 起手球就能吃，这是 (l) 已记录的忠实行为（原作同样用包围盒，`ABSORB_SIZE_RATIO.md` S-AR07），不是本图的数据错误。要不要给薄片设厚度下限是设计判断（`PROP_CATALOG §2.4` 已量化）。
 3. **本图的成长兑现要按新门槛重算**：§9 的「≥1.25 m 吸长凳」在 2.20 上限下不成立（要 3.12 m）。整图要么把上限提到 3.20（(n)/`PROP_SET_PLAN` 的说法，但与本文件 `scale.ball_max_collision_diameter_m = 2.2` 及校验器的路线余量判据冲突，需要先拍板），要么把对角门改成非长凳的门件。
 

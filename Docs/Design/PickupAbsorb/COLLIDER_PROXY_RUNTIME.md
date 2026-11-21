@@ -93,6 +93,16 @@ add `defs[].collider` blocks. No `StoryMode.unity` / `placement.json` / manifest
 - A declared block that fails validation is an import/sync error; at runtime a failed bake
   falls back to the OBB and is counted in `GetPropProxyFallbackRows()`.
 
+## 4.1 道具实体何时进、何时出（OBB 路径与代理路径相同）
+
+挡路/支撑的道具实体是球径与球位置的派生量，不是场景几何。`PickupFieldHost.UpdatePropObstacles` 每 `scanIntervalSeconds`（默认 0.05 s）从头判一遍：
+
+- **球长大跨过门槛**：`IsBeyondCachedRequirement(propReqMm[i], true, ballMm)` 用当前球径重算，件不再满足就不进候选，下一次扫描该件的实体从块里消失。
+- **球缩小（交分）**：门槛反向，件回到候选，下一次扫描重新进块。球此刻若与它重叠，由接触求解推出（未在 Unity 验证）。
+- **复位**：块只在三处被清空，`KatamariBallMotor.TeleportTo`、`KatamariBallMotor.ClearObstacles`、`PickupFieldHost.ResetField`（同时清零 `nextBlockingScanTime`，下一次扫描立刻重建）。静态平面和静态 OBB 不随复位清除。
+- **不吸收时仍然实心**：`UpdatePropObstacles` 在 `Collecting()` 早退之前调用，回合停止吸收不会让挡路件消失。
+- 吸收事件与扫描之间最多差一个扫描间隔：吃掉后多挡 ≤0.05 s，缩小后晚 ≤0.05 s 才挡。
+
 ## 5. Not verified here
 
 - Unity 2022.3 / UdonSharp compilation of the new signatures (especially the many optional

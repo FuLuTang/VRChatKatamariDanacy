@@ -248,7 +248,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 |---|---|---|---|
 | `ground` | `LevelArenaHost` → `motor.SetGroundPlane(normal, offset)` | 1 张地面 | **恰好 1 条**；`shape` 只能是 `plane` |
 | `boundary` | `LevelArenaHost` → `motor.AddPlane(normal, offset)` | ≤8 平面 | **用平面、不用盒**（否则墙顶变成可站的窄条，还吃掉盒预算） |
-| `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘焙 min/max → `motor.AddBox`） | ≤64 盒（2026-11-16 由 8 提到 64） | **一次登记两用**：扫掠是墙、顶面是支撑 |
+| `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘成 OBB → `motor.AddObb`） | ≤256 静态 OBB | **一次登记两用**：侧面是墙、顶面是支撑 |
 | `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；**板的本地 +Y 面是行走面**（`support` 落座读这一面；`AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面；坡度 > 45° 只是 **warning**（v2 慢爬，见 §4.3.1 / `CONTACT_MODEL_V2` 3.10），板面朝下（inverted）或 90°（侧立的墙）仍是硬错误 |
 | `curve_ramp` | `LevelArenaHost.rampBoxes[]`（导入期展开成 N 段 slab） | ≤4 斜面（**一条算一条**） | 一条弧 = 一个 `structures[]` 条目 + 一个 `curve` 块；导入器把它展开成 `<id>_00…` 的 N 个 cube 子物体（各带 `BoxCollider`），逐段进 `rampBoxes`。段数默认由「弦高 ≤ 5%·最小球半径」自动定（§4.3.1） |
 
@@ -340,7 +340,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 
 `arena` 只用于多格测试场的单格文档（见 [physics_test_field/README.md](../Levels/physics_test_field/README.md) 与 `placement_core._check_arena`）；单关文档不写。
 
-`budget` 与 `expected` 是**从运行期契约抄下来的常量**（不是每家一套）：`planes/boxes/ramps` 来自 [TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md) §3.2、§7.5 的容量与 `motor.AddPlane/AddBox/AddRamp` 的槽位；`expected` 来自 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §3.4（110 件 / 412 u）。**校验器拿它当硬门**：第一关少一件就红，避免「重排时丢了一件没人发现」。
+`budget` 与 `expected` 是**从运行期契约抄下来的常量**（不是每家一套）：`planes/boxes/ramps` 来自 [BallMotor README](../BallMotor/README.md)「固定容量与溢出信号」与 `LevelArenaHost` 的登记槽位；`expected` 来自 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §3.4（110 件 / 412 u）。**校验器拿它当硬门**：第一关少一件就红，避免「重排时丢了一件没人发现」。
 
 ### 4.6 三条约定（这三条错了会静默出错）
 
@@ -514,7 +514,7 @@ boxes + 直线坡 + 弯坡段数 ≤ 256（motor 的静态 OBB 表，CONTACT_MOD
 | `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条；**平面过 `center`**（`offset = dot(normal, center)`）；导入器另在该标记下生成子物体 `Visual`（地面板 + `BoxCollider`），顶面就是这张平面 |
 | `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」**标记**：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组）；每个标记下另有子物体 `Visual`（可见墙 + 玩家 `BoxCollider`），内表面就贴在这张平面上、向场外延伸一个厚度 |
 | `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | v1：`Setup` 烘焙 min/max → `AddBox`，一次两用。v2（电机 `IsContactModelV2()` 且 `useObbBake=true`）：8 角点烘成真 OBB → `AddObb`（表面 id 仍是 `1+i`），**不再**调 `AddBox`，同一条几何只登记一次（见下段） |
-| `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | 导入器把 `role=ramp` 接进 `rampBoxes`；v1：`Setup` 按盒的 +Y 面烘成行走面 → `motor.AddRamp`（坡度 ≤45° 含等号，超过带原因码拒绝）；v2：板本身就是一个 slab OBB（`axisY` = 行走面法线，表面 id `10+i`，role=1），**没有坡度门**（θ 连续处理，弯坡末段接近垂直也能登记）；**绝不进 `staticBoxes`**，斜面也不进扫掠（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
+| `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | 导入器把 `role=ramp` 接进 `rampBoxes`；v1：`Setup` 按盒的 +Y 面烘成行走面 → `motor.AddRamp`（坡度 ≤45° 含等号，超过带原因码拒绝）；v2：板本身就是一个 slab OBB（`axisY` = 行走面法线，表面 id `10+i`，role=1），**没有坡度门**（θ 连续处理，弯坡末段接近垂直也能登记）；**绝不进 `staticBoxes`**，同一块板登记两次会在坡脚多出隐形墙（BallMotor README「关卡几何宿主」第 1 条） |
 | `structures[role=curve_ramp]` | `rampBoxes[]`（N 个 `BoxCollider`） | 父物体 `<id>` 只是标记（无 Renderer/无 Collider）；子物体 `<id>_00…` 每段一个 cube + `BoxCollider`，**逐段**进 `rampBoxes`（和直线坡同一个数组，host API 不变）。父物体**不进** `staticBoxes`，否则弯坡底下出一排隐形墙。v2 下每段同样走「ramp → slab OBB」，所以一条 8 段弧 = 8 个静态 OBB、8 个相邻表面 id（`10..17`），`ramps=` 这一项报的就是**段数** |
 | `props[]` 中 `absorbable=false` | **不进 arena**：`PickupFieldHost` 按 `rise vs stepLimit` 自己分成「地形/挡路」 | `LevelArenaHost` **不得**引用道具（§7.4 硬规则） |
 
@@ -645,16 +645,16 @@ LevelContent/Props/<kind>/[<zone>/][Groups/<group>/]<itemId>
 - 若最终选「真 Unity 碰撞体」：导入器建 `BoxCollider`，`LevelArenaHost.Setup` 烘焙 min/max（现状路线）。
 - 若最终选「盒子数据」：导入器**不建 collider**，把 `center/size/rotationQuat` 直接写进 `LevelArenaHost` 的新字段（或 `motor.AddBox` 前的数据表）。
 
-两条路都从同一份 JSON 出发，切换只改导入器一处。**这就是「两种都喂」的落点**。代价要说清：真碰撞体路线下，45° 摆的盒会退化成外包 AABB（`TERRAIN_SUPPORT` §7.2 已记录），所以**斜的必须走 `ramp`，不要走 `box`**。
+两条路都从同一份 JSON 出发，切换只改导入器一处。**这就是「两种都喂」的落点**。代价要说清：真碰撞体路线下，45° 摆的盒会退化成外包 AABB（`LevelArenaHost` 的剪切拒绝会回退到 `Collider.bounds` AABB），所以**斜的必须走 `ramp`，不要走 `box`**。
 
 ### 10.3 三种身份的自动判定（校验器预测 + 运行期自作）
 
-对每个 `absorbable=false` 的结构/大件，运行期按一条几何规则分类（`TERRAIN_SUPPORT` §6.1）：
+对每个 `absorbable=false` 的结构/大件，运行期按一条几何规则分类（`SupportSurfaceMath.TryClassifyProp`）：
 
 ```
 rise = 顶面高 − 当前支撑面高
 rise ≤ stepLimit(=0.25·D)  → 地形（可上、顶面进支撑表）
-rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
+rise >  stepLimit           → 挡路（进道具 OBB 块，`SetPropObbs`）
 可吸（D_req ≤ 当前 D）      → 食物
 ```
 
@@ -662,7 +662,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 
 ### 10.4 斜面的作者陷阱（必须写进面板提示）
 
-同一块板既是 `ramp` 又是 `box` → 坡底一堵位置完全不合理的隐形墙（`TERRAIN_SUPPORT` §5.5）。对策：面板上 `ramp` 与 `box` 是**互斥的两个按钮**；校验器第 11 条直接拒绝；导入器自检同一 `BoxCollider` 出现在两个数组时报错。
+同一块板既是 `ramp` 又是 `box` → 坡底一堵位置完全不合理的隐形墙（BallMotor README「关卡几何宿主」第 1 条）。对策：面板上 `ramp` 与 `box` 是**互斥的两个按钮**；校验器第 11 条直接拒绝；导入器自检同一 `BoxCollider` 出现在两个数组时报错。
 
 弯坡同理，而且更隐蔽：`curve_ramp` 的父物体**不能**有 `BoxCollider`（否则一条弧下面多出一个 AABB 墙），段子物体才进 `rampBoxes`；道具也不能 `support` 到弯坡上（它没有单一顶面，校验器报错）。
 
@@ -727,7 +727,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 | **U2** | **`placement.json` 放哪、谁来改** | (a) 进仓库 `Docs/Design/Levels/<id>/`（可 diff、可 review、可校验）；(b) 只放 Windows 工作目录（不进 git） | **(a)**。不进 git 就等于回到「数据只在场景里」 |
 | **U3** | **单向还是双向** | (a) **单向**（Unity 里手改会被下次导入覆盖）；(b) 双向（导入器之外再加一个「从场景导出 JSON」，要做冲突合并，等于写第二个真源） | **(a)**，并在 Inspector 上明写。要微调就先在 Blender 里调，或在 JSON 里改一个数——比双向便宜一个数量级 |
 | **U4** | **第一关的 4 支暖壶** | (a) 按真实尺寸 0.12×0.30 建模（`D_req 0.435`，可吸）；(b) 维持场景现状 0.9 m 立方体（`D_req 2.41`，2.20 下永久吸不到，64 u 是空账） | **(a)**。这是 `PICNIC` §6 U3 的老问题，本工具只是把它变成「校验器会红」 |
-| **U5** | **结构用真碰撞体还是盒子数据** | 见 §10.2：两条路都从同一份 JSON 出发，差别在导入器一处；真碰撞体路线下 45° 盒会退化成 AABB | **先按 `TERRAIN_SUPPORT` 的现状（真 `BoxCollider` + 烘焙）**，JSON 不预先站队 |
+| **U5** | **结构用真碰撞体还是盒子数据** | 见 §10.2：两条路都从同一份 JSON 出发，差别在导入器一处；真碰撞体路线下 45° 盒会退化成 AABB | **先按现状（真 `BoxCollider` + `LevelArenaHost` 烘成 OBB）**，JSON 不预先站队 |
 | **U6** | **PNG 进不进仓库** | (a) 进 `Docs/Evidence/`（可追溯、体积涨）；(b) 只留 `plan` 一张当证据 | **(b)**，其余放 `~/tools/level_authoring_probe/` 或 Windows 工作目录 |
 
 不需要用户拍板、由本文直接定的：JSON 格式、坐标/四元数约定、受管根的名字（`LevelContent`）、导入器不 `SaveScene`、`ramp` 与 `box` 互斥、预算当硬门。
@@ -804,7 +804,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 
 ```bash
 python3 Tools/levelbuild/levelbuild.py from-layout Docs/Design/StoryMode/picnic_corner_layout.json \
-    --out /tmp/levelbuild/story_01_bench_size/placement.json [--expected 127,1500]
+    --out .work/levelbuild/story_01_bench_size/placement.json [--expected 127,1500]
 python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 ```
 
@@ -905,7 +905,7 @@ curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbu
 | `camera` | 相机增改/删/列 | `levelctl.py camera --id side --location=0,2,-6 --target=0,0.3,0 --lens 50` |
 | `preset` | 出图预设增改/删/列 | `levelctl.py preset --id side_view --camera side --engine WORKBENCH --res 640x480` |
 | `check` | 校验常驻文档（`--report` 加分区/分档表，`--strict`） | `levelctl.py check --report` |
-| `export` | **一等操作**：校验 + 写规范形（`--to` 写副本，`--force` 半成品） | `levelctl.py export --to /tmp/handoff.json` |
+| `export` | **一等操作**：校验 + 写规范形（`--to` 写副本，`--force` 半成品） | `levelctl.py export --to .work/handoff.json` |
 | `render` | `preset=<id>` 或 `camera={…}` 临时相机；`engine/res/samples/out/name` → PNG 路径 | `levelctl.py render --preset plan` |
 | `undo` | 撤销最近 N 个已提交操作（`steps`），文档与场景一起回退 | `levelctl.py undo --steps 2` |
 | `batch` | `ops=[...]`：**全有或全无**，一次校验、一次导出、一次场景差量 | `levelctl.py batch ops.json` |

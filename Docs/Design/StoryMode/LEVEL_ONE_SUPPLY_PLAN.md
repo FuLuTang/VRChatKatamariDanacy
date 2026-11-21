@@ -316,8 +316,8 @@ owner 报的 0.448% / 0.054% / 4.7% / 0.21% 与此一致（他按"所有件都�
 ```bash
 python3 Tools/levelbuild/supply_plan.py Docs/Design/Levels/story_01_bench_size/placement.json \
     --additions Docs/Design/Levels/story_01_bench_size/proposed_additions.json \
-    --merged-out /tmp/story_01_merged.json
-python3 Tools/levelbuild/levelbuild.py check /tmp/story_01_merged.json
+    --merged-out .work/story_01_merged.json
+python3 Tools/levelbuild/levelbuild.py check .work/story_01_merged.json
 ```
 
 ### 5.2 组成（352 件 / 35 个 def，全部是**已存在的模型**，只换位置和 yaw）
@@ -356,9 +356,9 @@ python3 Tools/levelbuild/levelbuild.py check /tmp/story_01_merged.json
 ### 5.4 验证结果
 
 ```
-$ python3 Tools/levelbuild/levelbuild.py check /tmp/story_01_merged.json
+$ python3 Tools/levelbuild/levelbuild.py check .work/story_01_merged.json
 props=482 growthMm3=15637968438 absorbable=482 defIds=57 defs[]=57 structures=11 ...
-PASS /tmp/story_01_merged.json (0 error(s), 0 warning(s))
+PASS .work/story_01_merged.json (0 error(s), 0 warning(s))
 ```
 
 - 482 件（130 + 352）、57 个 def、11 个结构不变、静态 OBB 不变；
@@ -449,11 +449,11 @@ PASS /tmp/story_01_merged.json (0 error(s), 0 warning(s))
 # 只看结论
 python3 Tools/levelbuild/supply_plan.py <placement.json> --quiet
 # 出 CSV（可 diff）
-python3 Tools/levelbuild/supply_plan.py <placement.json> --step 0.05 --csv /tmp/ladder.csv
+python3 Tools/levelbuild/supply_plan.py <placement.json> --step 0.05 --csv .work/ladder.csv
 # 出完整 JSON（给别的脚本吃）
 python3 Tools/levelbuild/supply_plan.py <placement.json> --json
 # 叠补丁 + 落一份临时合并副本（拒绝覆盖 placement.json）
-python3 Tools/levelbuild/supply_plan.py <placement.json> --additions <patch.json> --merged-out /tmp/m.json
+python3 Tools/levelbuild/supply_plan.py <placement.json> --additions <patch.json> --merged-out .work/m.json
 ```
 
 ### 7.2 测试

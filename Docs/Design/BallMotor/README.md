@@ -40,7 +40,7 @@
 |---|---|---|
 | 1→2 | `Vector2 move`（已钳位）、帧时间戳 | 原始按键、菜单状态 |
 | 2→3 | `Vector3 requestedPlanarDisplacement`（米） | 速度、意图 |
-| 3→4 | 扫掠后的 `Vector3 center`、是否卡住 | 请求位移 |
+| 3→4 | 接触求解后的 `Vector3 center`、是否卡住 | 请求位移 |
 | 4→5 | 最终 `center`、`collisionRadiusWorldM` | 语义直径、核心半径 |
 | 5→6 | 每件 `absorbedVolumeUnits` + 事件标识 | 位置、模型尺寸 |
 | 6→7 | `confirmedVolumeUnits`（累计、已确认） | 未确认/待处理值 |
@@ -79,13 +79,13 @@
 | `overflowCount` / `firstOverflowReason` / `contactBufferSaturated` | 固定容量溢出信号（见“固定容量与溢出信号”），不是玩法状态 | 注册被拒/接触缓冲满时写一次 |
 | `bankedScoreUnits` | 已交存分数 | 账本提交/交分成功后的读回值 |
 | `fixedStepAccumulator` / `localClockSeconds` | 定步长累积器 / 本地时钟 | `Update` |
-| `stuckSeconds` | 卡住计时 | 扫掠成功时按 `stuck` 累加或清零 |
+| `stuckSeconds` | 卡住计时 | `UpdateContactRecovery` 按「有推进意图、未被挡、且没离开起点附近小圆盘」累加，否则清零 |
 | `discontinuous` | 传送/重生标记，喂 `VisualRollMath` 与 `FollowRigMath` | `TeleportTo`、卡住恢复；每步末尾消费后清零 |
 | `visualRollRotation` | 视觉滚动位姿 | 第 8 步成功时 |
 | `followRigWorldPosition` / `followRigYawDegrees` / `followRigHeightMeters` / `hasFollowRigFrame` | 跟随架上一帧滤波状态（`followRigHeightMeters` 是相对球心的竖向偏移，不是眼高常量） | 第 9 步成功时 |
 | `proxyDirections` / `proxySupports` / `proxyEndpointPool` / `proxyItem*` / `proxyCandidateKeys` | 径向代理外壳（16 根针）：16 个固定方向、16 个端点支持长度、每件已吸附物 8 个 AABB 角点的账本（容量 256 件）；不再有长物件候选（`proxyCandidateKeys` 长度 0） | `Start` 一次分配；`AttachRadialProxy` / `DetachRadialProxy` / `ClearRadialProxies` / `RebuildRadialProxies`；第 4 步只读 |
 
-另有账本列（单行、单回合）、输入意图缓冲、扫掠缓冲区、待处理吸收候选队列；都是预分配、复用、不 per-step 分配的字段，不是玩法状态。
+另有账本列（单行、单回合）、输入意图缓冲、接触缓冲区、待处理吸收候选队列；都是预分配、复用、不 per-step 分配的字段，不是玩法状态。
 
 ### 固定步长策略
 
@@ -146,7 +146,7 @@ StepBall:
 
 ### 固定容量与溢出信号
 
-注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 64`、`PendingCandidateCapacity = 4`，加上扫掠每步最多 `ContactCapacity = 4` 个接触点。超出容量的条目**被拒绝并返回 false + latch 原因**（不是静默丢弃），不排队、不扩容、不降级，所以：
+注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 64`、`PendingCandidateCapacity = 4`，加上接触求解每步最多 `ContactTuning.ContactCapacity = 12` 条接触记录。超出容量的条目**被拒绝并返回 false + latch 原因**（不是静默丢弃），不排队、不扩容、不降级，所以：
 
 - 障碍超出会改变球实际能撞到什么；
 - 候选队列超出会静默丢掉一个本可吸收的物件。
@@ -174,7 +174,7 @@ StepBall:
 
 球的惯性（松手滑行、起步、刹车、转向漂移）的现状读数与重做设计见 [BALL_INERTIA.md](BALL_INERTIA.md)；原作证据见 [ORIGINAL_BALL_INERTIA](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)。
 
-支撑由接触求解选出（`WriteContactSupport`：最高的 RIDE 接触，针尖支撑 = 5，爬升接触 = 4，无支撑 = 下落）。台阶没有阈值字段：台阶高 `h < r` 天然滚过，`h < D` 由爬升通道处理（CONTACT_MODEL_V2 §2.7、§3）。`SupportSurfaceMath` 只留共享的 surface id、`stepHeightOverBallDiameter` 的步高上限（0.25 × 语义直径，宿主据此给道具分挡路/可站两种角色）、斜面校验/烘焙（`AddRamp` 的 45° 作者门）。设计与取舍见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)。
+支撑由接触求解选出（`WriteContactSupport`：最高的 RIDE 接触，针尖支撑 = 5，爬升接触 = 4，无支撑 = 下落）。台阶没有阈值字段：台阶高 `h < r` 天然滚过，`h < D` 由爬升通道处理（CONTACT_MODEL_V2 §2.7、§3）。`SupportSurfaceMath` 只留共享的 surface id、`stepHeightOverBallDiameter` 的步高上限（0.25 × 语义直径，宿主据此给道具分挡路/可站两种角色）、斜面校验/烘焙（`AddRamp` 的 45° 作者门）。接触求解的设计见 [CONTACT_MODEL_V2.md](CONTACT_MODEL_V2.md)，坡爬/墙爬见 [TERRAIN_CLIMB.md](TERRAIN_CLIMB.md)。
 
 | 字段 | 默认 | 作用 |
 |---|---:|---|
@@ -358,6 +358,31 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 - Udon 没有 `FindObjectsOfType`，"场景里 motor 数量必须 = 1"仍由编辑器侧审计保证：跑实验前断言 `FindObjectsOfType<KatamariBallMotor>().Length == 1`。
 - 重建球层级时先删旧 motor 对象再新建 `MotorHost`，并同步重建 prefab（prefab 根上残留 motor 会让每次实例化都复活旧结构）。
 
+### 关卡几何宿主 `LevelArenaHost`
+
+`LevelArenaHost`（`Runtime/Story/`）只负责把场景里的静态几何登记给电机：地面平面、边界墙、静态盒、静态斜板。它不认识道具；道具的挡路与支撑身份归 `PickupFieldHost`，两者互不引用，电机的道具实体只有 `PickupFieldHost` 一个写入者。
+
+序列化字段：
+
+| 字段 | 含义 |
+|---|---|
+| `motor` | 要登记的电机 |
+| `groundNormal` / `groundOffset` | 解析地面平面，始终是支撑兜底 |
+| `boundaryWalls`（`Transform[]`） | 每个 Transform 烘成一张平面：本地 +Z 指向可玩区内，原点在球应停住的面上。墙只挡不撑 |
+| `staticBoxes`（`BoxCollider[]`） | 静态盒，既挡路也是顶面支撑 |
+| `rampBoxes`（`BoxCollider[]`） | 静态斜板：本地 +Y 是行走面，本地 +Z 是上坡方向，板厚向下延伸 |
+| `allowedKinds` | 吸收种类白名单；空 = 电机拒绝所有候选 |
+| `autoBeginPlaying`、`logSetupLine` | 登记后是否自动开局、是否打 `[arena]` 汇总行 |
+
+`Setup()` 在首个 `Update` 且电机直径已大于 0 时执行一次，之后不再读 Collider；盒与斜板按 8 个世界角拟合成 OBB，经 `AddObb` 登记（静态 OBB 容量 256，满了计数拒绝，不静默丢弃）；边界墙走 `AddPlane`（容量 8）。登记顺序固定：地面 → 边界墙 → 斜板 → 静态盒 → `SetAllowedKinds` → 开局。
+
+作者约束：
+
+1. 同一个 `BoxCollider` 不要同时放进 `staticBoxes` 与 `rampBoxes`；若放了，`Setup` 报错并跳过盒登记，保留斜板（否则坡脚会多出一堵隐形墙）。
+2. 边界用平面（`boundaryWalls`），不用盒：墙盒会占用静态 OBB 名额，顶面还会变成可站的窄条。
+3. `allowedKinds` 忘填表现为「什么都吸不到」。
+4. 换关或测试场换格用 `Reapply()`（先 `ClearObstacles` 再重新登记）；多个宿主共享一个电机时用 `Register(false, boxIdOffset, rampIdOffset)` 追加并错开表面 id。
+
 ### 宿主提交契约：幂等 + 无闩锁
 
 `SubmitCandidate` **按 item id 幂等**：同 id 重复提交返回 `true` 且不新增槽位。`WithdrawCandidate` 对不在队列里的 id 返回 `false`，是**无害 no-op**。
@@ -388,7 +413,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 ## 重试（reset）：`TryResetForNewRound`
 
-来源：`Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md` §4「没有重试接缝」与 S6。第一关写 `retry: unlimited`（`story_01_bench_size.json:61`），而在此之前没有任何接缝能把球、账本和计时一起退回开局，只能重载场景。本节定义唯一的重试入口，**不改**场景、不碰道具生命周期。
+背景：第一关写 `retry: unlimited`（`story_01_bench_size.json:61`），而在此之前没有任何接缝能把球、账本和计时一起退回开局，只能重载场景。本节定义唯一的重试入口，**不改**场景、不碰道具生命周期。
 
 ### 接缝
 

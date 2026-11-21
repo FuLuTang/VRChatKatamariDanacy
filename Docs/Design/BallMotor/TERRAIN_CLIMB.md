@@ -152,19 +152,7 @@ Python 既有墙台沿出口与选面迟滞缺口仍按原参考模型范围处�
 
 ## 3. 抖动 / 边缘滑走（低优先；2026-11-16 已归因）
 
-现象：无人推动时约 **0.02 m/s** 漂移、并被台阶边缘带着走。**操作员 2026-11-16 复核：这是驱动脚本
-残留输入，不是地形物理。** 本节低优先：不为它改代码；若复现，按下面两条机制查。
-
-* **H1 探针环随视觉滚转 + 法线重贴**（推断）：支撑查询把 `visualRollRotation` 当 `localToWorld`
-  （`KatamariBallMotor.cs:3397`；`TerrainMeshMath.cs:345-361`），球一转，16 个环探针扫过相邻三角形，
-  「带内最高」换面（`:375-382`）⇒ `GroundContactMath` 沿新法线重贴（`GroundContactMath.cs:110-111`）
-  带出水平分量（2 mm × 10° ≈ 0.35 mm/步 ≈ 1.7 cm/s）。
-* **H2 T1 推出 ↔ 地面重贴的凹角循环**（推断）：T1 每次推出留 1 mm 缝（`:3465`），地面重贴再压回；
-  面 id 翻转还会进 `isFalling`（`SupportSurfaceMath.cs:1161-1171`）⇒ 竖向小跳。
-* **复现时的三步现场实验**（不写代码）：E1 `maxRollDisplacementM=0` 冻结视觉滚转；E2
-  `terrainSupportEnabled=false`（T1 仍在）；E3 读 `[story]` 的 `supportId/supportY/gap`。
-* 推荐方案（§6）本来就没有探针环与「最高者胜」，H1 在结构上不存在；§8.1 的 10 s 漂移项保留为廉价
-  回归，不作为验收门。
+现象：无人推动时约 **0.02 m/s** 漂移、并被台阶边缘带着走。**操作员 2026-11-16 复核：这是驱动脚本残留输入，不是地形物理。** 本节低优先，不为它改代码；若复现，先读 `[story]` 的 `supportId/supportY/gap`，再看驱动脚本是否还在写输入。§8.1 的 10 s 漂移项保留为廉价回归，不作为验收门。
 
 ---
 
@@ -538,7 +526,7 @@ D5 AddRamp的作者探针登记门不动（与运行时体力坡爬分流无关�
 的台阶在 **z≈5.67、球背后 1.07 m**（另一组三角形，顶面 −0.622）。所以「爬不出去」不是假台沿：球一直推
 的是一面 15 m 的墙，cap+掉落是设计行为；**出生点由另一任务按数据重选**（不在本文范围）。v2 的冻结另有一条：
 recovery 把「推墙」当「卡住」（每步位移 <0.5 mm 且驱动开），soft 阶段 `ClearClimbState()`、三次后进
-hold——v1 用的是 `sweepStuck`，而 SweepMath 自己的契约是 blocked ≠ stuck。现行规则（`UpdateContactRecovery`）：
+hold。现行规则（`UpdateContactRecovery`）：
 **受阻** = 任一接触的水平法线与**意图方向**（`ComputeDrive` 的 `intentDirection`：输入的前进/侧向轴按当前朝向合成的
 有符号单位向量，不随墙面偏转的速度变化；速度方向 `contactDriveDirection` 仍只给爬升门和针尖估计用）点积 < −0.5，
 受阻不计 stuck。**卡住** = 有输入、不受阻、且球心仍在本次 episode 起点周围 `ContactStuckConfineM`（1 cm）内；

@@ -13,7 +13,7 @@
 | 1 | 场景归属 | **正本 = `Worlds/StoryMode/StoryMode.unity`**，角内几何按地图真坐标长在它里面；不翻新、也不转正 `PicnicLawnGreybox`，不新建第二张场景（§1）。 |
 | 2 | 生成器还能不能用 | **不能用它建这一关**：`PicnicLawnGreyboxBuilder` 是「整图 · 从零重建 · 只产几何 · 会 `SaveScene`」，重跑必然覆盖手工接线；`--check` 只证明生成物与作者数据一致，与场景接线无关。数据侧只作 `--check` 回归，不重跑（§2）。 |
 | 3 | 一角的范围 | **西南角** `x∈[−19.40,−6.00]`、`z∈[−19.40,−6.00]`：毛 179.56 m²、扣花圃 19.60 m² 后**净 160.0 m²**；角内只有平地 + 花圃台（0.26 m）+ 树根丘/角树 + 指示牌 + 毯缘一条线；角内内容 **127 件 / 1500 u / 12 区**（真源 `placement.json`：110 件小道具 412 u + 17 件可吸家具 1088 u），其中 4 件是**结构门件**（§3.5.3）。 |
-| 4 | 地形与场地注册 | 边界是 **4 个竖直平面**（球）+ 4 面既有墙碰撞体（玩家）；地形现在**能上**：静态盒顶与「吸不动的道具顶」都是支撑面，台阶判据 `rise ≤ 0.25·D`（含等号）——花圃台 0.26 需 `D ≥ 1.04`，P2 链「台顶 0.26 → 躺椅 0.35 → 折叠桌 0.70」需 `D ≥ 1.40`；**斜面（P3）已注册成支撑面**（`rampBoxes` → `AddRamp`，d31dc9b），坡脚没有隐形墙。场地注册归 `LevelArenaHost`（4 平面 + 4 盒 + 2 斜面 + 11 kind），不是 Lab 脚本（§4）。 |
+| 4 | 地形与场地注册 | 边界是 **4 个竖直平面**（球）+ 4 面既有墙碰撞体（玩家）；地形现在**能上**：静态盒顶与「吸不动的道具顶」都能当支撑；道具分角色的台阶判据 `rise ≤ 0.25·D`（含等号）——花圃台 0.26 需 `D ≥ 1.04`，链「台顶 0.26 → 躺椅 0.35 → 折叠桌 0.70」需 `D ≥ 1.40`；斜板是实体 slab OBB（`rampBoxes` → `RegisterRampObb`），坡脚没有隐形墙。场地注册归 `LevelArenaHost`（4 平面 + 4 盒 + 2 斜面 + 11 kind），不是 Lab 脚本（§4）。 |
 | 5 | 导入与验收 | 导入（两次幂等 `+0 ~0 -0`）与 Play 验收 E1–E11（§5）。 |
 | 6 | 未决 | 场地 160 m²、127 件 / 1500 u、星级暂不重定已由 `OPEN_DECISIONS` (q) 与 [PICNIC_CORNER_LAYOUT](PICNIC_CORNER_LAYOUT.md) §9 拍板；**仍然开着的**是 120 s 与星级要不要按新内容重定（§6 U4）。 |
 
@@ -96,7 +96,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 第 11 条「档位与球包线」 | `threshold = clamp(game_longest_dim_m, 档窗口)`，要求 `threshold ≤ max_ball` | 用 `a_eq`（或目录新增 `a_eq_m` / `volume_m3` 列）判 `D_req = 2.673·a_eq ≤ D_cap`；长度档位退化为「价值分档」，与可吸性脱钩 |
 | 第 14 条「运行时预算」 | 只查 `pickup_dim_m ≤ max_pickup_diameter_m` | 改成体积上界 `a·b·c ≤ (π/6)·D_cap³/10`；`pickup_dim_m` 通道退役 |
 | 目录 schema | 必填 14 列，无体积列 | 建议加可选 `aabb_m`（"x;y;z"）或 `volume_m3`，由建模清单生成，禁止手抄 |
-| 第 13 条立面分类 | 允许 `climb_step`（台阶可按球径翻越） | **这一条已由运行时兑现（P1）**：motor 有 step-up，`climb_step` 按 `rise ≤ 0.25·D` 真实生效。仍然没有运行时的是 `drivable_grade`（12% 可走坡 = 玩家侧的 `validate_map` 分类；球没有牵引力模型，斜面等 P3） |
+| 第 13 条立面分类 | 允许 `climb_step`（台阶可按球径翻越） | **已由运行时兑现**：台阶高 `h < r` 天然滚过，`h < D` 由爬升通道处理（CONTACT_MODEL_V2 §2.7、§3）。`drivable_grade`（12% 可走坡）是玩家侧的 `validate_map` 分类，球没有牵引力模型 |
 
 ## 3. Q3 一角的范围与道具映射
 
@@ -192,8 +192,8 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | 身份 | 原作怎么用 | 我们能不能 | 代码依据 |
 |---|---|---|---|
-| **通路 / 地形**（滚上去、搭坡、叠放） | 斜板、叠箱、桌面 | **能了，但只有三种面**（P1 静态盒顶 + P2 道具顶 + P3 斜面支撑） | `SupportSurfaceMath` 每步在球心正下方选一个局部面（地面 / 盒顶 / 道具顶），`rise ≤ 0.25·D` 的盒从扫掠里剔除并成为支撑（`IsStepWithinLimit` / `RefreshStepMask`），失去支撑时按 9.81 m/s² 下落。**仍然做不到**：斜面（P3）、悬空、叠放、曲面。详见本文 §4 与 `TERRAIN_SUPPORT` §3–§5 |
-| **挡路**（吸不动时挡球） | 大件挡住小球的去路 | **能，而且是现成的** | `PickupFieldHost.UpdateBlockingProps` 用 `propBounds` 建轴对齐盒、经 `motor.SetBlockingBoxes` 进扫掠；谓词就是吸收门自己：`PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limit)`（`PickupFieldHost.UpdateBlockingProps`，头注释与 `IsBeyondAbsorbVolumeLimit` 调用处） |
+| **通路 / 地形**（滚上去、搭坡、叠放） | 斜板、叠箱、桌面 | **能了，但只有四种面**（地面 / 静态盒顶 / 支撑道具顶 / 斜板） | 支撑由接触求解选出：球与静态 OBB / 道具 OBB / 斜板 slab 的接触里最高的 RIDE 接触即支撑，没有支撑就下落（`WriteContactSupport`）；台阶、斜面都是同一套接触，不需要单独的台阶开关。**仍然做不到**：悬空、曲面。详见本文 §4 与 [BallMotor README](../BallMotor/README.md)「支撑与台阶」 |
+| **挡路**（吸不动时挡球） | 大件挡住小球的去路 | **能，而且是现成的** | `PickupFieldHost.UpdatePropObstacles` 用吸收门自己的谓词（`PickupAbsorbMath.IsBeyondCachedRequirement` / `IsBeyondAbsorbLimit`）选出吸不动的近处道具，烘成 OBB 经 `motor.SetPropObbs` 进接触求解（`RefreshPropObbs`） |
 | **食物**（长大后吸走） | 同一件东西后来被吃 | **能，和上一条是同一个函数** | 球长大 → `limit` = `(π/6)·D³/10` 超过该件体积 → 同一谓词不再成立 → 下一帧扫描撤掉挡路盒、同时吸收门放行。**"挡路"与"可吸"是同一个判据的两面，不会漂移** |
 
 一句话：**我们有竖向通路了，但它只由「地面 / 静态盒顶 / 吸不动的道具顶」这三种平面构成**，靠台阶规则（`rise ≤ 0.25·D`）走上去；「挡路 → 食物」的翻转与吸收门同源、不会漂移。所以本关的结构设计同时是两件事：**搭出可以走上去的台面层级**，和**用可吸物搭出一扇会自己消失的门**。斜面、悬空与叠放仍然做不到。
@@ -247,11 +247,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 **L3 的读法**：台顶是地形，`bed_top` 的 28 件在宿主里、`D ≥ 1.04` 上得去。台顶**是**内容，不是布景。
 
-**如果以后要做真正的"沿斜板上桌"**（P3 的活，本方案不设计物理）：下面三条里**第 1、3 条已落地**（场景物体参与支撑 = 盒顶/道具顶；step-up = 台阶规则），**只剩第 2 条**：
-
-1. **场景物体参与支撑** —— **已完成（P1/P2）**：静态盒顶与支撑道具顶都进支撑表；桌子的顶面今天已经能站（只要 `rise ≤ 0.25·D`）。
-2. **地面不再是"一张全局平面"** —— **仍未做**：今天是「地面平面 + 盒顶 + 道具顶 + （P3 的）斜面」四种平面，**没有分区高度场、没有曲面**。这一条只在需要坡/曲面/凹结构时才重要。
-3. **step-up** —— **已完成（P1）**：`rise ≤ 0.25·D` 的盒从扫掠里剔除、抬升上限 `maxStepUpLiftWorldM = 0.6`、三条防抖。
+**沿斜板上桌**：斜板、盒顶、支撑道具顶都是接触求解里的实体，没有额外开关；仍然没有的是分区高度场和曲面（只在需要坡/曲面/凹结构时才重要）。
 
 #### 3.5.4 操作员要点
 
@@ -263,30 +259,30 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 ## 4. Q4 场地与支撑：motor 能做到什么
 
-> 本节按代码现状写。物理设计真源是 [TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md)（§3 支撑面模型、§4 台阶、§5 斜面、§7 场地接口、§8 分阶段与 Play 验收、§8.1 P1 的三处偏离、§10.2 暂定值）；本节只回答「现在的代码能做什么、本关的登记账长什么样、哪些缺口还在」。
-> 判据只有两条，**别用眼睛估高度**：吸收门 `a·b·c ≤ (π/6)·D³/10`（`PickupAbsorbMath.IsBeyondAbsorbVolumeLimit`）；台阶 `rise = 顶面 − 当前支撑面 ≤ 0.25·D`（`SupportSurfaceMath.IsStepWithinLimit`，**含等号**）。
-> 状态：P1（静态盒顶支撑 + 台阶 + 重力下落）与 P2（道具顶面当支撑）的源码、NUnit 用例与 Python 参考模型已进树并编译通过；**Unity 编译、`run_tests`、Play Mode 全部 `NOT_RUN`**（作者不是 Unity 操作者）。所以本节写的是「代码这么写」，不是「跑起来是这样」。
+> 本节按代码现状写。物理真源是 [CONTACT_MODEL_V2](../BallMotor/CONTACT_MODEL_V2.md)，场地登记见 [BallMotor README](../BallMotor/README.md) 的「关卡几何宿主 `LevelArenaHost`」；本节只回答「现在的代码能做什么、本关的登记账长什么样、哪些缺口还在」。
+> 判据只有两条，**别用眼睛估高度**：吸收门（`PickupAbsorbMath.IsBeyondAbsorbLimit`，门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，细节见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)）；道具分角色用的台阶判据 `rise = 顶面 − 当前支撑面 ≤ 0.25·D`（`SupportSurfaceMath.IsStepWithinLimit`，**含等号**）。
+> 本节写的是「代码这么写」，不是「跑起来是这样」；Play Mode 读数以 Evidence 目录里的记录为准。
 
 ### 4.1 能力事实表（按符号名引用，不写行号）
 
 | 能力 | 现状 | 符号 |
 |---|---|---|
 | 地面 | 一张解析平面，但**运行期可改**：`SetGroundPlane(normal, offset)`（P1 新增；`n.y ≤ 1e-3` 拒绝，因为墙一样的「地面」答不出「球下面多高」）| `KatamariBallMotor.SetGroundPlane` |
-| 支撑面 | 每步在**球心正下方**选**一个**局部平面（地面 / 静态盒顶 / 道具顶），把 `(n, dot(n,P))` 喂 `GroundContactMath.TrySolve`；`GroundContactMath` 本身一行没改 | `SupportSurfaceMath.TryResolveSupport` |
-| 台阶 | `rise ≤ stepLimit = 0.25·D` → 该盒**从扫掠里剔除**并进支撑表；否则仍是实心墙。三条防抖：迟滞 `+0.02 m`、已在顶上（`+0.01 m` 余量）无条件算台阶、跨级需 `> 0.005 m` | `IsStepWithinLimit` / `RefreshStepMask` / `IsStepCrossing` |
-| 重力 | 失去支撑 → `fallSpeed += 9.81·dt`，当步的 `maxLift/maxDrop` 换成重力预算，落地清零；**没有跳跃、没有向上速度** | `ResolveFallState` / `TryIntegrateFall` |
+| 支撑面 | 接触求解选出：最高的 RIDE 接触（针尖支撑 = 5，爬升接触 = 4，无支撑 = 下落）；诊断读 `GetSupportSurfaceHeightWorldM` / `GetSupportKind` | `KatamariBallMotor.WriteContactSupport` |
+| 台阶 | 没有阈值字段：台阶高 `h < r` 天然滚过，`h < D` 由爬升通道处理（CONTACT_MODEL_V2 §2.7、§3）；`rise ≤ 0.25·D` 只用于给「吸不动的道具」分角色 | `StepContactV2` / `SupportSurfaceMath.IsStepWithinLimit` |
+| 重力 | 无支撑时按 `ContactTuning.Gravity`（9.81 m/s²）下落 | `StepContactV2` |
 | 道具的两个角色 | 每 `0.05 s` 一遍扫描同时出「挡路」「支撑」两个掩码：吸不动 + `rise ≤ stepLimit` → 支撑；吸不动 + `rise > stepLimit` → 挡路；吸得动 → 食物（两边都不进） | `SupportSurfaceMath.TryClassifyProp` / `PickupFieldHost.UpdatePropObstacles` |
-| 容量 | 平面 **8**、静态盒 **64**、动态挡路盒 **6**、道具支撑 **6**；**斜面 4**（P3 已落地：`MaxRampCount`） | `MaxPlaneCount` / `MaxBoxCount` / `MaxBlockingBoxCount` / `MaxSupportPropCount` |
-| 斜面 | **只当支撑面**：`motor.AddRamp` 与 `LevelArenaHost.rampBoxes` 都在（P3，d31dc9b）。导入器把 `role=ramp` 的 `BoxCollider` 填进 `rampBoxes`，由 `RegisterRamp` 烘成可行走的支撑面；它**不进 `staticBoxes`**，所以坡脚没有隐形墙 | `PlacementImporter.BindArenaHost` 的 ramp 分支；`LevelArenaHost.RegisterRamp` |
-| 旋转盒 | 没有。`BoxCollider.bounds` 烘焙成世界 AABB，45° 摆会胖（本关角内没有 45° 件） | `LevelArenaHost.Setup` |
-| 卡住恢复 | 1.5 s 无进展 → 球心瞬移回 `startCenterWorld` | `stuckTimeoutSeconds` |
-| 场地注册 | **`LevelArenaHost` 独占**：地面 1 次 `SetGroundPlane` + 墙平面 `Transform[]`（读**局部 +Z** 当法线、`dot(n, position)` 当 offset）+ 静态盒 `BoxCollider[]`（烘焙 min/max）+ `allowedKinds`；`Update` 等 `GetSemanticDiameterWorldM() > 0` 后注册一次并打一行 `[arena]`；`Reapply()` 是全清后的重注册路径 | `Runtime/Story/LevelArenaHost.cs` |
-| 道具注册 | `PickupFieldHost` 独占；arena **不许**引用道具（`TERRAIN_SUPPORT` §7.4 的一条硬规则） | `PickupFieldHost` |
+| 容量 | 边界平面 **8**、静态 OBB **256**（盒与斜板共用）、道具块 **12 槽**（挡路与支撑共用，每次扫描最近优先）；斜板 `MaxRampCount` = 4 | `MaxPlaneCount` / `ContactTuning.MaxStaticObbCount` / `PropObbBakeMath.PropObbCapacity` / `SupportSurfaceMath.MaxRampCount` |
+| 斜面 | 斜板是实体 slab OBB：导入器把 `role=ramp` 的 `BoxCollider` 填进 `LevelArenaHost.rampBoxes`，`Setup` 烘成 OBB 经 `AddObb` 登记（`RegisterRampObb`）；它**不进 `staticBoxes`**，所以坡脚没有隐形墙 | `PlacementImporter.BindArenaHost` 的 ramp 分支；`LevelArenaHost.RegisterRampObb` |
+| 旋转盒 | 有：盒与斜板按 8 个世界角拟合成真 OBB，剪切变形的盒拒绝并回退到 `Collider.bounds` AABB | `LevelArenaHost.Setup` |
+| 卡住恢复 | 分软、硬两级（`ContactStuckSoftSeconds` 1.5 s、`ContactStuckHardSeconds` 3 s） | `KatamariBallMotor.UpdateContactRecovery` |
+| 场地注册 | **`LevelArenaHost` 独占**：地面 1 次 `SetGroundPlane` + 墙平面 `Transform[]`（读**局部 +Z** 当法线、`dot(n, position)` 当 offset）+ 静态盒 / 斜板 `BoxCollider[]`（烘成 OBB）+ `allowedKinds`；`Update` 等 `GetSemanticDiameterWorldM() > 0` 后注册一次并打一行 `[arena]`；`Reapply()` 是全清后的重注册路径 | `Runtime/Story/LevelArenaHost.cs` |
+| 道具注册 | `PickupFieldHost` 独占；arena **不许**引用道具（BallMotor README「关卡几何宿主」的一条硬规则） | `PickupFieldHost` |
 
 **三条硬结论**：
 
 1. 「角内地面必须全平」→ **不再要求**：盒顶与道具顶都能当支撑，花圃台 0.26 与 P2 链都在代码里成立。但**悬空、叠放、曲面仍然不存在**——能被踩的是「地面 / 静态盒顶 / 支撑道具顶 / 静态斜面」这四种面。
-2. 「`AddBox` / `AddPlane` 够用」→ 仍然成立，而且**现在是导入器在填**：4 平面 + 4 盒，离 8/8 各余 4 格；玩家用的 `Wall_*` 不进盒数组（球用平面）。
+2. 「登记容量够用」→ 仍然成立，而且**现在是导入器在填**：4 平面（上限 8）+ 4 盒 + 2 斜板（共用 256 个静态 OBB）；玩家用的 `Wall_*` 不进盒数组（球用平面）。
 3. 「平面是无限半空间」→ 仍然成立：一岛一 motor 的隔离规则不变，房间岛在 `(1200,0,0)`。
 
 ### 4.2 本关的登记账（真源是 `placement.json`，由导入器填）
@@ -297,7 +293,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 墙平面 | 4 | `boundary_x0 / x1 / z0 / z1`，在 `LevelContent/Structures/` 下是**空物体标记**（无 Renderer、无 Collider，局部 +Z 指向场内）；可见墙 + 玩家碰撞盒在它的 `Visual` 子物体上 | 8 | `AddPlane`（标记）；`Visual` 只给玩家 |
 | 静态盒 | 4 | `flower_bed`（`(−10, 0.13, −8.55)`、`4.0×0.26×4.9`）、`shell_signpost`（`0.45×1.2×0.12`）、`shell_tree_mound`（`2.5×0.14×2.5`）、`shell_tree_trunk`（`0.5×9×0.5`） | 8 | `AddBox`（墙 + 顶面支撑两用） |
 | 斜面 | 2 | `ramp_to_bed`（10.7°）、`ramp_to_table`（30.0°） | 4 | `AddRamp`（支撑面；`LevelArenaHost.rampBoxes`） |
-| 道具支撑 / 挡路 | 各 ≤6（动态） | 127 件里「吸不动」的那些，每 `0.05 s` 重扫 | 6 / 6 | `SetSupportProps` / `SetBlockingBoxes` |
+| 道具支撑 / 挡路 | 共 ≤12（动态） | 127 件里「吸不动」的那些，每 `0.05 s` 重扫 | 12 | `PickupFieldHost` → `SetPropObbs` |
 
 导入后进 Play Mode 应看到**逐字**这一行（`LevelArenaHost.GetSetupReport()` 的格式）：
 
@@ -309,24 +305,20 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 ### 4.3 现在的四条硬结论
 
-1. **竖向通路存在，但只有三种面**：花圃台 `0.26` 需 `D ≥ 1.04`；P2 链「台顶 `0.26` → 躺椅 `0.35` → 折叠桌 `0.70`」在 `D ≥ 1.40` 上成立（两级 rise 分别 0.09 / 0.35）。斜面已有支撑面（P3）；悬空、叠放、曲面**仍然做不到**（P4）。
+1. **竖向通路存在，但只有三种面**：花圃台 `0.26` 需 `D ≥ 1.04`；P2 链「台顶 `0.26` → 躺椅 `0.35` → 折叠桌 `0.70`」在 `D ≥ 1.40` 上成立（两级 rise 分别 0.09 / 0.35）。斜板已是实体斜面；悬空、叠放、曲面**仍然做不到**。
 2. **毯缘 6 cm 必须继续当纯视觉**：它一旦进 `staticBoxes`，`rise = 0.06 ≤ 0.25·D` 在 `D ≥ 0.24` 时就是台阶，球会踩着毯子走。北边界平面先把球挡在 `z ≤ −6.0 − r`，毯子本来就不在球的可行域里 → 维持 §6 U6-A（不加 Collider、不进盒数组）。
-3. **斜板是支撑面，不是扫掠墙**：`ramp_to_bed` / `ramp_to_table` 在 `rampBoxes` 里，由 `RegisterRamp` 烘成可行走的支撑面（P3，d31dc9b）；它们**不进 `staticBoxes`**，所以坡脚没有隐形墙（`TERRAIN_SUPPORT` §5.5、§7.7 第 1 条）。坡度超过电机上限时 `RegisterRamp` 会拒绝并写原因，而不是退化成墙。
+3. **斜板只登记一次**：`ramp_to_bed` / `ramp_to_table` 在 `rampBoxes` 里，由 `RegisterRampObb` 烘成 slab OBB；它们**不进 `staticBoxes`**，同一块板登记两次会让坡脚多出一堵隐形墙（BallMotor README「关卡几何宿主」第 1 条；`Setup` 会报错并跳过盒登记）。
 4. **静态盒注册一次永不删**：只有 `ClearObstacles()`（全清）+ `LevelArenaHost.Reapply()`。所以「会消失的门」只能用动态挡路盒（门堆 3 篮 + 1 箱正是这么做的）；把门件登记成静态盒就会变成永久墙。
 
-### 4.4 缺口表（G1–G9）
+### 4.4 仍在的缺口
 
-| # | 旧写法 | 现状 | 处置 |
+| # | 缺口 | 现状 | 处置 |
 |---|---|---|---|
-| G1 | 没有台阶 / 坡 / 分区地面 | **台阶已关闭**（P1）；坡仍未做（P3） | 台阶用现成的；坡等 P3 |
-| G2 | 地面只能靠 Inspector 两个字段设 | **已关闭**：`SetGroundPlane` 运行期可改（`n.y > 1e-3`） | 无 |
-| G3 | 8+8 上限 + 只有 `ClearObstacles()` | **仍在**：静态盒没有单删接口；`Reapply()` 只能全清后重注册 | 门件继续走动态挡路盒 |
-| G4 | 平面是无限半空间 | **仍在** | 一岛一 motor；岛距写进场景约定 |
-| G5 | 没有通用的「关卡边界」组件 | **已关闭**：`Runtime/Story/LevelArenaHost.cs` 落地，场景已接（`LevelArena` 根对象上挂着它，`staticBoxes` 目前为空，导入后由导入器填） | 无 |
-| G6 | 盒只有 AABB、没有旋转盒 | **仍在**：45° 件退化；本关角内无 45° 件（躺椅 yaw 90° 的 AABB 由数据侧算好） | 整图另案 |
-| G7 | 静态布景的「多盒」没有契约 | **仍在**（一件多盒会破 `validate_map` 第 14 条的账） | 与本关无关 |
-| G8 | 没有「可爬的结构物」 | **部分关闭**：盒顶（P1）与道具顶（P2）可上；**斜面 / 悬空 / 叠放 / 曲面仍不能** | 本关竖向只到 0.70（折叠桌）；「沿板上桌」= P3 |
-| G9 | 挡路盒 6 格 + 没有厚度过滤 | 第 ② 条**已关闭**：台阶规则（尺寸相关）取代「固定 5 cm 过滤」；第 ① 条**仍在**：门堆 1.5 m 内不要放其它未解锁大件 | 作者侧保持门堆附近干净 |
+| G3 | 静态盒没有单删接口 | `ClearObstacles()` 全清 + `LevelArenaHost.Reapply()` 重注册 | 门件继续走动态挡路 OBB |
+| G4 | 平面是无限半空间 | 一岛一 motor | 岛距写进场景约定 |
+| G7 | 静态布景的「多盒」没有契约 | 一件多盒会破 `validate_map` 第 14 条的账 | 与本关无关 |
+| G8 | 悬空、叠放、曲面没有支撑 | 能被踩的是地面 / 静态盒顶 / 支撑道具顶 / 斜板 | 本关竖向只到 0.70（折叠桌） |
+| G9 | 门堆 1.5 m 内放其它未解锁大件会一起挡路 | 挡路块 12 槽最近优先 | 作者侧保持门堆附近干净 |
 
 ## 5. Q5 导入与 Play 验收（Unity 操作员清单）
 
@@ -358,7 +350,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **E5** | 挡路 | `D = 0.30` 撞保温箱 / 西瓜 / 皮球 → **停住**，`rej=` 出现 `TOO_LARGE`；`D ≥ 0.83` 吃掉最外侧的篮子后能进壁龛（净宽 0.10 → 0.55） |
 | **E6** | **P1 台阶**（花圃台 0.26） | `D = 1.00` → 被挡；`D ≥ 1.04` → 上去；静止后 `gap = 0.000 ± 0.005`、`support=box`、`supportY=0.260`；台顶沿边来回 10 s：`center.y` 波动 < 1 mm、`support` 不翻转；从台顶开出去 → `support=ground`、`falling` 至少一帧为真、落回后 `gap ≈ 0` |
 | **E7** | **P2 链**（台顶 → 躺椅 0.35 → 折叠桌 0.70） | 站上台顶后能跨上躺椅（rise 0.09，`D ≥ 0.36` 就有资格）；`D ≥ 1.45` 能上桌；`support=prop`、`supportId ≥ 100`；站上桌后 `D ≥ 2.00` 吃掉桌子 → `falling` 至少一帧、落回地面。**两个数要盯**：① 桌子的可用窗口是 `[1.40, 2.00)`（`4×rise` 到 `D_req`），1.40 是**等号**，实测请按 1.45 判（`D = 1.40` 时 `stepLimit` 恰好等于 rise，任何一点浮点误差都会让球掉下去）；② 躺椅 yaw 90° → 世界足迹 `x∈[−12.6,−12.0]`、`z∈[−10.4,−8.8]`，折叠桌 `x∈[−13.6,−12.6]`、`z∈[−9.5,−8.9]`，两者**只在 `x = −12.6` 这条线相接（重叠面积 0）**，不是 0.5×0.2 m。链能不能过必须实测 |
-| **E8** | 斜板（P3） | 球从坡脚上坡：`support=ramp`、`supportId` 落在斜面槽位、`center.y` 随坡上升；坡脚没有隐形墙（不会在坡前被挡）。两张截图：坡脚进入 / 坡顶接缝 |
+| **E8** | 斜板 | 球从坡脚上坡：`support=ramp`、`supportId` 落在斜面槽位、`center.y` 随坡上升；坡脚没有隐形墙（不会在坡前被挡）。两张截图：坡脚进入 / 坡顶接缝 |
 | **E9** | 限时结束与结算 | 120 s 到点 → `SettleRound` 冻结 → 卡面显示「呈给国王」→ 3 s 后星 / 直径 / 评语；`GetBankedScoreUnits() == 0`；HUD 隐藏。**重试按钮本轮不验**（F2）：它没有 Collider，uGUI 那条也没接 `EventSystem` |
 | **E10** | 方向指示与入座视点 | 推杆时 `PushDirectionCue` 指向球的前进方向（截图）；点球入座后眼点在球后上方、球在画面下前方不糊镜头；`[ride] seated entered` 一行 |
 | **E11** | 截图清单（存 `Docs/Evidence/StoryLevel/<日期>/`） | ① 场景视图顶视（与 `/tmp/corner_layout/corner_absorb.png` 对照）；② 球视角：起步 / 台顶 / 壁龛口；③ 撞墙帧；④ 上台阶帧（含 `gap` 读数）；⑤ P2 链三帧；⑥ HUD 三行；⑦ 结果卡；⑧ 斜板上坡帧 |

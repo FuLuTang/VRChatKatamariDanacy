@@ -327,7 +327,7 @@ Cancer 的 12 件（全在 area 0）：
 
 | 能力 | 现状 | 出处 |
 |---|---|---|
-| 平面 | ≤8 个/arena | `Docs/Design/BallMotor/TERRAIN_SUPPORT.md` |
+| 平面 | ≤8 个/arena | `Docs/Design/BallMotor/README.md`「固定容量与溢出信号」 |
 | 轴对齐盒 | ≤8 个/arena + 6 个动态 blocking | 同上 |
 | 斜坡/曲线斜坡 | ≤4 段/arena，≤45° | 同上 + `placement_core.py` |
 | 静态 OBB 总量 | **256**（盒子 + 斜坡 + 曲线段） | `STATIC_OBB_CAPACITY = 256` |

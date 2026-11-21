@@ -181,7 +181,7 @@
     },
     {
       "id": "_ref_wlk_vs2",
-      "name": "对战图：海边小镇",
+      "name": "VS：WLK 场地 vs_2",
       "scenes": [
         "RefWlkVs2",
         "AllMapsHub"
@@ -215,7 +215,7 @@
     },
     {
       "id": "_ref_vs00",
-      "name": "对战图：初代圆台",
+      "name": "VS：KD 场地 V_00",
       "scenes": [
         "RefVs00",
         "AllMapsHub"

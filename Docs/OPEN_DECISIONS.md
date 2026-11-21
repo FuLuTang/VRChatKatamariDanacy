@@ -206,6 +206,18 @@
 - **透明叶子照初代 REROLL（owner 2026-11-20）** — 参考道具的 MASK 材质按 REROLL `CustomStandard` 做：硬裁切阈值 0.5、贴图关闭 mipmap（REROLL 只采 mip0），远处叶子不再被 mip 平均掉；远处像素闪烁与 REROLL 相同。见 [参考道具材质的透明模式](Design/StoryMode/ALL_MAPS_HUB.md#614-参考道具材质的透明模式)。
 - **骑手随球放大、眼点抬高（2026-11-19）** — 吸附物挡前路，推球角定为 52°，即居中腿中轴离球面至少 0.03r 的最大整数候选；不改球径，见 [骑球几何 §1.1](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md#11-ψ-的候选每单位-rpitch-0-时的视角)。
 
+### Owner decisions 2026-11-21（对战玩法、大厅与观战、骨骼动画、资料与仓库）
+
+- **对战保持 2025 作「スポーツ塊」的交分玩法**（owner 2026-11-21，选 C）— 4 人、交分区、交分后球缩小、被吞后异地重生；不照两作原版的本地双人分屏对战改。两作原版对战是本地 2P 分屏、专用小图（初代 VS_00–04 每局 180 s 比直径；WLK 400 s、FAST/MANY 目标物），与 VRChat 联网多人不对口。依据：两作解包取证（2026-11-20）。交分数值与规则以上文「交分与回合规则（2026-11-14 拍板）」(a)–(d) 为准，本条与之一致。
+- **大厅引导板只展示、不传送**（owner 2026-11-21）— 板上只给信息，不承担传送。
+- **走进准备区即准备**（owner 2026-11-21）— 采用 VRChat 官方 Player Join Zones 的做法（`OnPlayerTriggerStay/Exit`、`OnPlayerLeft`，开局时锁定名单），不用点按钮报名。
+- **一局结束后所有人回中庭**（owner 2026-11-21）。
+- **大厅按原作取色重做**（owner 2026-11-21）— owner 评价现在的大厅「太丑陋…超高饱和撞色就是丑…也没有什么空间功能区域划分，东西也都没有材质」。要求功能分区明确、所有表面有材质（程序化贴图或 shader 均可）；面板分两种：能点的板、只看的屏。美术方案在做，方案待 owner 认可。
+- **观战可开关**（owner 2026-11-21）— 等待时在多人面板上显示，两种视角：鸟瞰正交相机叠加玩家位置图层、跟随某个玩家的视角。
+- **骨骼动物动画用原作状态名**（owner 2026-11-21，方案 A）— 状态为 idle/walk/escape/rampage/chase/special；被球吓到播 escape；rampage/chase/special 已装进控制器但不触发，触发条件待原生库逆向。见 [MOTION_HOST §6](Design/PickupAbsorb/MOTION_HOST.md#6-骨骼动画普通-animator)。
+- **原作分析资料集中放 `D:\块魂原作分析\`**（owner 2026-11-21）— 分初代REROLL、WLK_REROLL+ 两个子目录，游戏本体原地只读。
+- **仓库保持清洁**（owner 2026-11-21）— 被新实现取代的旧文件、旧代码、过时注释直接删，不留误导，与 [AGENTS.md](<../AGENTS.md>) 「只写现行决定」一致。
+
 ### Still open
 
 
@@ -229,7 +241,7 @@
 
 | 事项 | 已知与未决边界 | 需要决定的阶段 / 暂缓条件 |
 |---|---|---|
-| **回合结构与时长** | 原作已确认必须把球物理送进场景内兑换区才得分，交分＝用体积换分、球会变小、球太小不给分；兑换区在王子飞船正下方、约每60秒换位（C1–C5；其中60秒换位属强暗示C3；本项目已定60 s轮换与最小兑换0.55 m，见上节 (b)(c)）。仍unknown：**原作**单局时长、回合数、换算公式与截止裁决。当前2–4人、约180秒单回合只是项目原型，不是原作数据。([研究核查](Research/KatamariBallRules/README.md)、[决策表](Preparation/RuleDecisions/decisions.json)的`rules.match_format`与`rules.score_and_exchange`条) | 可先保留为可调试配置，待相关节奏/计分试玩后选择；若要改变项目范围再由用户明确批准。不得将原作`unknown`补成事实（尤其不得把180秒写成原作时长）。([项目基线与优先级](00_SCOPE_DECISIONS.md#L15-L22)、[交存事务边界](Preparation/RuleDecisions/decisions.json)的`rules.score_and_exchange`条) |
+| **回合结构与时长** | 原作已确认必须把球物理送进场景内兑换区才得分，交分＝用体积换分、球会变小、球太小不给分；兑换区在王子飞船正下方、约每60秒换位（C1–C5；其中60秒换位属强暗示C3；本项目已定60 s轮换与最小兑换0.55 m，见上节 (b)(c)）。仍unknown：**原作**单局时长、回合数、换算公式与截止裁决。项目对战按4人交分玩法做（见上文 2026-11-21 对战条）；约180秒单回合只是项目原型，不是原作数据。([研究核查](Research/KatamariBallRules/README.md)、[决策表](Preparation/RuleDecisions/decisions.json)的`rules.match_format`与`rules.score_and_exchange`条) | 可先保留为可调试配置，待相关节奏/计分试玩后选择；若要改变项目范围再由用户明确批准。不得将原作`unknown`补成事实（尤其不得把180秒写成原作时长）。([项目基线与优先级](00_SCOPE_DECISIONS.md#L15-L22)、[交存事务边界](Preparation/RuleDecisions/decisions.json)的`rules.score_and_exchange`条) |
 | **KO、重生、PVP阈值与道具平衡** | 原作已确认：同尺寸弹开、可吞更小的对手；被更大的球吞掉＝短暂不能动＋异地重生，**没有淘汰**，也无扣分记录；对战有宝箱道具（把球变大／妨碍对手）与加分Brother，磁铁/火箭可用只是强暗示（C6–C15）。项目保留KO/重生但加重为约3秒出局＋约2秒保护＋未交存资源清理，1.35比例等均为未验证项目参数，不是原作规则。([决策表](Preparation/RuleDecisions/decisions.json)的`rules.pvp_swallow_threshold`、`rules.ko_respawn`、`rules.powerups_in_pvp`条) | 相关参数须随T27/T39多人、公平与舒适证据调校；新增计时器等道具属于范围变更。若要贴近原作，可改为“保分、只冻结+重生”。([范围边界](00_SCOPE_DECISIONS.md#L25-L32)、[决策所有者](Preparation/RuleDecisions/decisions.json)的`rules.ko_respawn`条) |
 | **生长/碰撞上限与世界尺度** | 语义显示尺寸、碰撞半径、拾取门槛与收益账本必须分开；0.2–5米只是表现工作区间，不是碰撞或技术上限。最终半径、成长段、速度/物理限值仍未定。([技术契约:L15-L21](02_TECHNICAL_CONTRACTS.md#L15-L21)、[决策表](Preparation/RuleDecisions/decisions.json)的`project.item_growth_and_collision`条) | 先保持参数化；测量须由平台、地图和公平/性能证据支持，再由Lead在T01/T05后处理契约。T06未冻结前不得硬编码为公共接口。([T06依赖与范围](../tasks.json#L253-L279)、[契约冻结规则](02_TECHNICAL_CONTRACTS.md#L3-L13)) |
 | **付费外观SKU/价格** | 方向是免费完整玩法与可选纯外观；商品目录、价格、资格、授权和交易恢复均未批准。([决策表](Preparation/RuleDecisions/decisions.json)的`project.commercial_sku`条) | 可暂不决定并保持商店关闭；只有进入相应许可、权益和交易门禁后才需用户选SKU/价格。([发布配置](../tasks.json#L2094-L2105)、[范围排除](00_SCOPE_DECISIONS.md#L38-L42)) |

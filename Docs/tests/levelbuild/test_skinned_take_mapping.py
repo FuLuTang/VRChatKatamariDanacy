@@ -17,29 +17,27 @@ _spec = importlib.util.spec_from_file_location(
 conv = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(conv)
 
+# The out-of-repo exporter names clips its own way; the converter only trusts each clip's slot.
 CLIPS = [
-    {"slot": 0, "name": "walk", "seconds": 0.9667},
-    {"slot": 1, "name": "walk_fast", "seconds": 0.4833},
-    {"slot": 2, "name": "slot2", "seconds": 0.1},
-    {"slot": 3, "name": "idle", "seconds": 0.9667},
-    {"slot": 4, "name": "slot4", "seconds": 0.9667},
+    {"slot": 0, "name": "c0", "seconds": 0.9667},
+    {"slot": 1, "name": "c1", "seconds": 0.4833},
+    {"slot": 2, "name": "c2", "seconds": 0.1},
+    {"slot": 3, "name": "c3", "seconds": 0.9667},
+    {"slot": 4, "name": "c4", "seconds": 0.9667},
 ]
-# Blender 4.0's glTF importer order: alphabetical, which is NOT slot order.
-ACTIONS = ["idle_root", "slot2_root", "slot4_root", "walk_fast_root", "walk_root"]
+# The glTF importer's order is alphabetical by Action name, which is NOT slot order.
+ACTIONS = ["c3_root", "c2_root", "c4_root", "c1_root", "c0_root"]
 
 
 class TakeNames(unittest.TestCase):
     def test_suffix_is_stripped(self):
-        self.assertEqual(conv.clip_name_of("walk_fast_root"), "walk_fast")
-        self.assertEqual(conv.clip_name_of("idle"), "idle")
+        self.assertEqual(conv.clip_name_of("c1_root"), "c1")
+        self.assertEqual(conv.clip_name_of("c3"), "c3")
 
     def test_alphabetical_actions_map_by_name_not_by_index(self):
         mapping = conv.take_names(ACTIONS, CLIPS)
-        self.assertEqual(mapping["idle_root"], "idle")
-        self.assertEqual(mapping["walk_root"], "walk")
-        self.assertEqual(mapping["walk_fast_root"], "walk_fast")
-        self.assertEqual(mapping["slot2_root"], "slot2")
-        self.assertEqual(mapping["slot4_root"], "slot4")
+        self.assertEqual(mapping, {"c0_root": "c0", "c1_root": "c1", "c2_root": "c2",
+                                   "c3_root": "c3", "c4_root": "c4"})
 
     def test_unknown_action_is_an_error(self):
         with self.assertRaises(RuntimeError):
@@ -51,19 +49,37 @@ class TakeNames(unittest.TestCase):
 
     def test_two_actions_for_one_clip_is_an_error(self):
         with self.assertRaises(RuntimeError):
-            conv.take_names(["walk_root", "walk"], CLIPS[:1])
+            conv.take_names(["c0_root", "c0"], CLIPS[:1])
+
+
+class OriginalStates(unittest.TestCase):
+    """PS2 slot -> REROLL `mononame.ANIM_NAME` state, matched on all 18 Cancer types."""
+
+    def test_slot_order_names_the_original_states(self):
+        self.assertEqual(conv.STATE_OF_SLOT, ("walk", "escape", "rampage", "idle", "chase", "special"))
+
+    def test_clips_are_renamed_by_slot_not_by_their_exporter_name(self):
+        clips = CLIPS + [{"slot": 5, "name": "c5", "seconds": 0.9667}]
+        self.assertEqual(conv.state_names(clips), {"c0": "walk", "c1": "escape", "c2": "rampage",
+                                                   "c3": "idle", "c4": "chase", "c5": "special"})
+
+    def test_unknown_or_repeated_slot_is_an_error(self):
+        for bad in ([{"slot": 6, "name": "x"}], [{"slot": None, "name": "x"}],
+                    [{"slot": 1, "name": "x"}, {"slot": 1, "name": "y"}]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                conv.state_names(bad)
 
 
 class Durations(unittest.TestCase):
     def test_matching_spans_pass(self):
-        spans = {"walk": (0.0, 23.2), "walk_fast": (0.0, 11.6), "slot2": (0.0, 2.4),
-                 "idle": (0.0, 23.2), "slot4": (0.0, 23.2)}
+        spans = {"c0": (0.0, 23.2), "c1": (0.0, 11.6), "c2": (0.0, 2.4),
+                 "c3": (0.0, 23.2), "c4": (0.0, 23.2)}
         conv.check_durations(spans, CLIPS, 24.0)
 
     def test_misattributed_span_fails(self):
-        # The old index-based renaming put the 0.1 s clip's span under "walk_fast".
+        # Index-based renaming would put the 0.1 s clip's span under the 0.4833 s clip.
         with self.assertRaises(RuntimeError):
-            conv.check_durations({"walk_fast": (0.0, 2.4)}, CLIPS, 24.0)
+            conv.check_durations({"c1": (0.0, 2.4)}, CLIPS, 24.0)
 
 
 class SceneFrameRate(unittest.TestCase):
@@ -77,11 +93,11 @@ class SceneFrameRate(unittest.TestCase):
         frames = {c["name"]: c["seconds"] * fps for c in CLIPS}
         for name, count in frames.items():
             self.assertAlmostEqual(count, round(count), delta=conv.WHOLE_FRAME_TOLERANCE, msg=name)
-        self.assertEqual([round(frames[n]) for n in ("walk", "walk_fast", "slot2", "idle", "slot4")],
+        self.assertEqual([round(frames[n]) for n in ("c0", "c1", "c2", "c3", "c4")],
                          [58, 29, 6, 58, 58])
 
     def test_the_blender_default_rates_cut_clips_mid_frame(self):
-        # 24 fps: walk = 23.2 frames (Unity read 23 frames = 0.9583 s); 30 fps: walk_fast = 14.5 frames.
+        # 24 fps: 0.9667 s = 23.2 frames (Unity read 23 frames = 0.9583 s); 30 fps: 0.4833 s = 14.5 frames.
         for fps, clip in ((24, CLIPS[0]), (30, CLIPS[1])):
             frames = clip["seconds"] * fps
             self.assertGreater(abs(frames - round(frames)), conv.WHOLE_FRAME_TOLERANCE, (fps, clip["name"]))
@@ -137,14 +153,14 @@ class SkeletalManifest(unittest.TestCase):
                 conv.export_inputs(expected, report, folder, {"type_999"})
 
     def test_blender_36_armature_suffix_and_frozen_take(self):
-        names = ["idle_type_141_skin", "walk_fast_root"]
-        clips = [{"name": "idle", "seconds": 0.3}, {"name": "walk_fast", "seconds": None}]
-        self.assertEqual(conv.take_names(names, clips, ("type_141_skin",)), dict(zip(names, ["idle", "walk_fast"])))
+        names = ["c3_type_141_skin", "c1_root"]
+        clips = [{"name": "c3", "seconds": 0.3}, {"name": "c1", "seconds": None}]
+        self.assertEqual(conv.take_names(names, clips, ("type_141_skin",)), dict(zip(names, ["c3", "c1"])))
         self.assertEqual(conv.scene_fps(clips), 30)
         self.assertEqual(conv.take_frames(None, 30), 1)
-        conv.check_durations({"walk_fast": (0, 1)}, clips, 30)
+        conv.check_durations({"c1": (0, 1)}, clips, 30)
         with self.assertRaises(RuntimeError):
-            conv.check_durations({"walk_fast": (0, 2)}, clips, 30)
+            conv.check_durations({"c1": (0, 2)}, clips, 30)
 
     def test_q8_dog_speed_is_rounded_by_less_than_one_millisecond(self):
         clips = [{"name": str(i), "seconds": s} for i, s in enumerate([0.4209, 0.3222, 0.2417, 0.9667, 0.2762])]

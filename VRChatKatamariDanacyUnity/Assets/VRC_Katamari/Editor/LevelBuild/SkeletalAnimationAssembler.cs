@@ -6,6 +6,7 @@ using System.Text;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using VRCKatamari.Pickup;
 
 namespace VRCKatamari.Editor.LevelBuild
 {
@@ -18,12 +19,15 @@ namespace VRCKatamari.Editor.LevelBuild
     /// Input (all under <c>Assets/_RefUnlicensed/Animation/</c>, git-ignored, copied there by the
     /// operator from the output of <c>Tools/levelbuild/blender/skinned_glb_to_fbx.py</c>):
     /// <c>skinned_defs.json</c> (def to type, clip seconds) and <c>type_N/type_N.fbx</c>
-    /// (armature, skinned meshes, one take per original clip).
+    /// (armature, skinned meshes, one take per original clip, named after the original state:
+    /// <see cref="SkeletalStateMath"/>).
     /// </para>
     /// <para>
     /// Per type: the FBX is imported Generic with every take looping, and one
     /// <c>AnimatorController</c> is created (parameters <c>Moving</c>, <c>Panic</c>; states
-    /// <c>idle</c> default, <c>walk</c>, <c>walk_fast</c>). Per prop whose def is a skinned
+    /// <c>idle</c> default, <c>walk</c> while <c>Moving</c>, <c>escape</c> from any state on
+    /// <c>Panic</c>; and, for each of <c>rampage</c>, <c>chase</c>, <c>special</c> the FBX has, a
+    /// state with no transition, kept for when their triggers are known). Per prop whose def is a skinned
     /// type: a child <c>Skin</c> (the FBX instance) carrying the Animator, aligned to the static
     /// model by mesh-bounds centre, the static renderers switched off (kept in place; the pickup sync
     /// measures only them and skips the <c>Skin</c> subtree). <see cref="MotionHost"/> then starts each
@@ -37,19 +41,22 @@ namespace VRCKatamari.Editor.LevelBuild
     /// Source tracking: each type's stamp (SHA-256 of the FBX bytes and of <c>skinned_defs.json</c>) is
     /// kept in the FBX importer's <c>userData</c>. A stamp that differs from the files on disk means the
     /// source changed: the clip settings are re-read from the file (take ranges included), the
-    /// controller's states are re-wired to the re-imported clips, and every existing <c>Skin</c> of the
+    /// controller's states are re-wired to the re-imported clips (a controller whose states no longer
+    /// match the FBX's takes is rebuilt inside the same asset, so its GUID stays), and every existing <c>Skin</c> of the
     /// type is rebuilt. A <c>Skin</c> is also rebuilt when its mesh is gone, it instances another asset,
     /// or it has drifted off the static model's bounds centre. A rebuild first checks the <c>Skin</c>
     /// subtree for a <c>MonoBehaviour</c> (an <c>UdonBehaviour</c> included); if one exists nothing is
     /// destroyed and the run reports a problem. After the re-import every clip's length is compared with
     /// the seconds in <c>skinned_defs.json</c> (<c>[anim_clip]</c>). A skeletal FBX instance anywhere
     /// under a prop other than <c>Skin</c> (<c>[anim_stray]</c>) is reported as a problem and never
-    /// deleted: its renderers widen the prop's measured bounds.
+    /// deleted: its renderers widen the prop's measured bounds. A missing idle/walk/escape take, or a
+    /// take that is no original state (<see cref="IsOriginalStateTake"/>), is an <c>[anim_problem]</c>.
     /// </para>
     /// <para>
-    /// Which clip is "walk" is the exporter's naming (slot0, 0.967 s, +-15 degree leg swing), the
-    /// research's strongest reading, not a proven fact (ORIGINAL_SKELETAL_ANIMATION 9.2); when to switch
-    /// idle/walk/panic is our behaviour model, PROVISIONAL. Idempotent: with unchanged sources a second
+    /// The take names are the original states: REROLL's per-type controllers match the PS2 slots on
+    /// clip length, state speed and frozen poses for all 18 types (MOTION_HOST, skeletal section).
+    /// When to switch idle/walk/escape is our behaviour model, PROVISIONAL; the original's triggers for
+    /// rampage/chase/special live in the native simulation and are not known. Idempotent: with unchanged sources a second
     /// run prints <c>+0 ~0 -0</c>. The skin/static fit is logged as <c>[anim_fit]</c> for every skin on
     /// every run.
     /// </para>
@@ -61,9 +68,12 @@ namespace VRCKatamari.Editor.LevelBuild
         public const string SkinChildName = "Skin";
         public const string MovingParameter = "Moving";
         public const string PanicParameter = "Panic";
-        public const string IdleState = "idle";
-        public const string WalkState = "walk";
-        public const string PanicState = "walk_fast";
+        /// <summary>The state <see cref="PanicParameter"/> enters: the original's Escape.</summary>
+        public const string PanicState = SkeletalStateMath.Escape;
+        /// <summary>States every type must have: idle (default), walk, and the panic state.</summary>
+        public static readonly string[] RequiredStates = { SkeletalStateMath.Idle, SkeletalStateMath.Walk, PanicState };
+        /// <summary>Original states installed when the FBX has them, with no transition into them yet.</summary>
+        public static readonly string[] SpareStates = { SkeletalStateMath.Rampage, SkeletalStateMath.Chase, SkeletalStateMath.Special };
         /// <summary>A skin whose size differs from the static model by more than this is reported.</summary>
         public const float FitTolerance = 0.25f;
         /// <summary>A skin whose bounds centre is further than this (metres) from the static model's is realigned.</summary>
@@ -410,34 +420,70 @@ namespace VRCKatamari.Editor.LevelBuild
         private static AnimatorController EnsureController(string type, string fbx, Result result)
         {
             string path = AnimationRoot + "/" + type + ".controller";
-            AnimationClip idle = FindClip(fbx, IdleState);
-            AnimationClip walk = FindClip(fbx, WalkState);
-            AnimationClip panic = FindClip(fbx, PanicState);
-            if (idle == null || walk == null || panic == null)
+            var clips = new Dictionary<string, AnimationClip>(StringComparer.Ordinal);
+            var missing = new List<string>();
+            foreach (string state in RequiredStates)
             {
-                result.Problem(type, fbx + " lacks a take named " + IdleState + "/" + WalkState + "/" + PanicState +
+                AnimationClip clip = FindClip(fbx, state);
+                if (clip == null) missing.Add(state);
+                else clips[state] = clip;
+            }
+            if (missing.Count > 0)
+            {
+                result.Problem(type, fbx + " lacks the take(s) " + string.Join("/", missing.ToArray()) +
                                  " (takes found: " + ListClips(fbx) + ")");
                 return null;
             }
+            foreach (string state in SpareStates)
+            {
+                AnimationClip clip = FindClip(fbx, state);
+                if (clip != null) clips[state] = clip;
+            }
+            string unknown = UnknownTakes(fbx);
+            if (unknown.Length > 0)
+                result.Problem(type, fbx + " has take(s) that are no original state: " + unknown);
 
             var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
             if (existing != null)
             {
-                RewireStates(existing, idle, walk, panic, result);
+                string mismatch = ShapeMismatch(existing, clips);
+                if (mismatch == null) RewireStates(existing, clips, result);
+                else
+                {
+                    // Rebuilt inside the same asset, so its GUID and every Animator's reference stay.
+                    ClearStates(existing);
+                    BuildStates(existing, clips);
+                    SaveController(existing);
+                    result.Updated++;
+                    result.Lines.Add("controller " + existing.name + ": states rebuilt (" + mismatch + ")");
+                }
                 return existing;
             }
 
             AnimatorController controller = AnimatorController.CreateAnimatorControllerAtPath(path);
-            controller.AddParameter(MovingParameter, AnimatorControllerParameterType.Bool);
-            controller.AddParameter(PanicParameter, AnimatorControllerParameterType.Bool);
+            BuildStates(controller, clips);
+            SaveController(controller);
+            result.Created++;
+            result.Lines.Add("controller created: " + path);
+            return controller;
+        }
+
+        private static void BuildStates(AnimatorController controller, Dictionary<string, AnimationClip> clips)
+        {
+            if (!HasParameter(controller, MovingParameter)) controller.AddParameter(MovingParameter, AnimatorControllerParameterType.Bool);
+            if (!HasParameter(controller, PanicParameter)) controller.AddParameter(PanicParameter, AnimatorControllerParameterType.Bool);
             AnimatorStateMachine machine = controller.layers[0].stateMachine;
-            AnimatorState idleState = machine.AddState(IdleState);
-            idleState.motion = idle;
-            AnimatorState walkState = machine.AddState(WalkState);
-            walkState.motion = walk;
+            AnimatorState idleState = machine.AddState(SkeletalStateMath.Idle);
+            idleState.motion = clips[SkeletalStateMath.Idle];
+            AnimatorState walkState = machine.AddState(SkeletalStateMath.Walk);
+            walkState.motion = clips[SkeletalStateMath.Walk];
             AnimatorState panicState = machine.AddState(PanicState);
-            panicState.motion = panic;
+            panicState.motion = clips[PanicState];
             machine.defaultState = idleState;
+            foreach (string state in SpareStates)
+            {
+                if (clips.ContainsKey(state)) machine.AddState(state).motion = clips[state];
+            }
 
             AddTransition(idleState, walkState, MovingParameter, true);
             AddTransition(walkState, idleState, MovingParameter, false);
@@ -446,42 +492,93 @@ namespace VRCKatamari.Editor.LevelBuild
             toPanic.duration = 0f;
             toPanic.canTransitionToSelf = false;
             toPanic.AddCondition(AnimatorConditionMode.If, 0f, PanicParameter);
-
-            EditorUtility.SetDirty(controller);
-            AssetDatabase.SaveAssets();
-            result.Created++;
-            result.Lines.Add("controller created: " + path);
-            return controller;
         }
 
-        // An existing controller keeps its structure; each of its three states is pointed at the
-        // clip the FBX has now (a re-imported FBX, or a controller built from the wrong take).
-        private static void RewireStates(AnimatorController controller, AnimationClip idle, AnimationClip walk,
-                                         AnimationClip panic, Result result)
+        private static void ClearStates(AnimatorController controller)
+        {
+            AnimatorStateMachine machine = controller.layers[0].stateMachine;
+            foreach (AnimatorStateTransition transition in machine.anyStateTransitions) machine.RemoveAnyStateTransition(transition);
+            foreach (ChildAnimatorState child in machine.states) machine.RemoveState(child.state);
+        }
+
+        private static void SaveController(AnimatorController controller)
+        {
+            EditorUtility.SetDirty(controller);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static bool HasParameter(AnimatorController controller, string name)
+        {
+            foreach (AnimatorControllerParameter parameter in controller.parameters)
+            {
+                if (parameter.name == name) return true;
+            }
+            return false;
+        }
+
+        // Why an existing controller's state machine differs from what BuildStates makes for these
+        // clips (e.g. a controller built before the takes were named after the original states), or null.
+        private static string ShapeMismatch(AnimatorController controller, Dictionary<string, AnimationClip> clips)
+        {
+            AnimatorStateMachine machine = controller.layers[0].stateMachine;
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ChildAnimatorState child in machine.states) names.Add(child.state.name);
+            var wanted = new HashSet<string>(clips.Keys, StringComparer.Ordinal);
+            if (!names.SetEquals(wanted))
+                return "states " + string.Join(",", new List<string>(names).ToArray()) + " != " + string.Join(",", new List<string>(wanted).ToArray());
+            if (machine.defaultState == null || machine.defaultState.name != SkeletalStateMath.Idle) return "default state is not idle";
+            AnimatorStateTransition[] any = machine.anyStateTransitions;
+            if (any.Length != 1 || any[0].destinationState == null || any[0].destinationState.name != PanicState)
+                return "the Panic transition does not lead to " + PanicState;
+            return null;
+        }
+
+        // A controller of the expected shape keeps its structure; each state is pointed at the
+        // clip the FBX has now (a re-imported FBX).
+        private static void RewireStates(AnimatorController controller, Dictionary<string, AnimationClip> clips, Result result)
         {
             bool changed = false;
             ChildAnimatorState[] states = controller.layers[0].stateMachine.states;
             for (int i = 0; i < states.Length; i++)
             {
                 AnimatorState state = states[i].state;
-                AnimationClip wanted = state.name == IdleState ? idle
-                                     : state.name == WalkState ? walk
-                                     : state.name == PanicState ? panic : null;
-                if (wanted == null || state.motion == wanted) continue;
+                AnimationClip wanted = clips[state.name];
+                if (state.motion == wanted) continue;
                 state.motion = wanted;
                 changed = true;
                 result.Lines.Add("controller " + controller.name + ": state " + state.name + " re-wired to " + wanted.name);
             }
             if (changed)
             {
-                EditorUtility.SetDirty(controller);
-                AssetDatabase.SaveAssets();
+                SaveController(controller);
                 result.Updated++;
             }
             else
             {
                 result.Skipped++;
             }
+        }
+
+        /// <summary>True for a take name that is one of the original states the controller can hold.</summary>
+        public static bool IsOriginalStateTake(string takeName)
+        {
+            return Array.IndexOf(RequiredStates, takeName) >= 0 || Array.IndexOf(SpareStates, takeName) >= 0;
+        }
+
+        private static string UnknownTakes(string fbx)
+        {
+            var names = new List<string>();
+            UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(fbx);
+            for (int i = 0; i < assets.Length; i++)
+            {
+                var clip = assets[i] as AnimationClip;
+                if (clip == null || clip.name.StartsWith("__preview__", StringComparison.Ordinal)) continue;
+                string name = clip.name;
+                int bar = name.LastIndexOf('|');
+                if (bar >= 0) name = name.Substring(bar + 1);
+                if (!IsOriginalStateTake(name)) names.Add(name);
+            }
+            return string.Join(",", names.ToArray());
         }
 
         private static void AddTransition(AnimatorState from, AnimatorState to, string parameter, bool value)

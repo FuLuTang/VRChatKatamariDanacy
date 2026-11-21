@@ -216,5 +216,14 @@ namespace VRCKatamari.Tests
             Assert.IsFalse((bool)Call("IsUnderAnimationRoot", "Assets/_RefUnlicensed/Models/small_fiddler_crab/small_fiddler_crab.fbx"));
             Assert.IsFalse((bool)Call("IsUnderAnimationRoot", ""));
         }
+
+        [Test]
+        public void TakesMustBeOriginalStateNames()
+        {
+            foreach (string take in new[] { "idle", "walk", "escape", "rampage", "chase", "special" })
+                Assert.IsTrue((bool)Call("IsOriginalStateTake", take), take);
+            foreach (string take in new[] { "walk_fast", "slot2", "slot4", "slot5", "Idle", "" })
+                Assert.IsFalse((bool)Call("IsOriginalStateTake", take), take);
+        }
     }
 }

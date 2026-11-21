@@ -1,4 +1,4 @@
-"""Skinned reference GLB -> FBX with one take per clip (runs INSIDE Blender 4.0.2 / 5.x).
+"""Skinned reference GLB -> FBX with one take per clip (runs INSIDE Blender 3.6 or later).
 
     blender -b --python-exit-code 1 --python skinned_glb_to_fbx.py -- \
         --src glb --out fbx --motion-table motion_table.json --original-defs original_defs.json
@@ -6,8 +6,9 @@
 在参考数据的工作目录运行。--only 用于试转，不能覆盖装配清单。
 
 Input: ``type_<objectId>.glb`` from the (out-of-repo) skeletal exporter, plus its
-``report.json`` (clip names and fps).  Output per type: ``type_<id>/type_<id>.fbx`` (armature +
-skinned meshes + one Action per clip, baked per frame, no leaf bones) and
+``report.json`` (clip names, PS2 slots and fps).  Output per type: ``type_<id>/type_<id>.fbx``
+(armature + skinned meshes + one Action per clip named after the clip's original state, see
+``STATE_OF_SLOT``, baked per frame, no leaf bones) and
 ``skinned_defs.json`` mapping defs to the types.  Everything stays outside the repo (the files
 are unlicensed reference data); the Unity side copies them under Assets/_RefUnlicensed/Animation/
 (see Docs/Design/PickupAbsorb/MOTION_HOST.md, skeletal section).
@@ -134,6 +135,27 @@ def export_inputs(specs, report, src, only):
     return result
 
 
+# PS2 动画槽 → 原作状态名（REROLL `resources.assets` 的 `mononame.ANIM_NAME`）。18 型逐型对照槽的
+# 时长、速度和定格位置与 REROLL 控制器各状态一致；对照表与证据见
+# Docs/Design/PickupAbsorb/MOTION_HOST.md「骨骼动画：普通 Animator」。槽序与原生模拟的动画编号
+# （`playAnimNo`：Idle 0、Walk 1、Rampage 2、Escape 3、Chase 4、Special 5）不同，不能互换。
+STATE_OF_SLOT = ("walk", "escape", "rampage", "idle", "chase", "special")
+
+
+def state_names(clips):
+    """{报告里的剪辑名: 原作状态名}；槽号越界或两条剪辑同槽即报错。"""
+    result = {}
+    for clip in clips:
+        slot = clip["slot"]
+        if not isinstance(slot, int) or not 0 <= slot < len(STATE_OF_SLOT):
+            raise ValueError(f"clip {clip['name']!r} has slot {slot!r}, outside 0..{len(STATE_OF_SLOT) - 1}")
+        state = STATE_OF_SLOT[slot]
+        if state in result.values():
+            raise ValueError(f"two clips use slot {slot} ({state})")
+        result[clip["name"]] = state
+    return result
+
+
 ACTION_SUFFIX = "_root"
 DURATION_TOLERANCE_S = 1e-3
 # Scene frame rates tried in order; the first at which every clip lasts a whole number of frames
@@ -256,8 +278,9 @@ def convert(glb, out_dir, clips):
     if not armatures:
         raise RuntimeError("no armature in " + glb)
     armature = armatures[0]
-    # glTF import leaves one Action per clip, named "<clip>_root": rename each to its clip's
-    # name (looked up by name) so Unity's takes read walk / idle / ...
+    # glTF import leaves one Action per clip, named "<clip>_root": find each Action's clip by
+    # name (never by index), then name the take after the clip's original state (STATE_OF_SLOT).
+    states = state_names(clips)
     actions = list(bpy.data.actions)
     mapping = take_names([a.name for a in actions], clips, (armature.name, armature.data.name))
     spans = {mapping[a.name]: tuple(a.frame_range) for a in actions}
@@ -266,9 +289,10 @@ def convert(glb, out_dir, clips):
     takes = {}
     idle = None
     for action in actions:
-        action.name = mapping[action.name]
+        clip = mapping[action.name]
+        action.name = states[clip]
         action.use_fake_user = True
-        frames = take_frames(by_name[action.name]["seconds"], fps)
+        frames = take_frames(by_name[clip]["seconds"], fps)
         align_action(action, frames)
         if tuple(action.frame_range) != (0.0, float(frames)):
             raise RuntimeError(f"take {action.name}: Blender frame range is {tuple(action.frame_range)}, expected 0..{frames}")
@@ -314,9 +338,10 @@ def main():
         object_id = entry["objectId"]
         path, takes, fps = convert(glb, os.path.join(args.out, name), entry["clips"])
         print("OUT", path, takes, "fps", fps)
+        states = state_names(entry["clips"])
         written.append({"type": name, "objectId": object_id, "fbx": name + "/" + name + ".fbx",
                         "fps": fps,
-                        "clips": [{"name": c["name"], "seconds": takes[c["name"]] / fps,
+                        "clips": [{"name": states[c["name"]], "seconds": takes[states[c["name"]]] / fps,
                                    "sourceSeconds": c["seconds"], "speed": c["speed"], "slot": c["slot"]}
                                   for c in entry["clips"]]})
         defs[specs[object_id]["id"]] = name

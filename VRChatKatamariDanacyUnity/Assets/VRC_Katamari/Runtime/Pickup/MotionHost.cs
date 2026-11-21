@@ -972,7 +972,7 @@ namespace VRCKatamari.Pickup
             if (rowAnimators == null || i >= rowAnimators.Length) return;
             Animator animator = rowAnimators[i];
             if (animator == null) return;
-            animator.Play("idle", 0, MotionMath.Phase01(rowPhaseSeed[i]));
+            animator.Play(SkeletalStateMath.Idle, 0, MotionMath.Phase01(rowPhaseSeed[i]));
             HoldMovingForPathRow(i);
         }
 

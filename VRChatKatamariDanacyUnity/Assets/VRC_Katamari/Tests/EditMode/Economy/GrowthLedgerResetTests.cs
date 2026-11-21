@@ -4,8 +4,8 @@ using VRCKatamari.Economy;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// The retry seam of a story round (Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md
-    /// step S6): <see cref="GrowthLedgerMath.TryResetRowForNewRound"/> takes one row and
+    /// The retry seam of a story round:
+    /// <see cref="GrowthLedgerMath.TryResetRowForNewRound"/> takes one row and
     /// the round-scoped stores back to the just-joined state, so a failed round can start
     /// again without reloading the scene.
     /// </summary>

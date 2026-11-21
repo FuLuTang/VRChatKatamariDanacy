@@ -410,7 +410,7 @@ namespace VRCKatamari.Economy
         /// <remarks>
         /// <para>
         /// This is the retry seam of the story round (the "no retry seam" gap of
-        /// Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md, step S6): a failed round starts
+        /// the story flow): a failed round starts
         /// again without reloading the scene. The row keeps its player id and loses
         /// everything a round gave it - confirmed volume, banked score, player
         /// generation, life state (back to Active) and any respawn time - and every

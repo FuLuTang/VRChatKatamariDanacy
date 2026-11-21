@@ -6,8 +6,8 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// EditMode port of Docs/tests/pickup_absorb/test_blocking_props.py, the same ten
-    /// cases as BLOCKING_PROPS_PLAN.md §6 (1-6, 9, 10 plus the 7/8 limit-edge cases),
-    /// followed by the four wiring-contract cases (11-12 in §6): a prop with no collider
+    /// cases (1-6, 9, 10 plus the 7/8 limit-edge cases; see Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md §4.1),
+    /// followed by the four wiring-contract cases (11-12): a prop with no collider
     /// blocks from its gameplay bounds, growth past the limit removes the box in the same
     /// call, an absorbed prop is not a candidate, and only the nearest capacity blocks.
     /// </summary>

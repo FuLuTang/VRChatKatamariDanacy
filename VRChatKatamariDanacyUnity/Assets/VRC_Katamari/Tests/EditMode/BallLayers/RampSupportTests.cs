@@ -10,8 +10,8 @@ namespace VRCKatamari.Tests
     /// calculations or geometric invariants, never a re-run of the implementation
     /// formula. The assembly layer (KatamariBallMotor) cannot be instantiated in
     /// EditMode, so every case here exercises SupportSurfaceMath, which is where
-    /// the design puts the whole ramp decision (P3 of
-    /// Docs/Design/BallMotor/TERRAIN_SUPPORT.md).
+    /// the design puts the whole ramp decision (P3; see
+    /// Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节).
     ///
     /// Conventions used below: a ramp's normal is (0, cos(slope), -sin(slope)),
     /// so the downhill direction is +Z and the plane height falls as z grows;

@@ -357,7 +357,7 @@ namespace VRCKatamari.BallLayers
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The authoring convention (Docs/Design/BallMotor/TERRAIN_SUPPORT.md §5.1) is
+        /// The authoring convention (Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节) is
         /// the one the level tooling emits: <paramref name="boxCenter"/> is the box
         /// centre, <paramref name="boxSize"/> is its world size (x = width along local
         /// +X, y = thickness along local +Y, z = length along local +Z), and the

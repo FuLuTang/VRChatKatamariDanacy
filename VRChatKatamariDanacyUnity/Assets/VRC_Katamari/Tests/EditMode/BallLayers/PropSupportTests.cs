@@ -5,8 +5,8 @@ using VRCKatamari.BallLayers;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// EditMode port of Docs/tests/ball_terrain_support/test_prop_support.py (P2 of
-    /// Docs/Design/BallMotor/TERRAIN_SUPPORT.md). Lengths are metres in world space
+    /// EditMode port of Docs/tests/ball_terrain_support/test_prop_support.py (P2; see
+    /// Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节). Lengths are metres in world space
     /// (+Y up). Expected values are hand calculations or geometric invariants, never
     /// a re-run of the implementation formula.
     ///

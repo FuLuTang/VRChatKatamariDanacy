@@ -2303,7 +2303,7 @@ namespace VRCKatamari.Editor.LevelBuild
         /// the ball needs no runtime physics for it. A <c>ramp</c> entry gets the same
         /// collider but is wired into <c>LevelArenaHost.rampBoxes</c>, never
         /// <c>staticBoxes</c>: a ramp registered as a box puts the radius-expanded AABB of
-        /// the tilted board at its foot, an invisible wall (TERRAIN_SUPPORT 5.5/7.7).
+        /// the tilted board at its foot, an invisible wall (Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节).
         /// </para>
         /// </remarks>
         private static bool ApplyStructures(PlacementDocument doc, Transform structuresRoot,
@@ -3707,7 +3707,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
                     // A ramp is support-only (P3): it goes into its own array, never into
                     // staticBoxes, because a sweep box of the tilted board is the invisible
-                    // wall at the ramp foot (TERRAIN_SUPPORT 5.5).
+                    // wall at the ramp foot (Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节).
                     if (string.Equals(structure.role, "ramp", StringComparison.Ordinal))
                     {
                         rampList.Add(collider);

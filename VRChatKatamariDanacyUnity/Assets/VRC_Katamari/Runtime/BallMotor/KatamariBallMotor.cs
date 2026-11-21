@@ -95,7 +95,7 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float groundPlaneOffset = 0f;
 
         // ---- Terrain support (static box tops, the step rule, gravity fall) ----
-        // PROVISIONAL values, all from Docs/Design/BallMotor/TERRAIN_SUPPORT.md.
+        // PROVISIONAL values, all from Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节.
         //
         // Cell size of the uniform XZ grid the motor builds over the terrain mesh at
         // SetTerrainMesh time (TerrainGridMath). 1 m matches the v2 document's terrain.grid

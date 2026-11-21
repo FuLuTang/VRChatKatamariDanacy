@@ -104,9 +104,9 @@ namespace VRCKatamari.Story
         // Shown while the ball is offered; the result card repeats it on its first line.
         [SerializeField] private string presenterLine = "呈给国王";
 
-        // Level 1's result comments: GameModes README section 3.1, "评语（结算）"
-        // (0/1/2/3 星), plus the "just barely" band branch of section 2.4. The level
-        // JSON (Docs/Design/GameModes/Levels/) does not carry comment text yet, so
+        // Level 1's result comments: ROUND_RULES section 4, "评语（第 1 关）"
+        // (0/1/2/3 星), plus the "just barely" band branch of section 4. The level
+        // data (hub_levels.json) does not carry comment text yet, so
         // these serialized defaults are the level-1 wording; a later level sets its
         // own lines on its scene instance (level 2's king-counts-fruit wording is
         // section 3.2). Stars are keyed the same way as the star thresholds above.
@@ -347,8 +347,8 @@ namespace VRCKatamari.Story
         /// <remarks>
         /// The lines are presentation data, not rules: they live in the serialized
         /// fields above so a level can reword them without touching this file. The
-        /// defaults are level 1's lines from GameModes README section 3.1
-        /// ("评语（结算）"); the "just barely" branch is the band branch of section 2.4.
+        /// defaults are level 1's lines from ROUND_RULES section 4
+        /// ("评语（第 1 关）"); the "just barely" branch is the band branch of section 4.
         /// Level 2 has its own wording in section 3.2 (the king counting fruit), which
         /// arrives with that level's instance rather than a second rule here.
         /// </remarks>

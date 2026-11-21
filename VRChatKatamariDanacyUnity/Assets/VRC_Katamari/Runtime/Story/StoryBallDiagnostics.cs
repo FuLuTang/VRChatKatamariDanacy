@@ -11,7 +11,7 @@ namespace VRCKatamari.Story
     /// <para>
     /// This is the acceptance readout for terrain support in the formal scene: it is the
     /// only source of <c>gap</c>, <c>support</c> / <c>supportId</c>, <c>stepLimit</c> and
-    /// <c>falling</c> (Docs/Design/BallMotor/TERRAIN_SUPPORT.md section 3.6 item 3).
+    /// <c>falling</c> (Docs/Design/BallMotor/README.md「关卡几何宿主 LevelArenaHost」节).
     /// </para>
     /// <para>
     /// The field order is fixed: <c>t / center / heading / diameter / d_vis / bottom / gap / support /

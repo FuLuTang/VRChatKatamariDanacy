@@ -6,15 +6,14 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// EditMode tests for the story round's star table: the numbers both story levels
-    /// (Docs/Design/GameModes/Levels/story_01_bench_size.json and
-    /// story_02_fruit_ten.json) ask for, plus the edges a level author can get wrong.
+    /// (levels 1 and 2 in Docs/Design/StoryMode/hub_levels.json) ask for, plus the edges a level author can get wrong.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Every expectation is read off the design, not off the implementation:
     /// a tier is reached at exactly its threshold because the quest is "at least the
-    /// target" (GameModes README section 2.1) and the 1.25 m size gate absorbs at
-    /// exactly 1.25 m (section 3.1, arithmetic item 6); zero stars is failure and the
+    /// target" (ROUND_RULES section 2) and the 1.25 m size gate absorbs at
+    /// exactly 1.25 m (ROUND_RULES sections 4 and 7); zero stars is failure and the
     /// partial band only changes the presenter's line, never the stars (section 2.4);
     /// the band's worked example is "nine fruit out of ten" (section 3.2). Boundary
     /// cases use the level's own numbers (1.25 / 1.45 / 1.60 m, 10 / 20 / 30 items,
@@ -221,7 +220,7 @@ namespace VRCKatamari.Tests
             int stars;
             bool insidePartialBand;
 
-            // The level schema asks for strictly increasing tiers (validator rule 9),
+            // Levels are authored with strictly increasing tiers (ROUND_RULES section 4),
             // but a level that repeats a tier is still evaluable: the highest reached
             // tier wins, so a redundant tier 2 cannot block tier 3.
             Assert.IsTrue(StoryStarMath.TryEvaluateSizeStars(Star3M, Star3M, Star3M, Star3M,

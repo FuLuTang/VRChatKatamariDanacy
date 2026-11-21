@@ -22,9 +22,8 @@ namespace VRCKatamari.Story
     /// tested without a Unity scene and there is no second copy of it anywhere.
     /// </para>
     /// <para>
-    /// Threshold source. The level JSON (Docs/Design/GameModes/Levels/
-    /// story_01_bench_size.json, story_02_fruit_ten.json) carries three
-    /// strictly increasing tiers, and validator rule 9 of the GameModes README pins
+    /// Threshold source. The level data (Docs/Design/StoryMode/hub_levels.json) carries three
+    /// strictly increasing tiers, and ROUND_RULES section 4 pins
     /// tier 1 to the quest objective itself. Tier 1 is therefore not a parameter of
     /// these calls: it is the target, and a caller cannot accidentally evaluate with
     /// a first tier that disagrees with the quest the HUD shows.
@@ -43,7 +42,7 @@ namespace VRCKatamari.Story
     /// means "quest not achieved" and is not softened into a fraction of a star.
     /// </para>
     /// <para>
-    /// The partial band. GameModes README section 2.4: a level whose measurement misses
+    /// The partial band. ROUND_RULES section 4: a level whose measurement misses
     /// the target but lands inside evaluation.partial_band times the target gets a
     /// different presenter line ("just barely"), and that line changes no star. The
     /// band is reported as its own out value and is only ever true together with zero

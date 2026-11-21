@@ -27,7 +27,7 @@ namespace VRCKatamari.Pickup
         /// 由中心与全尺寸算挡路盒的最小/最大角。
         /// </summary>
         /// <remarks>
-        /// 宿主没有 collider 时用它把 propBounds 变成挡路盒（BLOCKING_PROPS_PLAN §5.3）。
+        /// 宿主没有 collider 时用它把 propBounds 变成挡路盒（Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md §4.1）。
         /// 负尺寸、非有限输入和不可表示的结果都拒绝，两个 out 值此时为零；零尺寸是合法
         /// 的点盒（min == max）。
         /// </remarks>
@@ -58,7 +58,7 @@ namespace VRCKatamari.Pickup
         /// </summary>
         /// <remarks>
         /// 挡路筛选用球心到盒的距离而不是中心距：3 m 长凳的中心可能在 1.6 m 外，近面却在
-        /// 0.1 m 外（BLOCKING_PROPS_PLAN §2 A）。倒置盒（min &gt; max）是数据错，返回
+        /// 0.1 m 外（Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md §4.1）。倒置盒（min &gt; max）是数据错，返回
         /// false；零尺寸的点盒合法。false 时 distanceM 为 0。
         /// </remarks>
         public static bool TryDistanceToBox(Vector3 point, Vector3 minimum, Vector3 maximum,
@@ -82,7 +82,7 @@ namespace VRCKatamari.Pickup
         /// </summary>
         /// <remarks>
         /// <para>
-        /// 规则（BLOCKING_PROPS_PLAN §5.1、§6）：
+        /// 规则（Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md §4.1）：
         /// </para>
         /// <list type="number">
         /// <item><description>

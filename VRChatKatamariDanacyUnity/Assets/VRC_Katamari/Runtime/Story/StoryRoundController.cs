@@ -19,8 +19,7 @@ namespace VRCKatamari.Story
     /// States. Idle (the scene has loaded and the player has not sat down yet) to
     /// Running (the countdown) to Presenting (the ball is offered to the quest giver) to
     /// Result (the round is over and its facts are final). The order is the
-    /// plan's (Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md section 4, step S4) and the
-    /// design's (GameModes README section 2.3). The states are plain ints, not an enum,
+    /// design's (ROUND_RULES section 3). The states are plain ints, not an enum,
     /// so a scene or a lab can log them without depending on a type.
     /// </para>
     /// <para>
@@ -34,7 +33,7 @@ namespace VRCKatamari.Story
     /// <para>
     /// What this behaviour is not. It never banks, never awards score and never
     /// writes a ledger field: the story mode has no conversion area and no score
-    /// channel at all (GameModes README section 1, "must be written in stone"), and
+    /// channel at all (ROUND_RULES section 1), and
     /// the level data says so explicitly (bank.enabled=false, score_channel=none,
     /// ledger_write=false). The ledger and the ball are reset by the motor's own
     /// <c>TryResetForNewRound</c> seam (plan step S6); this behaviour only asks for
@@ -79,8 +78,8 @@ namespace VRCKatamari.Story
     /// </para>
     /// <para>
     /// Measuring. The design evaluates the settled ball diameter and the settled
-    /// count of confirmed attachments, never a local prediction (GameModes README
-    /// section 2.7). The diameter is the collision diameter,
+    /// count of confirmed attachments, never a local prediction (ROUND_RULES
+    /// section 3). The diameter is the collision diameter,
     /// <c>2 * KatamariBallMotor.GetCollisionRadiusWorldM()</c>, which is the value
     /// the plan names (section 4) and today equals the semantic diameter because
     /// both ratios are 1; the count comes from the pickup host's per-kind confirmed
@@ -99,15 +98,14 @@ namespace VRCKatamari.Story
     /// sitting down again cannot re-open input after the bell.
     /// </para>
     /// <para>
-    /// Level data. The serialized fields below carry the fields of one level JSON
-    /// file under Docs/Design/GameModes/Levels/; the runtime never reads disk JSON
+    /// Level data. The serialized fields below carry the fields of one level entry
+    /// of Docs/Design/StoryMode/hub_levels.json; the runtime never reads disk JSON
     /// (AGENTS.md "No editor APIs or disk JSON in Udon runtime"), so until the
-    /// Editor importer of GameModes README section 7 item 2 exists, the scene
+    /// Editor importer of that data exists, the scene
     /// instance is where the numbers live and each field names the JSON key it
     /// carries. Only the fields the round itself needs are here: the goal and its
     /// target. Tier 1 of the star table is that same objective, and tiers 2 and 3 are
-    /// scoring data on the optional presenter (validator rule 9 of the GameModes README
-    /// is what makes "tier 1 is the objective" true).
+    /// scoring data on the optional presenter (tier 1 is the objective itself, ROUND_RULES section 4).
     /// </para>
     /// <para>
     /// Assembly. Own GameObject by project convention (clear ownership and a readable
@@ -900,7 +898,7 @@ namespace VRCKatamari.Story
             resultCount = goalType == StoryGoalType.B ? MeasuredCount() : 0;
 
             if (motor == null) return;
-            // Collision diameter: the evaluated quantity (GameModes README section 2.1)
+            // Collision diameter: the evaluated quantity (ROUND_RULES section 2)
             // and the one the plan pins to the motor's getter. A motor that never
             // started reads 0, which reads as a diameter below every threshold rather
             // than a false success.

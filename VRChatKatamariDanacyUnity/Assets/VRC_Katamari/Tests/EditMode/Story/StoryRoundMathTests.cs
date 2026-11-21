@@ -15,9 +15,9 @@ namespace VRCKatamari.Tests
     /// motor; the calls take their own time readings.
     /// </para>
     /// <para>
-    /// Only the static math class is touched. A level's time_limit_s is constrained to
-    /// 30..300 s by validator rule 10 of the GameModes README; the edges below are the
-    /// refused inputs that constraint exists to prevent.
+    /// Only the static math class is touched. The time limit defaults to 120 s and a level may
+    /// override it (ROUND_RULES section 3 item 2); the edges below are the non-positive or
+    /// non-finite inputs the math refuses.
     /// </para>
     /// <para>
     /// The star table lives in StoryStarMath and is tested in StoryStarMathTests; the
@@ -120,8 +120,7 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(StoryRoundMath.TryRemainingSeconds(0f, float.PositiveInfinity, 120f,
                 out remaining));
             Assert.IsFalse(StoryRoundMath.TryRemainingSeconds(0f, 0f, float.NaN, out remaining));
-            // A level's time_limit_s is constrained to 30..300 s (validator rule 10); a
-            // zero or negative limit cannot produce a countdown at all.
+            // A zero or negative limit cannot produce a countdown at all.
             Assert.IsFalse(StoryRoundMath.TryRemainingSeconds(0f, 0f, 0f, out remaining));
             Assert.IsFalse(StoryRoundMath.TryRemainingSeconds(0f, 0f, -5f, out remaining));
             Assert.AreEqual(0f, remaining);

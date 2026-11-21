@@ -78,7 +78,7 @@ namespace VRCKatamari.Pickup
     /// gameplay volume <c>propBounds</c> around the prop's world position - not from a
     /// <c>BoxCollider</c> and not from the visual mesh - because the three layers are
     /// separate and most scene props are authored without a collider at all
-    /// (Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md). Absorbed props are never
+    /// (Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md §4.1). Absorbed props are never
     /// candidates, and a field reset drops both sets.
     /// </para>
     /// <para>
@@ -138,7 +138,7 @@ namespace VRCKatamari.Pickup
         // still be registered. It covers one scan interval of travel with slack - 4 m/s *
         // 0.05 s = 0.2 m, so 0.8 m leaves room for a slower scan or a higher speed - and
         // is not a gameplay threshold: a prop closer than this is a wall/step, a prop
-        // farther is simply not registered yet (BLOCKING_PROPS_PLAN.md §2 A). The support
+        // farther is simply not registered yet (Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md §4.1). The support
         // set reuses this one number on purpose: the design says the two margins are the
         // same, and a second serialized knob could only drift.
         private const float DefaultBlockingMarginM = 0.8f;
@@ -356,7 +356,6 @@ namespace VRCKatamari.Pickup
         private float[] candDistanceByRow;
         private int propUsableCount;
         private float nextBlockingScanTime;
-        private int blockingLogCount;
         // Applied prop solids by role, as of the last scan (blocking = role 3, support = 2).
         private int propObbBlockingCount;
         private int propObbSupportCount;
@@ -990,7 +989,6 @@ namespace VRCKatamari.Pickup
             propMinima = new Vector3[propCount];
             propMaxima = new Vector3[propCount];
             propUsableCount = 0;
-            blockingLogCount = 0;
             supportCandidate = new bool[propCount];
             propObbCandidate = new bool[propCount];
             propObbPreviousIndices = new int[PropObbBakeMath.PropObbCapacity];

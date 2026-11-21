@@ -4,8 +4,8 @@
 
 ## 研究依据与边界
 
-- **本机网格实测**：[核心研究 E2](</tmp/core_radius_findings.md#L59>)：27 个 OBJ（01–29，无 26/27）都是约 5 cm 的凹凸球，包围盒约 4.8×4.9×5.4 cm，等体积径约 4.65 cm；core_01 约 52.6 cm³。13 个文件顶点逐个相同，其余仅微变；不是尺寸梯度。
-- **命名文献**：[E3](</tmp/core_radius_findings.md#L60>)，本机 [practice mod README](</home/fulutang/KatamariRef/meta/pages/github_il_practice_mod_README.md#L87-L89>)：“Most models are named after the levels where they're used in the unmodified game.” core_XX 按关卡命名，是皮肤而不是尺寸档。
+- **本机网格实测**：[核心研究 E2](<../../Evidence/CoreRadius/core_radius_findings.md#L59>)：27 个 OBJ（01–29，无 26/27）都是约 5 cm 的凹凸球，包围盒约 4.8×4.9×5.4 cm，等体积径约 4.65 cm；core_01 约 52.6 cm³。13 个文件顶点逐个相同，其余仅微变；不是尺寸梯度。
+- **命名文献**：[E3](<../../Evidence/CoreRadius/core_radius_findings.md#L60>)，本机 [practice mod README](</home/fulutang/KatamariRef/meta/pages/github_il_practice_mod_README.md#L87-L89>)：“Most models are named after the levels where they're used in the unmodified game.” core_XX 按关卡命名，是皮肤而不是尺寸档。
 - **玩家观察 + 开发者镜头说法**：[REROLL Steam 讨论](https://steamcommunity.com/app/848350/discussions/0/3561682880003061934/) 的玩家原话 “the 'core' grows and absorbs all the objects”；Takahashi 2004 postmortem 确认镜头随球变大自动拉远。前者是玩家观察，后者只说明镜头行为，不是可见核尺寸的直接测量；两者不能推出零售版精确的核/碰撞比例。
 - **专利文献**：[US7402104B2](https://patents.google.com/patent/US7402104B2/en) 将显示模型 Mp、碰撞模型 Mh、滚动模型 Mr 分开。模型分离不等于显示核尺寸恒定，也不能用未列出 Mp 放大步骤断言零售版核不长大。
 

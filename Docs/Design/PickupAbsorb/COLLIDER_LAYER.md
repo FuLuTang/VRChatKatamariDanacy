@@ -11,8 +11,8 @@
 | 1 | 碰撞体给谁用 | 只给 **(b) 玩家走路**；球挡路（a）走 `propBounds` 的体积门、不读碰撞体；吸附物（c）今天完全不参与碰撞，`RadialProxyMath` **没有接线**（§2） |
 | 2 | AABB 什么时候够 | 判据不是「体积填充率」，是**空腔净宽 vs 该件释放球径**：`0.30 m ≤ D_gap < D_release` 才必须拆盒（§3） |
 | 3 | 形状表达 | 每件 **0..K 个局部盒**，`K ≤ 6`，**有序 = 优先级**；球挡路的道具块共 12 槽（挡路与支撑共用），装不下时**退到 0 号盒**而不是退到「不挡」（§4） |
-| 4 | 建在哪、怎么进 Unity | Blender 里 `<id>_COL_<n>` 命名的盒对象（**不进渲染网格**）→ 写入 manifest 的 `collision.boxes`（**Unity Y-up**）→ **扩展现有编辑器同步工具 `PickupFieldSync` 读清单并同步 `BoxCollider`**，接进 `propColliders`；**无盒时回退视觉 AABB**（§5，已定 §10-6） |
-| 5 | 静态布景 | **同一套表达、另一套预算**：`AddBox` 只有 8 格且地图校验器按「1 structure = 1 collision 盒」计数，所以布景多盒要动地图契约；**已定：布景只挑主盒，本轮不动地图契约**（§6、§10-4） |
+| 4 | 建在哪、怎么进 Unity | 玩家侧：`PickupFieldSync.EnsurePropCollider` 按视觉 AABB 建 1 个 `BoxCollider`；球侧形状走 `placement.json` 的 `defs[].collider`（COLLIDER_PROXY），不走模型 manifest（§5） |
+| 5 | 静态布景 | **同一套表达、另一套预算**：布景走 `LevelArenaHost` 的静态 OBB，地图校验器按「1 structure = 1 collision 盒」计数；**已定：布景只挑主盒，本轮不动地图契约**（§6、§10-4） |
 | 6 | 与挡路接线怎么衔接 | **不返工**：电机的 `SetPropObbs` 本来就吃 N 个 OBB，电机零改动；只改宿主「建盒」那一段，且先以「每件 0 盒 = 今天行为」上线（§7） |
 
 **全文最关键的一句**：玩法体积（自身尺寸 `propLocalBounds`）管「**挡不挡**」（与吸收门同一个函数），碰撞盒管「**挡成什么形状**」。两者分开，所以加碰撞盒**永远不会**改变某个球径下能不能吸——这正是 (o) 三层分离要保的性质。
@@ -22,7 +22,7 @@
 | 层 | 数据在哪 | 谁读 | 决定什么 | 精度要求 |
 |---|---|---|---|---|
 | 视觉网格 | FBX / MeshFilter | 渲染 | 长什么样 | 亚厘米 |
-| **碰撞体层（本文）** | Blender 盒对象 → manifest `collision.boxes` → 场景 `BoxCollider` | **VRChat 玩家胶囊（PhysX）** | 玩家能不能走过去 | 20–30 cm（绊脚比穿模更糟） |
+| **碰撞体层（本文）** | 场景 `BoxCollider`（`EnsurePropCollider` 建） | **VRChat 玩家胶囊（PhysX）** | 玩家能不能走过去 | 20–30 cm（绊脚比穿模更糟） |
 | 玩法体积 | 场景 `propLocalBounds`（物件自身尺寸）与 `propBounds`（世界包围盒），宿主平行数组 | 自身尺寸 → 吸收门、reach、挡路门；世界包围盒 → 挡路盒形状 | 能不能吸、够不够近、挡不挡 | 1–2 cm（错一点就变成「空气墙」或「白送」） |
 
 三层不混用的依据是 (o)；「挡不挡」只由 `propBounds`（吸收门同一谓词）决定，挡路 OBB 的形状来自 `propLocalBounds`，都不读 `Collider`，本文**不改它**（现行实现见 [COLLIDER_PROXY_RUNTIME](COLLIDER_PROXY_RUNTIME.md) §4.1）。
@@ -30,9 +30,9 @@
 一件道具「多大」只在 `propBounds` 里声明，**不要**用碰撞盒去反推玩法体积：原作本身就把空腔算进包围盒（[ABSORB_SIZE_RATIO](../../Research/KatamariBallRules/ABSORB_SIZE_RATIO.md) S-AR07 的「包围盒含空腔」），而碰撞盒恰恰要把空腔挖掉。**同一个物件，玩法体积含空腔、碰撞体不含，这不是矛盾，是原作同构。**
 
 ```
-Blender 模型脚本 ──► manifest.collision.boxes ──┬──► Unity 场景 BoxCollider ──► 玩家胶囊
+视觉网格 AABB ──► EnsurePropCollider ──┬──► Unity 场景 BoxCollider ──► 玩家胶囊
         │                                        └──► (将来) 宿主多盒数组 ──► SetPropObbs ──► StepContactV2 ──► 球
-        └──► manifest.bounds_m ──► 场景 propBounds ──► 吸收门 / reach / 挡路门（挡不挡）
+        └──► 场景 propBounds / propLocalBounds ──► 吸收门 / reach / 挡路门（挡不挡）
 ```
 
 ## 2. 问题 1：碰撞体给谁用
@@ -43,7 +43,7 @@ Blender 模型脚本 ──► manifest.collision.boxes ──┬──► Unity
 
 所以「球挡路」这个消费者的输入是**玩法体积**，不是碰撞体。为什么不能反过来让它读碰撞体：一旦挡路盒取决于「这件有没有挂 collider」，同一件道具的物理行为就会随场景接线而变，而吸收门永远只看 `propBounds`，两者立刻可以漂移。
 
-**但「挡不挡」与「挡成什么形状」可以分开**：将来若要用多盒细化挡路形状，读的也是**同一份 `collision.boxes` 数据**（宿主序列化成数组），**不是**运行期去读 Unity 的 `Collider`。见 §4、§7。
+**但「挡不挡」与「挡成什么形状」可以分开**：将来若要用多盒细化挡路形状，读的也是**同一份形状数据**（宿主序列化成数组），**不是**运行期去读 Unity 的 `Collider`。见 §4、§7。
 
 ### 2.2 (b) 玩家走路 —— **今天唯一的正式消费者**
 
@@ -189,100 +189,36 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 ## 5. 问题 4：在哪里建、怎么进 Unity
 
-### 5.1 Blender 侧约定
+**现状（已实现）**：
 
-- 命名：`<id>_COL_<n>`（`n` 从 0 起，0 = 主盒），**网格对象是立方体**，变换应用（identity）、以米为单位，与视觉网格同一 collection。
-- **不进渲染网格**：导出 FBX 时只选视觉网格那一个对象（`prop_lib.export_asset` 今天就是 `select_all(DESELECT)` + 选 `ob` + `use_selection=True`），所以把 `_COL_` 对象留在场景里也不会被导出。**验证点**：`verify_import.py` 回读的 `mesh_objects` 必须仍然是 1。
-- 盒子由**模型脚本显式声明**，不要在 Blender 里手工摆：`prop_lib.Builder` 已经按 `add()` 攒了每个部件（`self.objs`），所以给 `Builder` 加一个 `collision(part_keys, name=...)` 就够——用已生成部件的 AABB 算盒，尺寸随模型自动同步，不会出现「模型改了、盒忘了改」。
-- 必须在部件级声明「**哪些部件被省略**」及理由（腿/壶嘴/把手），写进 manifest 的 `omitted_parts`，否则下一个人无法判断那是遗漏还是决定。
+- **玩家碰撞盒**：`PickupFieldSync.EnsurePropCollider` 给每个没有 `Collider` 的道具根建一个 `BoxCollider`，中心/尺寸取视觉网格的实测局部 AABB（已有 Collider 的件只接不建；第二次导入 `created=0`），接进 `propColliders[i]`。宿主在吸附/隐藏时关掉它，复位时开回。
+- **球侧形状**：由 `placement.json` 的 `defs[].collider`（`box/sphere/capsule/convex`，`PlacementImporter` 校验与同步，见 [COLLIDER_PROXY](COLLIDER_PROXY.md)、[COLLIDER_PROXY_RUNTIME](COLLIDER_PROXY_RUNTIME.md)）声明；没有声明的件用 `propLocalBounds` 烘出的 OBB。这条路取代了「模型 manifest 的 `collision.boxes` + Blender `_COL_` 盒」的方案：`exports/*.manifest.json` 里没有 `collision` 键，流水线脚本里也没有 `_COL_` / `omitted_parts` 的实现。
+- `valueUnits`/`propVolumeK` 由导入器按声明值一次写入并回读，同步工具不定价。
 
-### 5.2 manifest 契约（新增，不动已有字段）
+多盒（凹形家具）目前没有数据入口；要做时的改动清单见 §9。
 
-`Docs/Art/OriginalModels/props/exports/<id>.manifest.json` 增加一个顶层键（`build_all.py` 同步写进总 `manifest.json` 的每件条目）。**下面的数字只是形状示意，不是任何一件的真实量测值**：
+### 5.1 与 `propBounds` 的关系（三条硬规则）
 
-```json
-"collision": {
-  "space": "unity_y_up",
-  "source": "authored",
-  "boxes": [
-    { "part": "body", "min": [-0.1301, -0.2077, -0.1301], "max": [0.1301, 0.2077, 0.1301] }
-  ],
-  "omitted_parts": [
-    { "part": "spout", "reason": "thin (0.05 m); a player walks through it and a ball clips it, neither is worth a box" }
-  ],
-  "check": {
-    "boxes_inside_visual_bounds": true,
-    "vertex_coverage": 0.94,
-    "max_vertex_distance_m": 0.021
-  }
-}
-```
-
-字段口径：
-
-| 字段 | 含义 |
-|---|---|
-| `space` | **必须**是 `"unity_y_up"`：盒已换算到 Unity 轴（x, y=上, z=前）。**`bounds_m` 保持 Blender 空间不动**，两套空间并存，靠这个字段区分 |
-| `source` | `authored`（有 `_COL_` 盒）/ `aabb_fallback`（作者声明「整件一个盒」）/ `none`（明确不要碰撞体，例如 13 件小件） |
-| `boxes` | 0..6 项，**有序 = 优先级**；`part` 只给人和校验用，运行期不读 |
-| `omitted_parts` | 省略的部件 + 理由；没有就空数组 |
-| `check.vertex_coverage` | 网格顶点落在某个盒内（或距盒 ≤ 2 cm）的比例，构建时算。它只是**供人复核**的信号，不是门禁 |
-
-轴换算（**这一条最容易错**）：现有 16 件的 `bounds_m`（Blender）与场景 `propBounds`（Unity）逐件对得上，得到 `unity = (x, z, y)`（例：`banana` 的 Blender 0.18×0.0678×0.032 → Unity 0.18×0.032×0.0678）。**排列被实测确认，符号没有**：`watering_can` 的壶嘴在 Blender 指向 +Y，它在 Unity 是 +Z 还是 −Z，只能等第一件带盒的道具进 Unity 目视核对一次，然后把符号写死进流水线的 `BLENDER_TO_UNITY` 常量。
-
-**已定：选 A ——盒由流水线换算到 Unity Y-up，符号在首次导入时于 Unity 目视核对一次。** 这条已经把「排列」从猜测升成实测：场景里 61 件真实网格的 `propBounds` 与 24 个 `exports/*.manifest.json` 的 `dimensions_m`，按 `unity=(x,z,y)` **61/61 完全吻合**（最大偏差 1.2×10⁻⁷ m）。**但 AABB 尺寸是绝对值，它只能确认排列、确认不了符号**；符号与「盒中心是否落在网格原点上」这两件事，放在第一件带 `collision.boxes` 的道具导入时目视核对一次，然后把常量写死。
-
-### 5.3 Unity 侧：谁读、存在哪
-
-**已定：不手挂，也不新写生成器——扩展现有的编辑器同步工具 `Editor/Pickup/PickupFieldSync.cs`，让它读模型 manifest 的 `collision.boxes` 并同步碰撞盒。** 模型改了重跑一次同步即可，不另起一份实现。
-
-为什么是它：`PickupFieldSync` 本来就是「从场景子物体把宿主六个数组填对」的唯一作者路径（头注释原话是 *the one authoring path*），而 `propColliders` 已经是它写的六个数组之一。碰撞盒只是把同一条管线往下延伸一格：**同一次同步，既写 `propBounds`，也写 `BoxCollider` 与 `propColliders[i]`**，两边永远出自同一次读取，不会出现「网格换了、盒还是旧的」这种漂移。
-
-现状与要补的差：
-
-| 现状（`PickupFieldSync`） | 要补 |
-|---|---|
-| 只**接**已有 `Collider`（`PropCandidate.PrimaryCollider` 取道具自身或路径序第一个子 collider），**从不创建** | 按 `collision.boxes` 创建/更新道具物体上的 `BoxCollider`（v1 只用 `boxes[0]`：`center` = 盒中心、`size` = 盒尺寸），`source: none` 时明确不建 |
-| 只读场景（Renderer bounds、层级路径） | 另读 `<id>.manifest.json` 的 `collision` 块；路径要能在 Editor 里解析（`Docs/` 不在 Unity 资产库里，见下） |
-| 旧行为：`valueUnits` 由 `PickupFieldAuthoringRules` 的 (kind, tier) 表算出并**写回** | **已改**：不再用值表定价。调用方（导入器）把声明值传给 `SyncFromChildren`，同步工具一次写入并回读校验；没有声明时保留宿主既有值。缺 (kind, tier) 行不再丢件，`refused: value units pending one rubric` 守卫解除 |
-
-**代价（要写清楚，不是免费的）**：
-
-1. **同步工具要加两段新逻辑**：manifest 读取（含 `collision` 缺失时的默认 `none`）与碰撞盒生成（幂等、可 Undo、不乱改 prefab 实例）。这不是小改，`PickupFieldSync.cs` 已有 700+ 行且承担 U# 程序资产拷贝顺序。
-2. **manifest 位置要定**：`Docs/Art/OriginalModels/props/exports/` 不在 `Assets/` 里，Unity 的 `AssetDatabase` 看不到。要么同步工具用项目相对路径直接 `File.ReadAllText`（可跑但绕开资产库，路径随仓库布局变化就会静默失效），要么由流水线把同一份清单写进 `Assets/`（例如 `Assets/VRC_Katamari/Art/Props/prop_collision.json`）——**这一条仍是执行时要定的小项，不再是「选哪个方案」的未决**。
-3. **需要测试**：EditMode 用例至少覆盖 ① 无 `collision` 时按**视觉局部 AABB** 建 1 个盒并接进 `propColliders`（整关导入已实现），已有 Collider 的件不重复建（旧场景只接不建的行为不变）；② 幂等（连跑两次结果相同，第二次 `created=0`）；③ 将来有 `boxes[0]` 时 `BoxCollider.size` == `boxes[0]` 尺寸、盒 ⊆ `propBounds`；④ `source: none` 时不留 collider。
-4. **`valueUnits` 的写入口径**见上表第三行：U2 落地后同步工具不再定价，声明值由调用方传入并一次写入、回读校验，未声明时保留既有值。因此扩展碰撞盒时**不需要**再加「拒绝变更」守卫，但必须保持「先写声明值、再回读」的顺序，且不能绕过 `SyncFromChildren` 直接改数组。
-
-- 挂在哪：道具物体本身（scale≈1、rotation=identity、原点=AABB 中心），`BoxCollider.center` = 盒中心、`size` = 盒尺寸，**不需要子物体**。
-- 有 Collider 的件接进 `propColliders[i]`；没挂的留空。验收时核对有 Collider 的槽位指向正确组件，再吸掉一件，确认玩家不会撞到本应禁用的 Collider。
-- 被吸附/隐藏时宿主自动关掉它；复位时自动开回来。**不要**自己写脚本管这件事。
-- **首次运行的现实预期**：24 个 `exports/*.manifest.json` 仍没有 `collision` 键，所以同步走 §5.4 的视觉 AABB 回退——整关导入给每件没有 Collider 的道具根建一个 `BoxCollider` 并接进 `propColliders`（第一次 `created=127`，第二次 `created=0`）。真正的 9 个盒（多盒细化）仍要等流水线写出 `collision.boxes`（§9）；在那之前保证的是「每件一个按视觉形状的盒子」，不是多盒精度。
-
-**不手挂，也不新写 `PropColliderBuilder`**：模型一改手挂的盒就静默过期；新写生成器会与 `PickupFieldSync` 争「谁写 `propColliders`」。同一份数据只有一个来源。
-
-### 5.4 与 `propBounds` 的关系（三条硬规则）
-
-1. **回退**：`collision.source == none` 或 `boxes` 为空 → 碰撞体 = 视觉 AABB（今天等于 `propBounds`）。这条保证「被判定需要碰撞体、但还没做盒的道具」不会退化成可穿过，**只是不精确**。**注意边界**：它只对「需要碰撞体的件」生效——§3.3 判为 `不需要` 的 13 个 def / 52 件是按 §10-1 的决定**故意可穿过**，不走这条回退，否则会把空气墙装回去。
-2. **不许回写**：碰撞盒**永远不能**改 `propBounds`。一件道具「多大」只在一处声明（(o)）。
-3. **不许运行期互读**：宿主不读 `Collider`，Unity 侧不从 `propBounds` 反推碰撞体。两边都从 manifest 来，**同一个源，两条管道**。
+1. **回退**：没有声明碰撞形状的件，球侧形状 = `propLocalBounds` 烘出的 OBB，玩家侧 = 视觉 AABB 的 `BoxCollider`。这条保证「被判定需要碰撞体、但还没做形状的道具」不会退化成可穿过，**只是不精确**。**注意边界**：§3.3 判为 `不需要` 的 13 个 def / 52 件是按 §10-1 的决定**故意不给玩家碰撞体**（最高点 < 0.20 m 的件玩家踩过去），否则会把空气墙装回去。
+2. **不许回写**：碰撞形状**永远不能**改 `propBounds`。一件道具「多大」只在一处声明（(o)）。
+3. **不许运行期互读**：宿主不读 `Collider`，Unity 侧不从 `propBounds` 反推碰撞体。
 
 ## 6. 问题 5：静态布景
 
 **同一套表达，另一套预算。**
 
-- 表达相同：不可吸的地形/墙/大树/当布景的桌子，同样是「0..K 个轴对齐盒」，主盒规则一样。
-- 预算不同：布景走 `KatamariBallMotor.AddPlane` / `AddBox`，容量是 **8 平面 + 8 盒**，而且是**地图作者的数据契约**——`Tools/mapbuild/validate_map.py` 的 `MOTOR_MAX_COLLISION_BOXES = 8` 把它抄成了常量，`layout.json` 里每个 `structures[i]` 只能声明**一个** `collision` 值（`"box"`/`"plane"`），校验器按「1 structure = 1 盒」计数。
-- 所以布景要拆盒，必须动三处之一：**① 加 `collision_parts` 数组**（校验器改成数 parts，预算仍是 8）；**② 抬 `MaxBoxCount`**（同时改校验器常量、全部 lab 的场景预算、`StoryMode` 场景现在 4 盒）；**③ 不拆**，布景靠人挑「主盒」，靠 `AddPlane` 补大面积面。
-- 现状读数：`Docs/Design/Maps/PicnicLawn/layout.json` 的 60 个 structure **一个 collision 都没声明**（0/8），而新增的 `size_gates` 里也没有；真正在用的是关卡场景（StoryMode 4 盒）。也就是说 **8 格预算目前基本是空的**，这是好消息：布景拆盒有空间，缺的是**声明方式**，不是容量。
+- 表达相同：不可吸的地形/墙/大树/当布景的桌子，同样是「0..K 个盒」，主盒规则一样。
+- 预算不同：布景由 `LevelArenaHost` 登记成静态 OBB（容量 `ContactTuning.MaxStaticObbCount` = 256，盒与斜板共用），边界用平面（`MaxPlaneCount` = 8）。地图作者的数据契约是 `Tools/mapbuild/validate_map.py` 的 `MOTOR_MAX_COLLISION_BOXES = 8`，`layout.json` 里每个 `structures[i]` 只能声明**一个** `collision` 值（`"box"`/`"plane"`），校验器按「1 structure = 1 盒」计数；该常量与电机现行容量不一致，属于校验器侧的遗留（见 `LEVEL_AUTHORING.md` 的预算表）。
+- 现状读数：`Docs/Design/Maps/PicnicLawn/layout.json` 的 60 个 structure 一个 `collision` 都没声明；真正在用的是关卡场景（StoryMode 4 盒）。
 
-**已定：选 A ——布景只挑主盒，不拆。** 每件只挂一个盒，靠 `AddPlane` 补大面积面；多盒留给「玩家真的会从底下钻过去」的布景，等真的要拆时再走 ①（`collision_parts`），**不要**走 ②，因为抬常量会连带改两张图和每个 lab 的预算，收益却只是几个盒。**本轮不动地图契约**（`layout.json`、`validate_map.py`、8 格预算全部保持原样）。
+**已定：布景只挑主盒，不拆。** 每件只挂一个盒，靠 `AddPlane` 补大面积面；多盒留给「玩家真的会从底下钻过去」的布景，等真的要拆时再加 `collision_parts` 数组（校验器改成数 parts）。**本轮不动地图契约。**
 
 ## 7. 问题 6：和「挡路接线」那位代理怎么衔接而不返工
 
 ### 7.1 不变量（衔接的全部前提）
 
 - 「挡不挡」= 吸收门自己的谓词（`PickupAbsorbMath.IsBeyondAbsorbLimit` / `IsBeyondCachedRequirement`，宿主每次扫描用当前球径判），一个字不改。
-- 「挡成什么形状」= OBB。今天每件 1 个（`propLocalBounds` 烘出），将来 0..K 个（`collision.boxes`，缺省回退）。
+- 「挡成什么形状」= OBB。今天每件 1 个（`propLocalBounds` 烘出），将来 0..K 个（局部盒，缺省回退）。
 - 电机 `SetPropObbs` 本来就接受 N 个 OBB，容量 12（`PropObbBakeMath.PropObbCapacity`）。**电机零改动**。
 - `BlockingPropMath` 的纯函数（`TryBoxFromCentreAndExtents` / `TryDistanceToBox` / `SelectNearest` / `SelectNearestAmong`）契约不变，选择按盒行工作。
 
@@ -311,9 +247,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 | 步 | 做什么 | 行为变化 | 验收 |
 |---|---|---|---|
-| **S0** | 本文 + 目录列 | 无 | `validate_plan.py` + `Docs/tests` |
-| **S1** | 扩展 `PickupFieldSync`：加 manifest 读取、`collision` 缺失按 `none`、按 `boxes[0]` 幂等生成 `BoxCollider` 并接 `propColliders`，同时保持 `valueUnits` 的声明值写入/回读校验（无声明时保留既有值）；带 4 条 EditMode 测试（§5.3） | 整关首次导入按视觉局部 AABB 建 127 个盒（2026-11-15 已实现）；manifest `collision` 盒细化仍未做 | 测试全绿；连跑两次场景逐位不变（第二次 `created=0`）；`valueUnits` 与声明一致（无声明时一位不变） |
-| **S2** | manifest 增 `collision`：`watering_can` 一条 `authored`，`toy_ball`/`watermelon` 两条 `aabb_fallback`，其余 13 件按「没有 `_COL_` 对象」自动判 `none`；重跑 S1 的同步工具落地 3 个 def / 9 件 = 9 个盒 | 玩家不再穿过 0.4 m 球/西瓜/洒水壶；球行为**不变** | `SHA256SUMS` 更新、`verify_import` 仍 1 个 mesh、场景里每个 `BoxCollider` 与 manifest 对应盒逐个相等、吸掉一件后原地无悬空实体 |
+| **S1（已实现，2026-11-15）** | `PickupFieldSync.EnsurePropCollider`：没有 Collider 的道具根按视觉局部 AABB 建 1 个 `BoxCollider` 并接 `propColliders`，幂等（第二次 `created=0`）；`valueUnits` 由导入器声明、一次写入并回读 | 整关首次导入建盒，球行为不变 | `RadialProxyLocalBoundsTests` 里的两条 Collider 用例（`MissingColliderGetsOneBoxOnThePropRootAndIsReused`、`ExistingChildColliderIsWiredInsteadOfDuplicated`） |
 | **S3** | 宿主加 `propBoxCounts` 等三数组（全 0）+ 多盒烘焙 | 无（逐位不变） | `BlockingPropMathTests`、`PropObbBakeMathTests` 全绿；Play Mode 球感不变 |
 | **S4** | 家具建模时填 `counts ≥ 1`，先只填 1 盒/件 | 桌下可通行 | 0.3 m 球从桌下过、1.0 m 球被桌面挡 |
 | **S5** | 需要时填第 2..6 盒（腿/靠背） | 腿不再穿模 | 12 槽预算下的退化规则可观察（宿主的 OBB 计数读数） |
@@ -324,47 +258,36 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 1. **保持** `SetPropObbs` 的「整批替换、N 个 OBB、容量 12」语义——多盒方案完全靠它。
 2. **K ≥ 2 时**（家具期）把 `propColliders`（`Collider[]`，一件一个）换成 `propCollisionRoots`（`GameObject[]` 或 `Transform[]`，整根开关），否则一件的第二个盒在吸附后仍是实体。
-3. **不要**在 `RefreshPropObbs` 里读 `Collider` 或视觉网格——`collision.boxes` 走宿主自己的平行数组。
+3. **不要**在 `RefreshPropObbs` 里读 `Collider` 或视觉网格——形状数据走宿主自己的平行数组。
 4. 道具块 12 槽**先不动**；若实测不足，再按 §10-3 抬。
 
 ## 8. 数据结构汇总（一页）
 
 ```text
-manifest（每件，Blender 产出）
-  collision.space   "unity_y_up"
-  collision.source  authored | aabb_fallback | none
-  collision.boxes[] { part, min[3], max[3] }        // 有序 = 优先级，0 = 主盒，≤ 6
-  collision.omitted_parts[] { part, reason }
-  collision.check   { boxes_inside_visual_bounds, vertex_coverage, max_vertex_distance_m }
+placement.json（每个 def）
+  defs[].collider      { type: box|sphere|capsule|convex, ... }   // 可选；缺省 = propLocalBounds 的 OBB
 
 场景（Unity）
   道具物体（scale≈1, rotation=identity, 原点=AABB 中心）
-    └─ BoxCollider ×1（v1）        ← center/size 从 boxes[0] 抄
+    └─ BoxCollider ×1（视觉 AABB，EnsurePropCollider）  ← 只给玩家
        接进 PickupFieldHost.propColliders[i]
 
-宿主（S3 起，序列化）
-  propBoxCounts[propCount]                 // 0 = 回退 propBounds
+宿主（多盒方案，未实现）
+  propBoxCounts[propCount]                 // 0 = 回退 propLocalBounds
   propBoxMinima/Maxima[propCount * 6]      // 局部空间，固定步长
 
-电机（零改动）
+电机
   SetPropObbs(...)                         // 容量 12，整批替换
 ```
 
-## 9. 迁移步骤（要动流水线脚本的话，只写在这里）
+## 9. 若要做多盒（S3–S5）要动的地方
 
-**本文件不改任何脚本**。以下是要改的内容清单，给流水线 owner：
+1. 数据入口：`defs[].collider` 目前是单个形状；多盒需要新字段（先走 `Tools/levelbuild/placement_core.py` 的 schema 与校验），或用 COLLIDER_PROXY 的 `convex` 表达。
+2. `PickupFieldSync` / `PlacementImporter` 把数据同步成宿主的 `propBox*` 平行数组（§7.2）。
+3. `PickupFieldHost.RefreshPropObbs` 里循环多盒烘焙（§7.2 的选择算法）。
+4. `propColliders`（一件一个）换成整根开关（§7.4）。
 
-1. `scripts/prop_lib.py`
-   - 加 `BLENDER_TO_UNITY` 轴映射常量（`(x, z, y)`，符号待 §5.2 的一次目视核对后写死）；
-   - `Builder` 加 `collision(part_keys, name=...)`：用已生成部件的 AABB 算盒（Blender 空间），**立刻**换算成 Unity 空间存进 `self.collision_boxes`；
-   - `finish()` 里写 `collision` 块：`space` / `source` / `boxes` / `omitted_parts`，以及 `check`（`boxes_inside_visual_bounds`、`vertex_coverage`、`max_vertex_distance_m`——都只用已算出的顶点与盒，不需要新依赖）；
-   - `export_asset` **不改**（现在只导视觉网格，正是我们要的）；但要在导出后断言场景里仍有 `_COL_` 对象且没有进 FBX（`verify_import` 端已有 `mesh_objects == 1` 的检查，把它接到 `collision.boxes` 非空时必跑）。
-2. `scripts/models/<id>.py`：只在需要盒的件里调用 `b.collision([...])`，并显式列出 `omitted_parts` 及理由。**16 件里只有 `watering_can` 需要 authored 盒**（壶身 1 盒，壶嘴进 `omitted_parts`）；`toy_ball` / `watermelon` 写 `source: "aabb_fallback"`（盒 = 视觉 AABB，即 `propBounds`）；其余 13 件写 `source: "none"`（在 `build_all` 里按「没有 `_COL_` 对象」自动判定，不必逐件写）。
-3. `scripts/build_all.py`：把 `info['collision']` 原样带进总 `manifest.json` 的每件条目（现在 `props[i]` 是 `info` 的子集，照抄一层即可）；`SHA256SUMS` 已经覆盖 `exports/*.manifest.json`，无需改。
-4. `scripts/verify_import.py`：加一条「FBX 回读只有 1 个 mesh 对象」的硬失败（现在只是记录），并把 `collision.check.boxes_inside_visual_bounds` 与回读的 `world_min/max` 对一次（**换算回 Blender 空间再比**，否则轴一变就误报）。
-5. `props/README.md`：补 `collision` 键、`_COL_` 命名、`< 0.10 m` 省略规则、以及「盒是 Unity 空间、`bounds_m` 是 Blender 空间」。
-
-**Unity 侧不在流水线里**：`addCollider: false` 的导入设置保持不变（`Docs/Evidence/AssetImport/README.md` §2），碰撞体是场景里挂的，不是从网格生成的。**Cube 占位的 49 件在换网格时必须同一批把它的立方体 `BoxCollider` 换掉**——否则又会出现「0.9 m 的盒子套 0.3 m 的暖壶」。
+**Unity 侧**：`addCollider: false` 的导入设置保持不变（`Docs/Evidence/AssetImport/README.md` §2），碰撞体是场景里挂的，不是从网格生成的。Cube 占位的件在换网格时必须同一批把它的立方体 `BoxCollider` 换掉，否则会出现「0.9 m 的盒子套 0.3 m 的暖壶」。
 
 ## 10. 已定问题
 
@@ -396,30 +319,20 @@ manifest（每件，Blender 产出）
 
 4. **静态布景要不要多盒，以及怎么声明**（只有 `layout.json` + `validate_map.py` 的 owner 能改）
 
-   **已定：选 A ——只挑主盒。** 理由：8 格预算虽然基本是空的，但声明方式（`collision_parts`）还没定，为几个盒去动地图契约与两张图不划算；需要拆的时候再走 B。
+   **已定：选 A ——只挑主盒。** 理由：声明方式（`collision_parts`）还没定，为几个盒去动地图契约与两张图不划算；需要拆的时候再走 B。
 
    - A（已定）：布景先只挑主盒，不拆。
    - B（否，留作将来）：加 `collision_parts` 数组，校验器按 parts 计数（预算仍 8）。
-   - C（否）：抬 `MaxBoxCount`。
 
 5. **吸附物改变球的滚动轮廓**：已由球层的径向代理实现（BallMotor README「径向凹凸代理」），不属于道具碰撞体层。
 
-6. **Unity 侧怎么落：手挂还是生成器**
+6. **Unity 侧怎么落**
 
-   **已定：选 C ——不是手挂，也不是新写生成器，而是扩展现有的编辑器同步工具 `PickupFieldSync`（`Editor/Pickup/`），让它读 manifest 的 `collision.boxes` 并同步碰撞盒；模型改了重跑同步即可。**
+   **已定并已实现：扩展现有 `PickupFieldSync`（`EnsurePropCollider`），不手挂、不另写生成器。** 一条管线同时写 `propBounds`/`propLocalBounds` 与玩家用的 `BoxCollider`，`valueUnits` 由导入器声明值传入。
 
-   代价（完整版见 §5.3）：同步工具要加「读 manifest」与「生成/更新 `BoxCollider`」两段逻辑，并补 4 条 EditMode 测试（无 `collision` 时逐位不变、幂等、盒 ⊆ `propBounds`、`source: none` 不留盒）；manifest 在 `Docs/` 下不在 Unity 资产库里，路径解析方式要定（直读 vs 写一份进 `Assets/`）；**`valueUnits` 不再由同步工具定价**（U2，2026-11-15）：声明值由导入器传入、同步工具一次写入并回读，未声明时保留既有值，缺 (kind, tier) 行不再丢件，所以扩展碰撞盒时不再需要「拒绝变更」守卫。
+7. **形状数据的入口**
 
-   - A（否）：场景里手挂，数值照 manifest 抄。成本：模型改了会静默过期，需要一条离线校验兜底。
-   - B（否）：新写 `Editor/Props/PropColliderBuilder` 读资产侧 JSON 幂等生成。成本：~100 行 + 测试 + 一份 `Assets/` 副本，且与 `PickupFieldSync` 争「谁写 `propColliders`」。
-   - C（已定）：扩展现有 `PickupFieldSync`，一条管线同时写 `propBounds` 与 `BoxCollider`。
-
-7. **`collision.boxes` 的坐标空间**
-
-   **已定：选 A ——流水线换算到 Unity Y-up，首次导入时在 Unity 目视核对一次（核对符号与盒相对模型的位置），然后把常量写死。** 理由：`unity = (x, z, y)` 已由 61 件真实网格的 `propBounds` 与 manifest 尺寸逐件对（61/61）确认；让每个手挂/同步的人各转一次轴是最容易错的一条。
-
-   - A（已定）：Unity Y-up，流水线换算，符号在 Unity 目视核对一次后写死。
-   - B（否）：Blender Z-up，Unity 侧手转。成本：每个碰它的人都要记一次置换和符号，最容易错。
+   **已定：`placement.json` 的 `defs[].collider`**（COLLIDER_PROXY），不走模型 manifest。坐标是道具局部空间。
 
 ## 11. 复核方式（今天能跑 / 必须 Unity）
 
@@ -448,4 +361,4 @@ D = (60 * 0.7 * V / 3.141592653589793) ** (1/3)        # → 0.943
 ## 13. 与目录表的对齐
 
 - `PROP_CATALOG.md` §4 第 6 条记录了两件**模型尺寸与设计三轴不一致**的件（`toy_ball` 0.40 m vs 设计 0.15；`napkin` 0.30×0.30 vs 设计 0.15×0.15）。`propBounds` 没错，**错的是模型或设计三轴**，需要设计侧拍板。
-- 24 个 `exports/*.manifest.json` 没有 `collision` 键（§5.2 的契约尚未实现）；§10-6 的同步工具落地前，流水线必须先把 `collision.boxes` 写出来，否则工具只能空跑。
+- `exports/*.manifest.json` 没有 `collision` 键，也不再计划加（§5）。

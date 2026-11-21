@@ -143,9 +143,9 @@ OURS: Dict[str, Constant] = {
     # not a metre constant to compare against the ball.  See PARITY_AUDIT divergences row 3.
     "hud_offset_m": Constant(0.0002, "KatamariBallMotor.GetHudDiameterWorldM (+0.02 cm)"),
     "clear_target_m": Constant(1.25,
-                               "Docs/Design/GameModes/Levels/story_01_bench_size.json"),
+                               "StoryResultPresenter.star1DiameterM / Docs/Design/StoryMode/ROUND_RULES.md"),
     "star_span_m": Constant(0.35, "repricing_proposal.md §1（1.60 − 1.25）"),
-    "ramp_tangential_scale": Constant(0.0, "Docs/Design/BallMotor/TERRAIN_SUPPORT.md §11 U3"),
+    "ramp_tangential_scale": Constant(1.0, "KatamariBallMotor.rampTangentialGravityScale"),
     "gate_floor_m": Constant(0.001,
                              "placement_core.floor_mm / PickupAbsorbMath.MmFloorEpsilon"
                              "（Req 与球径都向下取整到整 mm）"),
@@ -564,8 +564,8 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     add("M03", "坡面切向重力（打滑）", "—", "有打滑/失控（[社区实测]）",
         _v("ramp_tangential_scale"), UNKNOWN,
         "/tmp/orig_physics/report.md §3.1（媒体与玩家：斜面打滑、缓坡也吃力）",
-        "Docs/Design/BallMotor/TERRAIN_SUPPORT.md §11 U3（rampTangentialGravityScale=0）",
-        "我们坡上不减速也不下滑；原作有‘站不住’的证据。这一条我们比原作‘更可控’")
+        "Docs/Design/BallMotor/BALL_INERTIA.md §4（rampTangentialGravityScale=1，静止 0.3 s 后顺坡）",
+        "我们静止 0.3 s 后且坡角 >2° 才顺坡下滑；原作有‘站不住’的证据")
 
     add("M04", "滚/爬分界角", "deg", None, _v("theta_ride_deg"), UNKNOWN,
         "/tmp/orig_physics/report.md §1.4：70°/90° 都无来源",
@@ -619,7 +619,7 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         _v("clear_target_m"), PARAM,
         "missions.CLEAR_DIAMETER=%.4g cm（CLEAR_TYPE=%s）"
         % (corpus.clear_diameter_m * 100.0, params.get("clear_type") or "?"),
-        "Docs/Design/GameModes/Levels/story_01_bench_size.json quest.objective（%.4g m）"
+        "StoryRoundController.targetDiameterM / Docs/Design/StoryMode/ROUND_RULES.md（%.4g m）"
         % _v("clear_target_m"),
         "目标值相差 %.1f×；" % (_v("clear_target_m") / corpus.clear_diameter_m)
         + "在这个量级上，我们的目标相当于原作里更后期关卡的一段")
@@ -862,7 +862,7 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     timer_seconds = params.get("timer_seconds")
     add("L02", "时限", "s", timer_seconds, 120.0, UNKNOWN,
         "corpus.parameters.timer_raw=4，单位未证实（reroll_numbers §6.1）",
-        "Docs/Design/GameModes/Levels/story_01_bench_size.json time_limit_s=120",
+        "StoryRoundController.timeLimitSeconds=120（Docs/Design/StoryMode/ROUND_RULES.md）",
         "原作 4 个‘时间单位’，若按分钟是 240 s（我们的 2 倍）。"
         "单位不确认前不给比值——这正是语料里留 null 的地方")
 

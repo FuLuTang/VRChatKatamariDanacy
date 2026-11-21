@@ -18,7 +18,7 @@
 |---|---|---|
 | A. 扩建 PicnicLawn（例如剧情第一关切的西侧 6 区） | **不先做** | 全图 38 个障碍面（`Docs/Design/Maps/PicnicLawn/README.md:74`）远超 8 平面 + 8 盒（`Runtime/BallMotor/KatamariBallMotor.cs:235-236`）；西侧就有毯缘坡、0.14 m 树根丘、0.26 m 花圃台（同文件 `:337-339`），运动层只有一张解析地面（`KatamariBallMotor.cs:86-89`，`Docs/02_TECHNICAL_CONTRACTS.md:54`）；它是四人对称 PvP 图，改几何会动 PvP 设计；Unity 侧是从零重建的生成器。 |
 | B. 新开「时代」主题区（对应 2025 作的时间旅行轴，§1.1、§1.3） | **不先做** | 仓库里没有时间旅行剧情的任何设计决定（只有调研）；没有任何时代主题素材，全部要新找或新建。主题可以以后只靠国王委托文案带出，不影响几何（本项目选择）。 |
-| **C. 新单人区域「野餐一角」，复用野餐物件 id** | **推荐** | 素材面与野餐目录重合（`Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 的 seed/acorn/pebble/bottle_cap/paper_scrap/toy_ball/napkin/watering_can 已建模并导入）；能在现有运行时上限内设计；剧情第一关的规则（1.25 m / 120 s，`Docs/Design/GameModes/Levels/story_01_bench_size.json:22`）与地图无关，可直接改挂到新图；做完的经验（门、密度、扫描成本）原样回流 PicnicLawn（T21）。 |
+| **C. 新单人区域「野餐一角」，复用野餐物件 id** | **推荐** | 素材面与野餐目录重合（`Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 的 seed/acorn/pebble/bottle_cap/paper_scrap/toy_ball/napkin/watering_can 已建模并导入）；能在现有运行时上限内设计；剧情第一关的规则（1.25 m / 120 s，见 `Docs/Design/StoryMode/ROUND_RULES.md`）与地图无关，可直接改挂到新图；做完的经验（门、密度、扫描成本）原样回流 PicnicLawn（T21）。 |
 
 C 不是 20×20 m 的平地切片，也不替代 [关卡内容计划](<../StoryMode/LEVEL_CONTENT_PLAN.md>) 给切片排的 110 件 / 412 单位：切片是无门、无地标的平场，且 ★★★ 1.60 m（519.5 单位）在切片里结构性不可达（该文 §0.4）。本图是它的下一步：有尺寸带、门、地标，★★★ 可达（§2.2）。切片里的接线（输入、骑球、宿主、回合）与命名/kind 约定（该文 §4.2）全部沿用。
 
@@ -119,7 +119,7 @@ C 不是 20×20 m 的平地切片，也不替代 [关卡内容计划](<../StoryM
 | G9 | 附着物大了以后：只保留局部位姿与自身 scale（`Runtime/BallLayers/Attachment/AttachmentMath.cs:24-31`），球芯长大会把早期附着物埋进球里，渲染成本还在；大件附着后伸出球外、会穿墙 | 宿主在长大时把「局部距离 + 自身半径 < 当前核心半径 − 余量」的附着物 `SetActive(false)`；穿墙第一版接受 | 不挡 |
 | G10 | 校验器按 PvP 图写：必填 `bank`/`player_count_plans`/`respawn`（`validate_map.py:111-116`、`:1129-1143`）；不查运行时上限 | layout 加 `map_kind: "story_region"`，此时这些键可缺、出生→交分路程不算；**保留**每出生点 2 出路（`:1179`）；新增第 14 组「运行时预算」：平面 ≤8（含地面）、盒 ≤8、可卷拾取尺寸 ≤ 安全上界、价值为 ≥1 的整数、实例数 ≤ 宿主预算 | **挡数据步骤**（R1） |
 | G11 | 摆放位置由 Unity 侧决定：生成器只给每区件数，Unity builder 用种子随机找点（`Editor/MapGreybox/PicnicLawnGreyboxBuilder.cs:829-839`），实例没有稳定 id，同步工具无从对账 | 把种子摆放挪到 Python 生成器（复用 `Tools/mapbuild/build_greybox.py` 的 `scatter_feasibility` 模型），载荷逐件给 id + 坐标；Unity 只照抄 | **挡同步步骤**（R3） |
-| G12 | 关卡校验器写死野餐草坪：`MAP_DIR = …/PicnicLawn`（`Docs/Design/GameModes/validate_levels.py:48`） | 按关卡的 `map_id` 找目录 | 挡剧情关接入（R9） |
+| G12 | 剧情第一关的回合参数在场景序列化字段与 `hub_levels.json`，不绑定具体地图 | 关卡按 `hub_levels.json` 的条目挂接 | 不挡剧情关接入（R9） |
 | G13 | 同步工具（未提交，另一 agent 在写）的 bounds 只来自 Renderer AABB、档位按最长边（`Editor/Pickup/PickupFieldSync.cs:34-41`），没有「拾取尺寸 ≠ 外形」的通道 | 给少数门物件一个显式的拾取尺寸来源（例如目录/载荷里的覆盖值，或一个只放尺寸的子物体约定），其余行照旧 | **挡**三个门（只影响 3 行） |
 
 ## 5. 构建路线（每步独立可验；不写一次性 builder）
@@ -135,7 +135,7 @@ C 不是 20×20 m 的平地切片，也不替代 [关卡内容计划](<../StoryM
 | R6 | 素材：Kenney 验收清单导入（T20 路线）；6 类 Blender 新道具按 props 管线生成 + 清单 + SHA256SUMS | 素材 agent；导入由 Unity 操作者 | 每件 manifest、三角面预算、导入 scale 1 / rotation 0 |
 | R7 | 两段同步，都幂等：① 摆放同步（新，放进 `Editor/MapGreybox/`，与现有载荷 DTO 同处）读 R3 载荷，**按名字增 / 改 / 删**本图场根下的实例，不碰别的对象；② 现有的 `Editor/Pickup/PickupFieldSync.cs`（另一 agent 在写，未提交）从场景回填 `PickupFieldHost` 的并行数组（加 G13） | Unity 操作者运行 | 两段各连跑两次，第二次「0 处变更」；宿主启动日志件数 = 载荷件数；UdonSharp 组件按 `Labs/README.md:41-49` 的序列建 |
 | R8 | 灰盒试玩 `Maps/PicnicCorner/PicnicCorner.unity`（含 PipelineManager、ReferenceCamera，`Labs/README.md:5-33`） | 用户按键 + Unity 操作者读日志 | 记录：G1 打开时刻、各尺寸节点时刻与单位、扫描帧时间、截图验视线；不达标改件数，不改目标 |
-| R9 | 剧情第一关挂到本图：G12；关卡 JSON 改 `map_id`、`spawn_id`、`map_expectations.zones`（口袋 + 毯 + 草地），重钉 `map_snapshot` | 非 Unity agent + Unity 操作者接 `StoryRoundController` | `python3 Docs/Design/GameModes/validate_levels.py` OK；Play Mode 0/1/2/3 星各一次；**Build & Test 由用户点**，结果记 `Docs/Evidence/` |
+| R9 | 剧情第一关挂到本图：G12；`hub_levels.json` / `placement.json` 改出生点与区域（口袋 + 毯 + 草地） | 非 Unity agent + Unity 操作者接 `StoryRoundController` | `python3 Tools/levelbuild/levelbuild.py check` OK；Play Mode 0/1/2/3 星各一次；**Build & Test 由用户点**，结果记 `Docs/Evidence/` |
 | R10 | 美术与致谢牌、边界外地标；第二关（水果）用全图 | — | 不阻塞 R9 |
 
 顺序约束：R1→R2→R3→R7；R4、R5 与 R2/R3 并行；R6 只挡 R8 的观感，灰盒可以先用基础体顶替。

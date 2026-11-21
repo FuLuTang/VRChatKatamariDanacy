@@ -9,9 +9,9 @@
 
 0.1 **宿主是 110 行 / 412 单位（2026-11-15 场景实测）。** `StoryLevel.unity` 里 `PlaygroundProp` **0 命中**，宿主是 110 行、`itemIds` 110 个唯一、`valueUnits` 合计 **412**，另有一组 110 个 `propColliders` 指向新道具（名字如 `thermos_01`、`bottle_cap`）。旧 `Item_00..Item_29` 只剩 30 个**不再被宿主引用**的方块。§7 的全部复算都基于这份场景数据，不是基于 §2.1 的计划表。
 
-0.2 **本计划把场地重排成 110 件 / 412 单位，两关共用。** 关卡 1 验 1.25 m；关卡 2 只数其中 40 件 `kind=fruit`。这与两关共用 `picnic_lawn` 同构（`Docs/Design/GameModes/README.md:169`）。
+0.2 **本计划把场地重排成 110 件 / 412 单位，两关共用。** 关卡 1 验 1.25 m；关卡 2 只数其中 40 件 `kind=fruit`。这与两关共用 `picnic_lawn` 同构（`ROUND_RULES.md`）。
 
-0.3 **1.25 m 可达且有余量。** 1.25 m = **245.91 单位**（`Docs/Design/GameModes/README.md:212`；公式 `d=d0·(V/V0)^(1/3)`、1356 单位 = 0.30→2.20 m，`Docs/Design/Gameplay/README.md:56`、`Docs/Design/Gameplay/round_model.py:110-115`）。412/245.91 = **1.68×**（计划要求 ≥1.6×）；达标只吃掉 245.91/412 = **59.7%**（S5 要求 ≤65%）。**复算（§7.2）：** 用运行时常量（`baselineVolumeUnits = 3.4390244`、`c = 0.0041 m³/u`）精确值是 **245.99 u**，与 245.91 差 0.08 u（0.03%），原因是 `round_model` 的每单位体积取 `(V_max−V_0)/1356 = 0.0040992` 而运行时用 0.0041；比例不变（59.7%、1.68×）。
+0.3 **1.25 m 可达且有余量。** 1.25 m = **245.91 单位**（`ROUND_RULES.md`；公式 `d=d0·(V/V0)^(1/3)`、1356 单位 = 0.30→2.20 m，`Docs/Design/Gameplay/README.md:56`、`Docs/Design/Gameplay/round_model.py:110-115`）。412/245.91 = **1.68×**（计划要求 ≥1.6×）；达标只吃掉 245.91/412 = **59.7%**（S5 要求 ≤65%）。**复算（§7.2）：** 用运行时常量（`baselineVolumeUnits = 3.4390244`、`c = 0.0041 m³/u`）精确值是 **245.99 u**，与 245.91 差 0.08 u（0.03%），原因是 `round_model` 的每单位体积取 `(V_max−V_0)/1356 = 0.0040992` 而运行时用 0.0041；比例不变（59.7%、1.68×）。
 
 0.4 **切片只能验 ★ 和勉强 ★★，验不了 ★★★（2026-11-15 复核，数值见 §7）。** 「勉强 ★★」这个说法太轻，但也别读成「打不过」。用 §7.2 的精确值，★★ = **385.89 u = 93.7%**，门槛模拟的最省件路径是 **84 件 / 386 u**——4 单位以上的 82 件一件都不能漏，只剩 26.11 u 余量（刚好等于 26 件 1 单位件）；漏 1 件 4 单位件就掉到 1.4452 m。**但 Play Mode 实测（n=1）120 s 就跑到 1.43 m = 370.00 u（89.8%），只差 15.89 u ≈ 4 件四单位件**——余量极低但一次真人运行就摸到了，所以 ★★ 是「紧」而不是「结构上打不过」。★★★ 1.60 = **519.65 u = 126.1%** 才是硬不可能：把 412 u 全吃光也只到 **1.4817 m**。**但这是切片的问题、不是关卡 JSON 的问题**：同一组 1.25/1.45/1.60 在 1284 单位的出货地图上是 19.2%/30.1%/40.5%（§7.7）。§7.6 建议改切片自己的两个序列化阈值，**不改关卡 JSON**——那才是「改目标去凑」。
 
@@ -85,7 +85,7 @@
 | thermos `[csv:34]` | P | l | 0.90 | 16 | 4 | container | 64 |
 | **合计** | | | | | **110** | | **412** |
 
-模型门槛：`round_model` 把 s 夹到 ≥0.08、m 夹到 ≥0.32，所以 strawberry 的门是 0.08、apple/orange 是 0.32；运行时 (h) 比的是 `bounds`，表里 `bounds` 保持视觉最长边（0.06/0.30/0.30）（`Docs/Design/GameModes/README.md:278-282`、`Docs/Design/Gameplay/round_model.py:310-315`、`Docs/Design/Maps/PicnicLawn/layout.json:49-56`）。**不要为了让模型门槛好看去改 bounds**；两套口径见 §2.4。
+模型门槛：`round_model` 把 s 夹到 ≥0.08、m 夹到 ≥0.32，所以 strawberry 的门是 0.08、apple/orange 是 0.32；运行时 (h) 比的是 `bounds`，表里 `bounds` 保持视觉最长边（0.06/0.30/0.30）（`Docs/Design/Gameplay/round_model.py:310-315`、`Docs/Design/Maps/PicnicLawn/layout.json:49-56`）。**不要为了让模型门槛好看去改 bounds**；两套口径见 §2.4。
 
 数值口径：s=1、m=4 是计划基线；工具表对 garden m 给 6、container l 给 16，所以 `small_potted_plant`/`watering_can` 6、`thermos` 16；`glass_bottle` 与 `watermelon` 按工具表取 4（目录写 5/6，工具表取低值，见 §4.2），全是 ≥1 的整数（决定 (j)，`Docs/OPEN_DECISIONS.md:57`）。`thermos` 是唯一 ≤1 m 的 l 档（0.90 m，`[csv:34]`），作为后期大件。110 件略多于计划的「~100」：s 起步环 + m 主体 + 4 个 l 收益件；用 100 件凑不出 412（s=1/m=4 时 100 件上限约 400，且几乎没有起步物）。
 
@@ -122,7 +122,7 @@
 
 ### 3.1 水果表（7 个 definition，40 件 / 112 单位）
 
-`fruit` 的权威 id 集是 `Docs/Design/GameModes/categories.json:9-17` 的 7 个；全图 50 件的逐 id 件数是 8/8/10/6/8/6/4（`:19`）。本切片取 40 件（均不超过全图件数），留 3 星余量。
+`fruit` 的权威 id 集是 `ROUND_RULES.md` §7 的 7 个 definition_id；全图 50 件的逐 id 件数是 8/8/10/6/8/6/4。本切片取 40 件（均不超过全图件数），留 3 星余量。
 
 | id | 源 | 档 | bounds / 模型门 m | 值 | 件 | 小计 | kind |
 |---|---|---|---:|---:|---:|---:|---|
@@ -135,7 +135,7 @@
 | watermelon `[csv:28]` | K | m | 0.72 / 0.72 | 4 | 3 | 12 | **fruit** |
 | **合计** | | | | | **40** | **112** | |
 
-★10/★★20/★★★30（`Docs/Design/GameModes/Levels/story_02_fruit_ten.json:35-59`）；40 件对 30 件是 **1.33×**、对 10 件是 4×。
+★10/★★20/★★★30（`ROUND_RULES.md` §7）；40 件对 30 件是 **1.33×**、对 10 件是 4×。
 
 ### 3.2 非水果填充（70 件 / 300 单位）
 
@@ -148,7 +148,7 @@
 | toy / garden / container | toy_ball 4；small_potted_plant 2、watering_can 2；thermos 4 | 12 | 104 |
 | **合计** | | **70** | **300** |
 
-300 单位约为西瓜门槛 44.21 u 的 **6.8×**（44.21 见 `Docs/Design/GameModes/README.md:304`），即使玩家不先吃水果也足够长大；同时把关卡 1 的总量补到 412 u。`cookie/cheese_slice` 是「食物但不是水果」的反例（同 `Docs/Design/GameModes/README.md:288` 的思路），kind 记为 `food`，绝不可写成 `fruit`。
+300 单位约为西瓜门槛 44.21 u 的 **6.8×**（44.21 u 为西瓜的门槛单位，按旧门算出，需按现行门重算），即使玩家不先吃水果也足够长大；同时把关卡 1 的总量补到 412 u。`cookie/cheese_slice` 是「食物但不是水果」的反例（同 `Docs/Design/GameModes/README.md:288` 的思路），kind 记为 `food`，绝不可写成 `fruit`。
 
 ### 3.3 kind 契约（决定计数是否成立）
 
@@ -158,7 +158,7 @@
 
 ### 3.4 关卡 2 的可达性与「成长」真实性
 
-- 30 件 > 单簇 20 件：玩家必须换簇（与 `Docs/Design/GameModes/README.md:303` 的「30 > 单毯 23」同构）；3 星 30/40 = 75% 的水果，全图口径 50 件，本切片 40 件仍高于 30（`Docs/Design/GameModes/categories.json:19`）。
+- 30 件 > 单簇 20 件：玩家必须换簇（同「30 > 单毯 23」的结构）；3 星 30/40 = 75% 的水果，全图口径 50 件，本切片 40 件仍高于 30。
 - **尺寸门现在是真约束（2026-11-15，(h) 已落地）**：0.72 m 西瓜要 44.23 u 才解锁，0.90 m 暖壶要 89.66 u（§7.3）。旧写法「0.30 m 球就能吃 0.72 m 西瓜」在 (h) 落地前成立，现在不成立。西瓜仍应放在第二簇（远离出生点）作为路线目标——不是为了尺寸门，而是为了让「换簇」这件事发生；不要用关卡 2 的成立来证明成长门有效（那是 §7.3 的事）。
 
 ## 4. 布局与落地
@@ -192,7 +192,6 @@
 ```bash
 python3 Docs/tools/validate_plan.py
 python3 -m unittest discover -s Docs/tests
-python3 Docs/Design/GameModes/validate_levels.py
 ```
 
 **§7 的场景数据怎么复现（只读，不改场景）：**
@@ -373,7 +372,7 @@ r     = (3 · total · c / 4π)^(1/3)          d = 2r
 ```text
 python3 Docs/tools/validate_plan.py                  -> PASS: 61 tasks; both release DAGs acyclic; source hashes verified.
 python3 -m unittest discover -s Docs/tests           -> Ran 280 tests ... OK
-python3 Docs/Design/GameModes/validate_levels.py     -> 结论: OK（错误 0、警告 0）
+（当时另有一个关卡校验器，已随 GameModes 目录删除）
 ```
 
 - 三条都是**规划数据**校验，全绿；本文只改了 `Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md` 一个文件，没动 `tasks.json`、关卡 JSON、场景、`.cs`，所以结果应与基线一致。

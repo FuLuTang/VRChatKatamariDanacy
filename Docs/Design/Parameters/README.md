@@ -26,9 +26,9 @@
 
 **实例一（文档哈希已过期，机器钉住的没过期）。** 两份文档手工钉了地图版本：
 
-- [`Gameplay/README.md`](../Gameplay/README.md) §0.2 / §4 与 [`GameModes/README.md`](../GameModes/README.md) §0.2 都写着 `layout.json` = `8218881d…`、`prop_catalog.csv` = `901d0141…`；
+- [`Gameplay/README.md`](../Gameplay/README.md) §0.2 / §4 都写着 `layout.json` = `8218881d…`、`prop_catalog.csv` = `901d0141…`；
 - 磁盘上现在是 `layout.json` = `5b08daf9…`、`prop_catalog.csv` = `01d01418…`；
-- 而关卡文件里的 `map_snapshot.layout_sha256` 是新的，[`validate_levels.py`](../GameModes/validate_levels.py) 的 `map_snapshot` sha256 检查会比对它，所以**门禁是绿的**。
+- 而新的哈希只记在源数据里，所以**门禁是绿的**。
 
 结论：手工钉的哈希会烂，机器验的哈希不会。文档里的复述值必须改成“引用真源”，而不是“再抄一遍”。
 
@@ -76,7 +76,7 @@
 |---|---|---|---|
 | **地图** | `Docs/Design/Maps/<map_id>/layout.json` | 几何、球径包线 `scale.ball_*`、档位门槛 `item_tier_pickup_diameter_m`、`size_gates`、交分锚点与轮换 `bank.anchors` / `bank.rotation`、`bank.rules.*`（残差/最小兑换门槛——它们已经是该文件里的既有字段，见 §5 步骤 1 的取舍） | 对局时长、PvP 比例、道具时长、运动/跟随调参 |
 | **规则集** | `Docs/config/rulesets/<ruleset_id>.json`（新，见 §3.1） | 按 `ruleset_id` 共享的规则：交分周期、对局时长、PvP 吞噬/重生、道具时长与倍率、吸收比、成长标定、运动/跟随调参、形状常量 | 任何地图几何；任何每关开关 |
-| **关卡** | `Docs/Design/GameModes/Levels/*.json` | **开关与限时**：`time_limit_s`、`quest.objective`、`spawn_id`、`bank.enabled`、`powerups.enabled` | 规则数值——[`GameModes/README.md`](../GameModes/README.md) §4.3 字段表已经写明 `ruleset_id` 是“引用共享规则集，**关卡不复制这些数字**” |
+| **关卡** | `Docs/Design/StoryMode/hub_levels.json`（`round` 块）与 `Docs/Design/Levels/<id>/placement.json` | **开关与限时**：`time_limit_s`、`quest.objective`、`spawn_id`、`bank.enabled`、`powerups.enabled` | 规则数值——关卡引用共享规则集，**关卡不复制这些数字**（回合规则见 [`ROUND_RULES.md`](../StoryMode/ROUND_RULES.md)） |
 | **运行时派生** | 代码里算出来的量 | 起始球径（由体积基线算出 = **0.29974 m**，见 [`BallMotor/README.md`](../BallMotor/README.md)「交分」节的「`start` 必须和体积映射同源」条）、三尺寸、`sizeScale`（D/D0）、交分后直径、`carried`、确认体积 | 任何作者可调的数 |
 | **运行时独有** | 代码里的 `const` / 缓冲容量 / 容差 | 结构容量、ε 容差、`fixedStepSeconds`、`stuckTimeoutSeconds` 一类**没有作者数据来源**的实现值 | 设计旋钮 |
 
@@ -84,7 +84,7 @@
 
 ### 1.3 证据等级：复用项目既有分级，且只挂在真源上
 
-沿用 [`Research/KatamariBallRules/README.md`](../../Research/KatamariBallRules/README.md) §2 的 C 编号与 [`GameModes/README.md`](../GameModes/README.md) §0.1 的标记约定，本文用六个记号：
+沿用 [`Research/KatamariBallRules/README.md`](../../Research/KatamariBallRules/README.md) §2 的 C 编号与 [`ROUND_RULES.md`](../StoryMode/ROUND_RULES.md) 的标记约定，本文用六个记号：
 
 | 记号 | 含义 | 现在能引用的地方 |
 |---|---|---|
@@ -152,7 +152,7 @@
 
 ### C. 手写一个组件当唯一真源，反向生成 JSON
 
-把手写 `KatamariRules` 组件当权威，Python 从 prefab YAML 里读。**否决**：prefab/scene YAML 有 GUID、fileID、嵌套引用，Python 解析它比解析 JSON 贵得多且脆；而且地图域的数（球径包线、档位门槛）已经在 `layout.json` 里被其它工具读，权威一旦翻到 Unity 侧，`validate_map.py` / `validate_levels.py` / `round_model.py` 全都要改成读 YAML。**把权威从纯文本挪到二进制化资产，是纯负收益。**
+把手写 `KatamariRules` 组件当权威，Python 从 prefab YAML 里读。**否决**：prefab/scene YAML 有 GUID、fileID、嵌套引用，Python 解析它比解析 JSON 贵得多且脆；而且地图域的数（球径包线、档位门槛）已经在 `layout.json` 里被其它工具读，权威一旦翻到 Unity 侧，`validate_map.py` / `round_model.py` 全都要改成读 YAML。**把权威从纯文本挪到二进制化资产，是纯负收益。**
 
 ### D. 运行时读 JSON / 自己写个 U# 解析器
 
@@ -254,7 +254,7 @@
 |---|---|---|
 | 改规则的人 | `python3 Tools/rulesbuild/build_rules.py` | 改完 `rulesets/*.json` 或 `layout.json` 的球径包线 |
 | 离线模型 | `round_model.RoundParams.from_ruleset()`（§3.4） | 每次跑 `simulate.py`；直接读 JSON，不读载荷 |
-| 关卡校验 | `python3 Docs/Design/GameModes/validate_levels.py` | 关卡或地图变更（已有） |
+| 关卡校验 | `python3 Tools/levelbuild/levelbuild.py check <placement.json>` | 关卡或地图变更（已有） |
 | 门禁 | `python3 Tools/rulesbuild/build_rules.py --check` | 与 `validate_plan.py` + `unittest discover -s Docs/tests` 一起，见 `AGENTS.md` |
 | Unity 操作者 | 菜单 `VRC_Katamari/Bake Rules Into Prefab` | 只在载荷变化后；跑完提交 prefab 的 diff |
 | 运行时 | 不跑任何东西 | 只读 `KatamariRules` 的字段 |
@@ -290,7 +290,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
    - 载荷有、表里没有 → “生成器写了一个没人认领的字段”；
    - 表里有、载荷没有 → “登记了但没烘进去”。
 3. **`test_no_source_value_is_unbaked`** —— 遍历 `rulesets/*.json` 的**所有数值叶子**，凡是不在 `FIELD_TABLE` 也不在 `MODEL_ONLY` / `STRUCTURAL` 白名单里的，失败。**这条是真正的漂移守卫**：任何人往规则集里加一个数，必须当场决定它属于“烘焙 / 仅模型 / 结构常量”，不能含糊地放着。
-4. **`test_payload_pins_live_hashes`** —— `source_sha256` 必须等于磁盘上 `layout.json` 与规则集文件的实际 sha256。地图一改，这里立刻红（和 `validate_levels.py` 的 `map_snapshot` 同一招，见 [`validate_levels.py`](../GameModes/validate_levels.py) 的 `map_snapshot` sha256 检查）。
+4. **`test_payload_pins_live_hashes`** —— `source_sha256` 必须等于磁盘上 `layout.json` 与规则集文件的实际 sha256。地图一改，这里立刻红（载荷钉住源文件哈希）。
 
 再加一个**不需要 Unity 就能抓住 C# 常量**的断言（同文件）：
 
@@ -319,7 +319,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ### 4.3 第 3 层：版本钉（跨文件，可选但推荐）
 
 - 载荷里 `source_sha256` 已覆盖“真源 → 载荷”；
-- 关卡侧建议在 `map_snapshot` 旁加 `ruleset_sha256`，让“这一关是按哪版规则设计的”也可验。**这需要改 `Docs/Design/GameModes/` 的 schema 与 `validate_levels.py`，属于 GameModes owner**，本文只登记需求，不代做。今天 `ruleset_id` 只过一条正则（[`validate_levels.py`](../GameModes/validate_levels.py) 的 `ID_TOKEN` 正则检查），**不解析到任何文件**——这是现存缺口。
+- 关卡侧可以带 `ruleset_sha256`，让“这一关是按哪版规则设计的”也可验；目前没有关卡 schema 校验器，`ruleset_id` 不解析到任何文件——这是现存缺口，本文只登记需求。
 
 ### 4.4 为什么不用“跑一遍看数字对不对”
 
@@ -389,7 +389,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 - 删除 `Docs/config/prototype_defaults.json`（规则集里用 `supersedes` 指回它），更新 6 个文件里的引用（`grep -rn prototype_defaults` 复核）：
   `Docs/00_PACKAGE_ENTRY.md`、`Docs/tests/test_validate_plan.py`、`Docs/Design/Maps/PicnicLawn/README.md`、`Docs/Design/Maps/ToyRoom/README.md`、`Docs/Design/Gameplay/round_model.py`、`Docs/Design/Gameplay/README.md`。
-- `Docs/Design/GameModes/`（**另一个 owner**）：`validate_levels.py` 让 `ruleset_id` 解析到 `Docs/config/rulesets/<id>.json`；可选加 `ruleset_sha256`（§4.3）。
+- 关卡数据（`hub_levels.json` 与各关 `placement.json`）的 owner：让 `ruleset_id` 解析到 `Docs/config/rulesets/<id>.json`；可选加 `ruleset_sha256`（§4.3）。
 - 删除 `ball_motion.py` / `follow_rig.py` 里与规则集重复的默认值，改为从 `from_ruleset()` 拿。
 - **仍然成立**：`Docs/tests/test_levels.py` 的 hash 期望要同步更新；`test_validate_plan.py` 的 config 断言改读规则集。
 - **验证**：两条门禁命令 + `Docs/Design/Gameplay/tests` + `Tools/mapbuild/tests`。
@@ -579,9 +579,9 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 2. **不是数值批准。** 本文引用的每个数都是现状，不是建议值。改任何数都需要对应的证据任务（§1.3 的 `[PROVISIONAL]` 行）。
 3. **不是接口冻结。** T06 之前世界尺度未定；`KatamariRules` 的字段名是场景内接线，不是公共 API。
 4. **不是验收。** 它不证明可玩、公平、舒适或性能；这些门禁仍是 T21/T22/T27/T38/T39。
-5. **不替代现有校验器。** `validate_map.py` 管地图几何，`validate_levels.py` 管关卡自洽，本文的 `build_rules.py --check` 只管“真源 → 载荷”。
+5. **不替代现有校验器。** `validate_map.py` 管地图几何，`levelbuild.py check` 管关卡摆放，本文的 `build_rules.py --check` 只管“真源 → 载荷”。
 6. **不是原作声明。** 等级记号只引用 Research README 的 C 编号；没有 Cn 的都是项目自选。
-7. **不授权改名。** 步骤 6 里的文件移动要各自的 owner 执行（地图 / GameModes / 规则）。
+7. **不授权改名。** 步骤 6 里的文件移动要各自的 owner 执行（地图 / 关卡 / 规则）。
 
 ---
 
@@ -591,7 +591,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 |---|---|---|
 | 1 | 规则集文件由谁 own（Lead / 平衡 / 地图） | Lead |
 | 2 | `bank.rules.*` 是否从 `layout.json` 搬进规则集（§5 步骤 1 的取舍） | 地图 owner + Lead |
-| 3 | 关卡 schema 是否加 `ruleset_sha256`（§4.3、§5 步骤 6） | GameModes owner |
+| 3 | 关卡 schema 是否加 `ruleset_sha256`（§4.3、§5 步骤 6） | 关卡数据 owner |
 | 4 | `KatamariRules` 放在球 prefab 上还是独立 prefab（今天 motor 还没进任何场景，所以两者都可行） | Unity 操作者 |
 | 5 | **已关闭（2026-11-15）**：体积标定曾要在 394.41 与 1356 之间选一侧（§8 风险 3）；运行时已重新标定为 `3.4390244` / `0.0041`，满径 **1356.4** 确认单位，与模型同源 | 已关闭（Lead 记录） |
 | 6 | 本文件的 Docs 索引登记位置 | Lead |
@@ -614,4 +614,4 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ---
 
-**参考**：[BallMotor 接口契约](../BallMotor/README.md) · [回合经济离线模型](../Gameplay/README.md) · [剧情关卡设计](../GameModes/README.md) · [野餐草坪](../Maps/PicnicLawn/README.md) · [代码约定](../CODE_CONVENTIONS.md) · [待决事项](../../OPEN_DECISIONS.md) · [原作规则核查](../../Research/KatamariBallRules/README.md) · [技术契约](../../02_TECHNICAL_CONTRACTS.md) · [mapbuild 流水线](../../../Tools/mapbuild/README.md)
+**参考**：[BallMotor 接口契约](../BallMotor/README.md) · [回合经济离线模型](../Gameplay/README.md) · [剧情回合规则](../StoryMode/ROUND_RULES.md) · [野餐草坪](../Maps/PicnicLawn/README.md) · [代码约定](../CODE_CONVENTIONS.md) · [待决事项](../../OPEN_DECISIONS.md) · [原作规则核查](../../Research/KatamariBallRules/README.md) · [技术契约](../../02_TECHNICAL_CONTRACTS.md) · [mapbuild 流水线](../../../Tools/mapbuild/README.md)

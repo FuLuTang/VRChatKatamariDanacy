@@ -158,7 +158,7 @@
 
 ### 4.4 REROLL 数据挖掘修订（2026-11-15，以此为准）
 
-`[data-mined]` 来源：REROLL Dump 的「关卡表/实例表/类型表」（19 个任务、28,698 行实例），原始整理见 `/tmp/orig_physics/reroll_numbers.md` §2。**这是我们目前唯一一份逐关、逐件的真实投放数据**，比 HUD 附着件数可信得多。
+`[data-mined]` 来源：REROLL Dump 的「关卡表/实例表/类型表」（19 个任务、28,698 行实例），原始整理见 `Docs/Evidence/OriginalPhysicsNotes/reroll_numbers.md` §2。**这是我们目前唯一一份逐关、逐件的真实投放数据**，比 HUD 附着件数可信得多。
 
 #### 4.4.1 原作实测（只列与我们同量级的部分）
 

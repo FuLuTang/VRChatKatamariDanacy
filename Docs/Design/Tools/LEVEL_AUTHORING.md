@@ -990,7 +990,7 @@ curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbu
 - 另外两个不是时间能买的收益：`render` 之后场景还是热的（连出三张图不重复构建）；`check/list/get` 在没有 Blender 的机器上根本不用起服务（纯 Python）。
 - Windows 5.3 + GPU 上比值会变（渲染更快、Blender 启动更慢），**结构不变**：构建一次、导出即真源。
 
-**冒烟（真实服务、真实 Blender）**：`open story_01` → `move acorn_01 +0.05 x` → `check`（PASS、`inSync`）→ `render --preset plan`（Workbench 俯视，看过图：草坪、花圃台、折叠桌、两块斜板、四道边界、树根丘半出场外）→ `render --preset overview`（EEVEE，看过图：道具都立在支撑面上，没有半埋）→ `undo` → `placement.json` 与 git HEAD **逐字节相同**（sha `601ab8034bc8b494…`）。图在 `/tmp/lb-smoke/live/`（PNG 不进仓库，按 §12 U6）。
+**冒烟（真实服务、真实 Blender）**：`open story_01` → `move acorn_01 +0.05 x` → `check`（PASS、`inSync`）→ `render --preset plan`（Workbench 俯视，看过图：草坪、花圃台、折叠桌、两块斜板、四道边界、树根丘半出场外）→ `render --preset overview`（EEVEE，看过图：道具都立在支撑面上，没有半埋）→ `undo` → `placement.json` 与 git HEAD **逐字节相同**（sha `601ab8034bc8b494…`）。截图不进仓库（按 §12 U6），复现用上面的命令。
 
 ### 16.10 P1（建议，尚未做）
 

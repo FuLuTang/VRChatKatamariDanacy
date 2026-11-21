@@ -149,7 +149,7 @@
 ### T04 · Station、输入与缩放最小平台实验
 阶段：P0；优先级：P0。
 依赖：T00。
-允许写入：`Assets/VRC_Katamari/Labs/StationPlatform/`。
+允许写入：`Docs/Evidence/StationPlatform/`（实验场景 `Labs/StationPlatform/` 已删除，现行实现见 `Runtime/Riding/BallRideStation`）。
 步骤：
 1. 读取本任务依赖的交付物与固定版本契约。
 2. 做移动Station+独立FollowRig，排除Mesh滚动旋转。

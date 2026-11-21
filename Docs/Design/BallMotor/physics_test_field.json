@@ -67,7 +67,7 @@
       "support_props": 6,
       "contacts": 4
     },
-    "source": "Runtime/BallMotor/KatamariBallMotor.cs 的序列化字段与常量；ramps 为 TERRAIN_SUPPORT 的 P3 计划项，step 规则与 support_props（P1/P2）已实现",
+    "source": "Runtime/BallMotor/KatamariBallMotor.cs 的序列化字段与常量；ramps、step 规则与 support_props 均已由接触求解实现",
     "absorb_gate": "Req_mm = floor(1000*cbrt(60*V/pi)), V = k*a*b*c (k default 0.70); absorbable iff floor(1000*D) >= Req_mm (PickupAbsorbMath). absorb_max_abc_m3 = the strict upper bound on a*b*c at k=0.70 for the preset's whole-mm diameter; the 0.30 preset is quantized to 0.2997 m (299 mm), where it is 0.002020 m3."
   },
   "diameters": [
@@ -133,7 +133,7 @@
       "boxes": 0,
       "ramps": 0
     },
-    "cost_note": "进沙盒一次 ClearObstacles + 登记（分配一对 Vector3[]，见 TERRAIN_SUPPORT §3.5 的 GC 风险）"
+    "cost_note": "进沙盒一次 ClearObstacles + 登记（重新登记静态 OBB 表）"
   },
   "sandbox": {
     "arena_id": "SANDBOX",

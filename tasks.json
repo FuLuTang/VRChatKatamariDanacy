@@ -181,7 +181,7 @@
   {
    "id": "T04",
    "title": "Station、输入与缩放最小平台实验",
-   "execution_note": "2026-10-14 RUNNING：PC桌面层面已过——Station入座、坐姿Jump不退座、单击/长按只计一次、三条离开路径恢复JumpImpulse到3、退出/Respawn、入座后本地Interact提示关闭，证据见 Docs/Evidence/StationPlatform/。未完成：步骤4（手追踪与原生舒适转向事件差异、眼高范围）须戴头显实测，修复后Respawn/自然离座恢复未测；GetJumpImpulse()四次会话初始读值均为0，正式世界需显式配置移动参数。2026-11-15 BLOCKED：此后无新证据，剩余只有需要真人头显的步骤 4 与两条修复后恢复路径（证据文件已把 VR 部分整体留给 T05）。缺的具体条件：一次真人 VR 会话（授权测试者戴头显）。Station 仍是 PC 层面首选候选，未批准为正式主方案。",
+   "execution_note": "2026-10-14 RUNNING：PC桌面层面已过——Station入座、坐姿Jump不退座、单击/长按只计一次、三条离开路径恢复JumpImpulse到3、退出/Respawn、入座后本地Interact提示关闭，证据见 Docs/Evidence/StationPlatform/。未完成：步骤4（手追踪与原生舒适转向事件差异、眼高范围）须戴头显实测，修复后Respawn/自然离座恢复未测；GetJumpImpulse()四次会话初始读值均为0，正式世界需显式配置移动参数。2026-11-15 BLOCKED：此后无新证据，剩余只有需要真人头显的步骤 4 与两条修复后恢复路径（证据文件已把 VR 部分整体留给 T05）。缺的具体条件：一次真人 VR 会话（授权测试者戴头显）。Station 仍是 PC 层面首选候选，未批准为正式主方案。2026-11-21：实验场景 Labs/StationPlatform/ 已删除（它要验证的 Station + 独立 FollowRig 已由 Runtime/Riding/BallRideStation 的现行实现取代，PC 实测证据保留在 Docs/Evidence/StationPlatform/）；写入范围去掉已删路径，剩余的 VR 步骤仍需真人头显会话。",
    "phase": "P0",
    "implementer": "SOL",
    "reviewer": "Sol",
@@ -191,7 +191,6 @@
     "T00"
    ],
    "write_scope": [
-    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/StationPlatform/",
     "Docs/Evidence/StationPlatform/"
    ],
    "exclusive_locks": [
@@ -1731,8 +1730,8 @@
     "T46"
    ],
    "write_scope": [
-    "Docs/Design/BallLayers/GroundContact/",
-    "Docs/tests/ball_ground_contact/"
+    "Docs/Design/BallMotor/",
+    "Docs/tests/ball_contact_v2/"
    ],
    "exclusive_locks": [],
    "external_requirements": [],
@@ -1927,8 +1926,8 @@
     "T46"
    ],
    "write_scope": [
-    "Docs/Design/BallLayers/Sweep/",
-    "Docs/tests/ball_sweep/"
+    "Docs/Design/BallMotor/",
+    "Docs/tests/ball_contact_v2/"
    ],
    "exclusive_locks": [],
    "external_requirements": [],
@@ -2064,7 +2063,7 @@
    "external_requirements": [],
    "steps": [
     "按 Docs/Design/CODE_CONVENTIONS.md 建立 VRCKatamari.Runtime（含 U# Assembly Definition）与 VRCKatamari.Tests.EditMode 程序集。",
-    "把 GroundContact、RadialProxy、Attachment、SizeModel、VisualRoll、Sweep、FollowRig、RemoteProxy 八层逻辑写成 Runtime/BallLayers/<Module>/ 下的 U# 兼容静态数学（必要时加 Behaviour），不保留并行草稿。",
+    "把 RadialProxy、Attachment、SizeModel、VisualRoll、FollowRig、RemoteProxy 等球层逻辑（接地与扫掠两层已由接触求解 Runtime/BallContact/ContactSolveMath 取代）写成 Runtime/BallLayers/<Module>/ 下的 U# 兼容静态数学（必要时加 Behaviour），不保留并行草稿。",
     "把各层 Python 测试的固定用例改写成 NUnit EditMode 测试；全部通过后把 Python 模型和对应 Docs/tests 移入归档。",
     "建一个 Labs/BallLayers 实验场景，用真实运行时组件逐层可视化（含 +X/+Y/+Z 方向探针），供人工检查。",
     "RemoteProxy 只用合成 ballSeed；生产键语义等 T06。"
@@ -2100,7 +2099,7 @@
    "title": "剧情模式（单人）：规则与两关设计",
    "write_scope": [
     "Docs/01_GAME_DESIGN.md",
-    "Docs/Design/GameModes/",
+    "Docs/Design/StoryMode/ROUND_RULES.md",
     "Docs/Design/Maps/PicnicLawn/"
    ],
    "dependencies": [
@@ -2118,7 +2117,7 @@
     "关卡数据可被 validate_plan.py 与地图校验脚本检查，目标阈值与地图实际可卷物件数量对得上（用离线模型或地图数据算出的可达性支撑）。",
     "文档明确剧情模式无交分、无对手、失败可重试，并标注所有暂定数值。"
    ],
-   "execution_note": "2026-11-14 交付物已全部落地：模式拆分、两关作者数据（story_01_bench_size / story_02_fruit_ten）、Docs/Design/GameModes/validate_levels.py、Docs/tests/test_levels.py（全过）；commits 0cb010e、5ee89c2。依赖现为 [\"T02\"] 且 T02 已是 DONE，本任务已是 DONE（两关是离线作者数据，不需要输入适配与 Unity 烘焙工具，原 T08、T20 两条陈旧依赖已删）。"
+   "execution_note": "2026-11-14 交付物已全部落地：模式拆分、两关作者数据（story_01_bench_size / story_02_fruit_ten）、当时的关卡校验器与测试（2026-11-21 已随 GameModes 目录删除，回合规则现行文档为 Docs/Design/StoryMode/ROUND_RULES.md）；commits 0cb010e、5ee89c2。依赖现为 [\"T02\"] 且 T02 已是 DONE，本任务已是 DONE（两关是离线作者数据，不需要输入适配与 Unity 烘焙工具，原 T08、T20 两条陈旧依赖已删）。"
   },
   {
    "implementer": "LUNA",
@@ -2144,7 +2143,7 @@
     "T58"
    ],
    "steps": [
-    "实现 BallMotor 组合层：按 Docs/Design/BallMotor/README.md 的帧内顺序把 ControlIntent→BallMotion→Sweep→GroundContact→Pickup→Ledger→SizeModel→VisualRoll→FollowRig 接起来，状态由该 Behaviour 独占。",
+    "实现 BallMotor 组合层：按 Docs/Design/BallMotor/README.md 的帧内顺序把 ControlIntent→BallMotion→接触求解（StepContactV2）→Pickup→Ledger→SizeModel→VisualRoll→FollowRig 接起来，状态由该 Behaviour 独占。",
     "在 Labs 下用 ClientSim 可运行的本地玩家入口（Desktop 输入优先），不接网络、不做远端代理。",
     "做最小 HUD：当前直径、目标进度、计时；只用 Udon 可用的 UI 或世界内 TextMesh，不引入编辑器 API。",
     "在野餐草坪灰盒上跑通：能滚、能吸收、能长大、撞墙不穿模、地形高差能上；记录一次可复现的 Play Mode 结果。"

@@ -123,7 +123,7 @@ VOLUME_K_MAX = 32.0
 MM_EPSILON = 1e-3
 
 #: ``rise <= step_limit(= STEP_RATIO * D)`` is terrain, above it is blocking
-#: (``Docs/Design/BallMotor/TERRAIN_SUPPORT.md`` section 6.1).
+#: (``SupportSurfaceMath.TryClassifyProp`` / ``IsStepWithinLimit``).
 STEP_RATIO = 0.25
 
 #: Ball diameter tiers the population report is computed at (design section 8.13).

@@ -1,8 +1,5 @@
 # 野餐草坪（PicnicLawn）灰盒关卡设计 v0.1
 
-> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
-
-
 **状态：`PROVISIONAL_NOT_TESTED`。** 本目录只有设计与数据，没有 Unity 场景、Prefab 或任何实测。除表格「来源」列写明「决策」的数值外，**所有数字都是暂定值**，不得当成验收证据；`Docs/Preparation/MapRubrics/*.csv` 仍是 `NOT_RUN`。
 
 | 文件 | 内容 |
@@ -25,7 +22,7 @@
 - **性能与实现边界**：02 §9（PC-only 仍要限 CPU/Udon/Draw Call/音源；不声称达到任何 FPS）、03 §5/§6（主路按最大球径+余量、每区至少两条出路、无跳跃、大物件被卷后仍有导航地标）。
 - **文件指纹必须现算，禁止手抄**：本文不复述 `layout.json` / `prop_catalog.csv` 的 sha256（手抄的哈希会在地图一改后就变成假数据）。需要快照指纹时现算：
   `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv`。
-  机器可读的权威副本是 `Docs/Design/GameModes/Levels/*.json` 的 `map_snapshot`，由 `python3 Docs/Design/GameModes/validate_levels.py` 比对；本目录不写死任何哈希（跨文件漂移见 §16 风险 13）。
+  本目录不写死任何哈希，需要时对文件现算（跨文件漂移见 §16 风险 13）。
 
 **坐标系**：Unity 左手系，+Y 向上，+Z 北，原点在地图中心地面（y=0），角度为绕 +Y 顺时针（0°=+Z、90°=+X）。全部单位米。
 
@@ -463,7 +460,7 @@ respawn / player_count_plans / performance_budget
 11. **价值目标被下调**：452 件保留，但价值从 1356 降到 1284（§3.3/§12）。若 T20/T21 认定 1284 不足以支撑 180 s 的成长曲线，补的是**每件价值**或**补货预算**（T22），不是把件数塞回篮子区——那会重新违反放置门槛。
 12. **树根丘坡度（已解决）**：结构数据曾是 Ø2.5 m × 0.18 m（`tree_root_mound`），平均坡度 0.18 ÷ 1.25 = **14.4%**，高于 `scale.max_traversable_slope_percent = 12`（当时 README 与 `layout.json` 的 purpose 还错写成「11%」，算术不成立）。现已把丘高压到 **0.14 m（0.14 ÷ 1.25 = 11.2%）**，并在 `layout.json` 里标成 `traversability.class = drivable_grade` + `run_m: 1.25`——坡度由校验器按几何现算并卡 ≤12%，不再有手写数字可以对不上。仍未实测：T21 翻越实测前不要声称「全部尺寸可翻」。
     **同一类审阅还发现花圃的 28.9%**：`flower_bed_frame` 0.26 m 台 + 0.9 m 斜面若当「可走坡」看就是超限的面，但它的门槛语义是「球够不够大」（原作同样按球径判爬坡），属于**爬升台阶**而不是坡。现在它被显式声明为 `climb_step`（`step_height_m: 0.26`），按 [TERRAIN_CLIMB](../../BallMotor/TERRAIN_CLIMB.md) 的 1.5 倍口径：0.26 ÷ 1.5 ≈ 0.17 m 是最小可翻球径，**0.95 m 与 1.10 m 的球都能爬上去**，`gate_bed_*` 的尺寸门因此只剩作者意图、没有物理支撑（要真挡住 0.95 m 的球，立面要 >1.43 m）。**不许**用「压低台面」来消掉这个数字（那会同时毁掉门，见 §8 的合规降级方案）；要恢复门只能改立面形态（`obstacle`，或 >1.43 m 的墙），这是第一关 owner 的后续决定。
-13. **地图快照 sha256 不要手抄**：本目录不写死任何哈希，一律用 `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 现算。`Docs/Design/GameModes/Levels/*.json` 的 `map_snapshot` 由 `Docs/Design/GameModes/validate_levels.py` 逐字节比对，地图一改就报「地图已变更，请复核」——**改完地图必须重跑它并重钉两个 hash，而不是改 README**。`Docs/Design/GameModes/README.md` §0.2 的 `catalog_sha256` 已不再是 `eb1a1742…`（现为 `01d01418…`，且该节写明「hash 现算，永不手抄」）——本节原先关于它的那句话已过期，已删。**§0.2 那张表只是缩写副本、不参与机器校验**（机器校验的是 `Levels/*.json`）。本次把 `layout.json` 升到 schema v2 之后，§0.2 里的 `layout_sha256` 缩写在它被重算之前会显示旧值；重算是 GameModes 负责人的动作，权威值以本次同步过的两个关卡文件为准。
+13. **地图快照 sha256 不要手抄**：本目录不写死任何哈希，一律用 `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 现算；改完地图要同步复算依赖它的目标/阈值。
 14. **地图数据里的缩小规则没有 Unity 消费方**：`GreyboxPayload.GreyboxBankRotation` 只声明了 `max_concurrent_bankers` / `occupancy_lock` / `bank_resets_ball_to_start_size`（int）三个字段，`PicnicLawnGreyboxBuilder` 从头到尾没读过它们中的任何一个；它只读 `bank_rotation.order` 做锚点校验。`unity_greybox.json` 新增的 `bank_size_rule` / `bank_residual_fraction` / `bank_min_conversion_diameter_m` / `bank_shrink_dimension` / `bank_shrink_formula` 会被 `JsonUtility` 安静地忽略。运行时侧另有 `Runtime/BallMotor/BankShrinkMath.cs` 按同一条公式实现（不读这份 JSON），所以现在是「数据写一份、代码写一份、`round_model.py` 再一份」；要做到单一真源，得让 DTO 加字段并由运行时从 payload 读 `residual` / 最小兑换球径，或明确接受三处同步。改 Unity 代码不在本次范围。
 
 ## 17. 验证与下一步
@@ -497,44 +494,46 @@ T21 在 Unity 里要做的（灰盒）：
 
 ## 18. 体积口径下的可吸性审计
 
-> 本节只**记录**现状与后果，**不改任何机器可读字段**。原因写在 §18.3：`layout.json` 与 `prop_catalog.csv` 已被两份关卡 JSON 的 `map_snapshot` 钉住，改一个字节就会让 `python3 Docs/Design/GameModes/validate_levels.py` 报「地图已变更」、`python3 -m unittest discover -s Docs/tests` 变红；重钉哈希属于 GameModes 负责人的动作（决定 (g)：**哈希不手抄、不自动刷新**），不属于本目录。
+> 本节只**记录**现状与后果，**不改任何机器可读字段**。原因写在 §18.3：`layout.json` 与 `prop_catalog.csv` 被 `Tools/mapbuild` 的生成物逐字节钉住（`--check`），改一个字节就会让 `python3 -m unittest discover -s Docs/tests` 变红；哈希不手抄（决定 (g)）。
 
 ### 18.1 现行门槛
 
-吸收门是**体积**口径（`Docs/OPEN_DECISIONS.md` (l)）：
+吸收门是原作的**体积**口径（`Docs/OPEN_DECISIONS.md` (l)；实现见 `PickupAbsorbMath`）：
 
 ```text
-可吸 ⇔ a·b·c ≤ min(maxItemVolumeWorldM3, (π/6)·D³ / absorbVolumeRatio)
-     = min(512, (π/6)·D³ / 10)          D = 球的语义直径
-等价：D_req = (60·V/π)^(1/3) = 2.673·a_eq,  a_eq = (a·b·c)^(1/3)
+V = k·a·b·c                 k 缺省 0.70
+Req_mm = floor(1000·cbrt(60·V/π))
+可吸 ⇔ floor(1000·D) ≥ Req_mm        D = 球的语义直径
+等价：D_req = (42·a·b·c/π)^(1/3) = 2.373·a_eq,  a_eq = (a·b·c)^(1/3)
 ```
 
-| D | 门槛体积 m³ | 等价立方体边长上界 |
+| D | 可吸的最大 `a·b·c`（m³，k = 0.70） | 等价立方体边长上界 |
 |---:|---:|---:|
-| 0.30 | 0.0014137 | 0.1123 |
-| 1.25 | 0.1022654 | 0.4676 |
-| **2.20**（本图 `ball_max_collision_diameter_m`） | **0.5575280** | **0.8230** |
-| 3.20（(n)/`PROP_SET_PLAN §2.8.5` 说的"大球区"上限） | 1.7178 | 1.197 |
+| 0.30 | 0.002020 | 0.1264 |
+| 1.25 | 0.146093 | 0.5267 |
+| **2.20**（本图 `ball_max_collision_diameter_m`） | **0.796469** | **0.9269** |
+| 3.20（(n)/`PROP_SET_PLAN §2.8.5` 说的"大球区"上限） | 2.451041 | 1.3483 |
 
-**本文件 §2「尺寸门槛 s/m/l」与 §9「成长解锁」按最长边写（`D ≥ 最长边`），不是现行判据**，引用前必须按本节重算：一件 `3.6 × 0.55 × 0.80` 的长凳按长度只要 3.6 m 球，按体积要 `2.673 × 1.166 = 3.12 m`；反过来一根 `0.02 × 0.02 × 0.85` 的细杆按长度要 0.85 m 球，按体积只要 `0.19 m`。**§9 的「吸走所需球径」列请按本节重算后再引用**（表在 `Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md` §3.3，逐件给出 `a_eq` / `D_req` / 2.20 判定）。
+**本文件 §2「尺寸门槛 s/m/l」与 §9「成长解锁」按最长边写（`D ≥ 最长边`），不是现行判据**，引用前必须按本节重算：一件 `3.6 × 0.55 × 0.80` 的长凳按长度要 3.6 m 球，按体积要 `2.373 × 1.166 = 2.77 m`；反过来一根 `0.02 × 0.02 × 0.85` 的细杆按长度要 0.85 m 球，按体积只要 `0.17 m`。**§9 的「吸走所需球径」列也要按本节重算。**
 
-### 18.2 2.20 m 上限下的判定（只列会被改结论的行）
+### 18.2 判定（只列会被改结论的行）
 
-| 目录 id | AABB m（来源） | `a_eq` | `D_req` | 2.20 下 |
-|---|---|---:|---:|---|
-| `collapsed_bench` | 3.6×0.55×0.80（设计） | 1.166 | **3.116** | **吸不到**（对角门那 4 张长凳在本图 2.20 上限下永远打不开；与 (n) 一致） |
-| `picnic_table` | 1.50×0.75×0.72（设计） | 0.932 | **2.492** | 吸不到 |
-| `park_bench` | 1.80×0.55×0.80（设计） | 0.925 | **2.473** | 吸不到 |
-| `thermos`（**场景占位 0.9³**） | 0.9×0.9×0.9（场景） | 0.900 | **2.406** | 吸不到 —— 与 `PROP_CATALOG §2.2` 的 4 件死物同一件事 |
-| `thermos`（真实尺寸 0.12×0.12×0.30） | 0.12×0.12×0.30（设计） | 0.163 | 0.435 | 可吸 |
-| `toy_ball` / `watering_can` | 0.40³ / 0.26×0.58×0.42（模型，仍是游戏尺寸） | 0.400 / 0.397 | 1.069 / 1.062 | 可吸，但要 ~1.07 m 球 |
-| `watermelon` | 0.30×0.24×0.22（模型） | 0.251 | 0.671 | 可吸（本图最大的真实尺寸件） |
+| 目录 id | AABB m（来源） | `a_eq` | `D_req` | 3.20 下 | 2.20 下 |
+|---|---|---:|---:|---|---|
+| `collapsed_bench` | 3.6×0.55×0.80（设计） | 1.166 | **2.766** | 可吸 | 吸不到 |
+| `picnic_table` | 1.50×0.75×0.72（设计） | 0.932 | **2.212** | 可吸 | 吸不到 |
+| `park_bench` | 1.80×0.55×0.80（设计） | 0.925 | **2.195** | 可吸 | 可吸 |
+| `thermos`（**场景占位 0.9³**） | 0.9×0.9×0.9（场景） | 0.900 | **2.136** | 可吸 | 可吸 |
+| `thermos`（真实尺寸 0.12×0.12×0.30） | 0.12×0.12×0.30（设计） | 0.163 | **0.386** | 可吸 | 可吸 |
+| `toy_ball` | 0.40³（模型，游戏尺寸） | 0.400 | **0.949** | 可吸 | 可吸 |
+| `watering_can` | 0.26×0.58×0.42（模型，游戏尺寸） | 0.397 | **0.942** | 可吸 | 可吸 |
+| `watermelon` | 0.30×0.24×0.22（模型） | 0.251 | **0.596** | 可吸 | 可吸 |
 
 三条口径后果：
 
-1. **`@size=<米>` 立方体通道在体积门下会把门件写成死件**：`@size=1.25` 把长凳记成 `1.25³ = 1.95 m³`，需要 **2.60 m** 球。正确做法是 `propBounds` 说真话（模型 AABB）+ 挡路 OBB 另立（见 `Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md` §4.1、`COLLIDER_LAYER.md`），不是把拾取尺寸压成一个立方体。
+1. **`@size=<米>` 立方体通道在体积门下会把门件写成死件**：`@size=1.25` 把长凳记成 `1.25³ = 1.95 m³`，需要 **2.97 m** 球。正确做法是 `propBounds` 说真话（模型 AABB）+ 挡路 OBB 另立（见 `Docs/Design/PickupAbsorb/COLLIDER_PROXY_RUNTIME.md` §4.1、`COLLIDER_LAYER.md`），不是把拾取尺寸压成一个立方体。
 2. **薄片类（`fallen_leaf` / `cheese_slice` / `cookie` / `paper_scrap`）在体积门下等于沙粒**：0.30 m 起手球就能吃，这是 (l) 已记录的忠实行为（原作同样用包围盒，`ABSORB_SIZE_RATIO.md` S-AR07），不是本图的数据错误。要不要给薄片设厚度下限是设计判断（`PROP_CATALOG §2.4` 已量化）。
-3. **本图的成长兑现要按新门槛重算**：§9 的「≥1.25 m 吸长凳」在 2.20 上限下不成立（要 3.12 m）。整图要么把上限提到 3.20（(n)/`PROP_SET_PLAN` 的说法，但与本文件 `scale.ball_max_collision_diameter_m = 2.2` 及校验器的路线余量判据冲突，需要先拍板），要么把对角门改成非长凳的门件。
+3. **本图的成长兑现要按现行门槛重算**：§9 的「≥1.25 m 吸长凳」在 2.20 上限下不成立（要 2.77 m）。整图要么把上限提到 3.20（(n)/`PROP_SET_PLAN` 的说法，但与本文件 `scale.ball_max_collision_diameter_m = 2.2` 及校验器的路线余量判据冲突，需要先拍板），要么把对角门改成非长凳的门件。
 
 ### 18.3 为什么这次不改数据
 

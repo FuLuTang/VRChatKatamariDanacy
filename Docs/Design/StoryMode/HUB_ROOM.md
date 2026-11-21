@@ -103,7 +103,6 @@ Unity 侧（HubAssembler.Room）：
 - 切换语言后三块板各一张（英、日）。
 - 结果卡：Scene 视图俯视结算卡（从卡上方往下看，能看到卡根 BoxCollider 线框与两颗按钮的相对位置，确认按钮上没有单独的碰撞体），另一张骑手视角正面（Result 状态，两颗按钮与文字完整）；回大厅后视角同前；回大厅后蟹座卡片的记录行。
 
-Blender 预览（本机渲染，面板位置用奶油色平板代替，不代表 Unity 实际效果）：`/tmp/hub_art_overview.png`、`/tmp/hub_art_spawn_view.png`、`/tmp/hub_art_levels_{2,3}m.png`、`/tmp/hub_art_help_{2,3}m.png`、`/tmp/hub_art_settings_{2,3}m.png`。
 
 ## owner VR 复测
 

@@ -301,7 +301,7 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 面板同时给出：四档件数、可吸件的 `valueUnits` 合计、全关合计、D_req 直方图、
 「再大一点」候选。这是设计者的主反馈工具：每个尺寸档需要足够多的小件
 （见 [PROP_SET_PLAN](../StoryMode/PROP_SET_PLAN.md) 与
-`/tmp/growth_audit/repricing_proposal.md` 的分析），滑条让「某一档只剩 3 件」一眼可见。
+`Docs/Evidence/GrowthAudit/repricing_proposal.md` 的分析），滑条让「某一档只剩 3 件」一眼可见。
 
 ## 7.1 区域统计（2026-11-15 追加）
 

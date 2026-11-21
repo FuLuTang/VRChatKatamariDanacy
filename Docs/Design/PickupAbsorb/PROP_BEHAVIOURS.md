@@ -361,7 +361,7 @@
 
 本节记录所有者 2026-11-16 答复的现行结论：`kind`/`behaviour` 分列（§10.1）、纯重力坠落与落定不倾斜（§10.2）、`carry` 不在 v1（§10.3）、原作的组只有单父指针（§10.4），以及 v1 的堆叠形态——父件被吃 ⇒ 子件坠落，运行时每 tick 浮空复检（§10.9）。
 
-本节引用的原版数据表都在本机的数据挖掘目录（`~/KatamariRef/meta/`、`/tmp/orig_physics/`），**不入库**（同 `Docs/Design/Parity/PARITY_AUDIT.md` 卷首的约定）。表里的字段名是逐字抄的，计数是实测的；凡是我方解读而非原版明写的，按 §1 标 `[推断]`。
+本节引用的原版数据表都在本机的数据挖掘目录（`~/KatamariRef/meta/`；REROLL 数据挖掘导出表，本机保留、含原作数据，不入库），**不入库**（同 `Docs/Design/Parity/PARITY_AUDIT.md` 卷首的约定）。表里的字段名是逐字抄的，计数是实测的；凡是我方解读而非原版明写的，按 §1 标 `[推断]`。
 
 ### 10.0 术语表（先对齐词）
 
@@ -381,7 +381,7 @@
 
 #### 表 1 — 逐实例表 `object dump`（28,698 行、1,438 个类型 id、19 个任务）
 
-路径：`~/KatamariRef/meta/tables/raw_reroll_dump__object_dump.tsv`（逐字表头 17 列，见 `~/KatamariRef/meta/DATAMODEL_NOTES.md:60`、`/tmp/orig_physics/reroll_datamodel.md:66`）。
+路径：`~/KatamariRef/meta/tables/raw_reroll_dump__object_dump.tsv`（逐字表头 17 列，见 `~/KatamariRef/meta/DATAMODEL_NOTES.md:60`、`Docs/Evidence/OriginalPhysicsNotes/reroll_datamodel.md:66`）。
 
 | 列名（逐字） | 它是什么 | 实测取值与计数 |
 |---|---|---|
@@ -414,7 +414,7 @@
 
 #### 原版还有一层我们**没导出**的行为字段（重要缺口）
 
-同一个数据挖掘工具解析原始二进制时，逐实例记录里还有：`s16MoveTypeNo`（+0x04）、`u8LinkActNo`（+0x07）、`u8ExActTypeNo`（+0x08）、`u8LocPosType`（+0x02，固定位 vs 随机位）、`s8TwinsNo`（+0x0E）；逐类型定义里还有 `animated`（+0x1A）、`stayLevel`（+0x0C）、`speedIndex`（+0x13）、`altUpdate`（+0x14）、`dummyParent`（+0x21）、以及碰撞行里的 `category` / `size` / `sortKey`（`/tmp/orig_physics/noclip_bin.ts:1371-1383` 与 `:1057-1068`）。**这些列没有进那 20 张导出表** ⇒ 逐实例的「移动方式」在抽取表里查不到，我们只有逐类型的 `pathSpeedIndex`。这条是缺口，不是「原版没有」。
+同一个数据挖掘工具解析原始二进制时，逐实例记录里还有：`s16MoveTypeNo`（+0x04）、`u8LinkActNo`（+0x07）、`u8ExActTypeNo`（+0x08）、`u8LocPosType`（+0x02，固定位 vs 随机位）、`s8TwinsNo`（+0x0E）；逐类型定义里还有 `animated`（+0x1A）、`stayLevel`（+0x0C）、`speedIndex`（+0x13）、`altUpdate`（+0x14）、`dummyParent`（+0x21）、以及碰撞行里的 `category` / `size` / `sortKey`（noclip.website 公开解析器源码（第三方，不入库）1371-1383 行附近 与 `:1057-1068`）。**这些列没有进那 20 张导出表** ⇒ 逐实例的「移动方式」在抽取表里查不到，我们只有逐类型的 `pathSpeedIndex`。这条是缺口，不是「原版没有」。
 
 #### 所以我们的设计怎么落地
 
@@ -450,8 +450,8 @@
 | `object dump.parentProp.monoControlIndex` | **每件最多一个父件**（单指针，不是组 id）。1,970 条子件 / 1,082 个父件 / 单个父件最多 30 个子件；涉及 308 个不同父件名、380 个不同子件名 | `~/KatamariRef/meta/tables/raw_reroll_dump__object_dump.tsv`；`~/KatamariRef/meta/DATAMODEL_NOTES.md:60` |
 | **链（塔）确实存在** | 305 条子件自己也是父件；最深 **13 层**：Make Cygnus 有一摞 13 个蛋（`EGG07_B`×10 + `EGG06_B` + `EGG03_B` + `EGG05_B`），x/z 几乎相同、每层高 ~7.4 cm、总高 0.89 m —— 就是「一堆蛋」 | 同上，用 `parentProp` 反查链 + `position` |
 | 几何方向 | 子件在父件**上方**的占 75.1%（有坐标的 1,259 对里 946 对），中位高出 5.6 cm、水平偏 12 cm；433 条与父件坐标完全相同（附件式） | 同上，`position` |
-| 二进制里另有一张**独立的父列表** | 按 (关卡, 区域) 存的一串 int16 对，导出表没有它，是解析器直接读的 | `/tmp/orig_physics/noclip_bin.ts:1073-1090`（`getParentList`） |
-| 原作**游戏内证据**：子件跟着父件走、并且一起进账 | 「group objects… picking up the **parent** object automatically gives you the size from the **child** objects that are **moving with the parent**」 | `/tmp/orig_physics/doc.txt` 第 4 条（离群点解释，即 `raw_growth_mechanism.txt`） |
+| 二进制里另有一张**独立的父列表** | 按 (关卡, 区域) 存的一串 int16 对，导出表没有它，是解析器直接读的 | noclip.website 公开解析器源码（第三方，不入库）1073-1090 行附近（`getParentList`） |
+| 原作**游戏内证据**：子件跟着父件走、并且一起进账 | 「group objects… picking up the **parent** object automatically gives you the size from the **child** objects that are **moving with the parent**」 | 挖掘者的本机笔记（第三方，不入库） 第 4 条（离群点解释，即 `raw_growth_mechanism.txt`） |
 | **不存在**的字段（逐条确认） | 没有组 id；没有「组内序号」；没有 stack / tower / pile 这种记录类型（名字里只有 `TOWER01_G` / `DENTOWER_G` / `DENTOWER02_G` 三个塔类建筑，与堆叠无关）；没有逐件的「我在谁上面」以外的引用；没有逐件状态字段 | 35 张表表头 + 全表名检索 |
 | 同名但**无关**的「group」 | `random_groups`（随机刷新组）、`cygnus.random group`（同上）、`s8MonoCommentGroupNo`（图鉴批注分组）、`missions.MONO_GROUP` / `PROP_CATCH_A/B`（`GAME_Mxx_CATCH_A/B_nn`，是单人与双人场景名，不是道具组） | 各表表头；`raw_reroll_dump__missions.tsv` 实测 |
 | 社区表里的「stack / on top of」 | 只有 **40 行自由文本**（地点描述，如 "in a stack in the corner"、"on top of the marmalade"），散在 `location` 列里，不是字段 | `raw_reroll_dump__objects_1438__items_by_location.tsv` 的 `location` 列 |
@@ -463,9 +463,9 @@
 
 #### 原作的**逻辑**拿得到吗：拿不到，只有数据
 
-- 物理与吸附在**原生 DLL** `PS2KatamariSimulation.dll` 里，托管侧只有外壳；公开 mod（KatamariMods / RerollPatcher）只能挂钩 `PS2KatamariSimulation.GetPropMatrixFromSimulation` 和 `AttachableProp` **读矩阵**，不重写逻辑（`/tmp/orig_physics/prop.cs`；`/tmp/orig_physics/reroll_datamodel.md` §1.2）。
-- 速通用的 ASL 只读 `levelID / frames / size / stage` 四个值，没有任何物件状态（`/tmp/orig_physics/reroll.asl:1-12`）。
-- 调研没有反编译游戏 DLL（`/tmp/orig_physics/reroll_datamodel.md` 卷首与 §6「仍然不可见」）。
+- 物理与吸附在**原生 DLL** `PS2KatamariSimulation.dll` 里，托管侧只有外壳；公开 mod（KatamariMods / RerollPatcher）只能挂钩 `PS2KatamariSimulation.GetPropMatrixFromSimulation` 和 `AttachableProp` **读矩阵**，不重写逻辑（公开 mod 源码 `prop.cs`（第三方，不入库）；`Docs/Evidence/OriginalPhysicsNotes/reroll_datamodel.md` §1.2）。
+- 速通用的 ASL 只读 `levelID / frames / size / stage` 四个值，没有任何物件状态（公开速通脚本 `reroll.asl`，第三方，不入库）。
+- 调研没有反编译游戏 DLL（`Docs/Evidence/OriginalPhysicsNotes/reroll_datamodel.md` 卷首与 §6「仍然不可见」）。
 - `noclip_bin.ts` 是**渲染用**的解析器（自带 "until we know better"、"I don't understand yet" 这类注释），它证明的是数据布局，不是玩法逻辑。
 - **结论**：**能拿到的是数据（父指针、链、坐标、体积、速度档），拿不到的是逻辑（谁在什么时候判「我下面还有东西」）**。所以该假设只能作为**设计依据**成立，不能写成「原版就是这样」。
 
@@ -644,11 +644,11 @@ v1 的参考模型是 `floating_requeue.py`（父指针派生组、每 tick 浮�
 | P11 | 内容分类 = 81 个带名字的标签 `OT_CTG_001..081`（Vegetables / Fruit / … / Animals），编号与 `u8monoCategory` 数值一一对应；`0` = 未填（53.4% 的实例） | `[数据挖掘]` | `raw_reroll_dump__strings.tsv` 的 `OT_CTG_*`；分类计数见 §10.1 |
 | P12 | 形态类 `u8UnitType` 的 16 个值就是日文量词（個/人/匹/台/羽/本/足/冊/枚/島/棟/町/隻/機/基/箱），与内容分类正交；1,426/1,438 个类型与 `name_props_0x30` 的 `0x11` 一致 | `[数据挖掘]` + `[推断]` | `raw_reroll_dump__object_db.tsv` 的 `unitStrId` → `strings` 的 `UI_SYS_057..072` |
 | P13 | 「移动」在**逐类型**表里：`pathSpeedIndex` 11 个取值、`2` 为缺省（80.2% 的类型）、非缺省值集中在船/飞机/人/动物/车（8/8、5/5、88%、67%、30%），树/岛/楼/箱 0–4% | `[数据挖掘]`；「是速度档」为 `[推断]` | `raw_reroll_dump__name_props_0x30.tsv`；交叉统计见 §10.1 表 2 |
-| P14 | 逐实例的 `moveType` / `linkAct` / `exActType` / `locPosType` / `twinsNo` 与逐类型的 `animated` / `stayLevel` / `speedIndex` / `dummyParent` **存在但没进导出表** | `[数据挖掘]`（原始二进制解析） | `/tmp/orig_physics/noclip_bin.ts:1371-1383`（实例记录）、`:1057-1068`（类型定义） |
+| P14 | 逐实例的 `moveType` / `linkAct` / `exActType` / `locPosType` / `twinsNo` 与逐类型的 `animated` / `stayLevel` / `speedIndex` / `dummyParent` **存在但没进导出表** | `[数据挖掘]`（原始二进制解析） | noclip.website 公开解析器源码（第三方，不入库）1371-1383 行附近（实例记录）、`:1057-1068`（类型定义） |
 | P15 | 原版有「父指针」这种组关系：1,970 条子件 / 1,082 个父件 / 最多 30 个兄弟；**链最深 13 层**（Make Cygnus 一摞 13 个蛋，每层 ~7.4 cm）；75.1% 的子件在父件上方 | `[数据挖掘]` | `raw_reroll_dump__object_dump.tsv` 的 `parentProp.monoControlIndex` + `position` |
-| P16 | 二进制里另有一张按 (关卡, 区域) 存的**父列表**（int16 对），导出表没有它 | `[数据挖掘]`（解析器源码） | `/tmp/orig_physics/noclip_bin.ts:1073-1090`（`getParentList`） |
-| P17 | 原作**游戏内**：父件被吃时，**跟着父件动的子件一起进账**（`group` 物件解释体积高侧离群点） | `[社区]`（速通/数据挖掘者的机制笔记，非官方文档） | `/tmp/orig_physics/doc.txt` 第 4 条（= `raw_growth_mechanism.txt`） |
-| P18 | 原作的**逻辑拿不到**：物理/吸附在原生 `PS2KatamariSimulation.dll`；公开 mod 只挂钩读矩阵；ASL 只读 `levelID/frames/size/stage`；未反编译 DLL | — | `/tmp/orig_physics/reroll_datamodel.md` 卷首与 §1.2/§6；`/tmp/orig_physics/prop.cs`；`/tmp/orig_physics/reroll.asl:1-12` |
+| P16 | 二进制里另有一张按 (关卡, 区域) 存的**父列表**（int16 对），导出表没有它 | `[数据挖掘]`（解析器源码） | noclip.website 公开解析器源码（第三方，不入库）1073-1090 行附近（`getParentList`） |
+| P17 | 原作**游戏内**：父件被吃时，**跟着父件动的子件一起进账**（`group` 物件解释体积高侧离群点） | `[社区]`（速通/数据挖掘者的机制笔记，非官方文档） | 挖掘者的本机笔记（第三方，不入库） 第 4 条（= `raw_growth_mechanism.txt`） |
+| P18 | 原作的**逻辑拿不到**：物理/吸附在原生 `PS2KatamariSimulation.dll`；公开 mod 只挂钩读矩阵；ASL 只读 `levelID/frames/size/stage`；未反编译 DLL | — | `Docs/Evidence/OriginalPhysicsNotes/reroll_datamodel.md` 卷首与 §1.2/§6；公开 mod 源码 `prop.cs`（第三方，不入库）；公开速通脚本 `reroll.asl`（第三方，不入库） |
 | P19 | 导出表里**没有**：组 id、组内序号、stack/tower 记录类型、逐件状态字段；同名的 `MONO_GROUP` / `random_groups` / `s8MonoCommentGroupNo` 都不是道具组 | `[数据挖掘]`（逐列表头 + 全表名检索） | 35 张表表头；`raw_reroll_dump__missions.tsv` 的 `MONO_GROUP` = `GAME_Mxx_CATCH_B_01`（单人/双人场景名） |
 
 P15–P17 合起来的意义：**「组」这件事在原版数据里是存在的（父指针 + 链），但「组表」要从父指针派生，而且没有任何字段记录逐件状态**。所以「组表 + 每 tick 复检」假设（§10.4）与数据形状**相容**，只是「每 tick 复检」这一层**没有公开证据**（P18）。

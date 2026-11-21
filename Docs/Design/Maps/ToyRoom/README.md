@@ -439,7 +439,7 @@ python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/ToyRoom          # 通�
 python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/ToyRoom -v       # 附带逐区容量表
 python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn       # 另一张图也必须过
 python3 Tools/mapbuild/build_greybox.py --layout Docs/Design/Maps/ToyRoom/layout.json \
-        --catalog Docs/Design/Maps/ToyRoom/prop_catalog.csv --out /tmp/toy_room_greybox.json \
+        --catalog Docs/Design/Maps/ToyRoom/prop_catalog.csv --out .work/toy_room_greybox.json \
         --feasibility                                                    # 复用消费方契约复核容量
 ```
 

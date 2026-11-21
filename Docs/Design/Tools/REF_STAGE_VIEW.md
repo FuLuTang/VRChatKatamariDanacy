@@ -316,7 +316,7 @@ warning**，其中 511 条是派生列过期、367 对道具互穿（25 行 + "�
 
   ```bash
   python3 Tools/leveleditor/server.py --level _ref_cancer --port 8792 --host 127.0.0.1 \
-    --no-lock --state-dir /tmp/refviewer/state --token <token>
+    --no-lock --state-dir .work/refviewer/state --token <token>
   curl -s "http://127.0.0.1:8792/api/ref-stage/contact?t=0.1" -H "X-Editor-Token: <token>"
   curl -s "http://127.0.0.1:8792/api/ref-stage/transforms.json" -H "X-Editor-Token: <token>"
   ```

@@ -40,7 +40,7 @@ D_m(V)             = (6·V/π)^(1/3)（m）；D_mm = floor(1000·D + ε)
 
 **字节稳定性**：现有文件作为**输入**全部仍然合法（`valueUnits`/`expected.valueUnits` 读得进、校验不报错）。但 `canonical_doc` 的输出变了（去掉 `valueUnits`、加 `growthMm3`、`expected` 换键），所以**受版本管理的 placement.json 必须用写出器整体重生成**；重生成是确定性的（排序、舍入、派生列都由同一函数给出），同一份输入永远得到同一份字节。`_ref_*` 是本地只读参考，不进 git，不重生成（它们的派生列从起就已经是旧门的，读时会被校验器告 stale，属已知状态）。
 
-**total/expected 的后果**：`level.expected.valueUnits`（旧）被 `growthMm3`（新）取代；`propCount` 不变。**星级/目标不变**：关卡目标仍是**直径米**（`Docs/Design/GameModes/Levels/*.json` 的 target 是 m），不换算成 mm³。内容量对目标的兑换率变了，所以第一关 130 件全吃光只到 **1.398 m**（§7），不到原来的 2.20 m 上限——这是原作的成长速度，不是数据错误；星级带要等 T39 试玩重标（(p) 现阶段不调数值）。
+**total/expected 的后果**：`level.expected.valueUnits`（旧）被 `growthMm3`（新）取代；`propCount` 不变。**星级/目标不变**：关卡目标仍是**直径米**（`StoryRoundController.targetDiameterM` 是 m），不换算成 mm³。内容量对目标的兑换率变了，所以第一关 130 件全吃光只到 **1.398 m**（§7），不到原来的 2.20 m 上限——这是原作的成长速度，不是数据错误；星级带要等 T39 试玩重标（(p) 现阶段不调数值）。
 
 ## 3. 宿主 / 导入 / 同步的列名与责任
 

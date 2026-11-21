@@ -98,7 +98,7 @@ python3 Tools/levelbuild/levelbuild.py format Docs/Design/Levels/physics_test_fi
 # 逐格文档没有，所以预览用的是九格合并的临时文档，见设计 §2.2）
 source ~/tools/blender-env.sh
 "$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/render_views.py -- \
-    --placement /tmp/ptf/preview/placement.json --preset plan --out-dir /tmp/ptf/shots
+    --placement Docs/Evidence/PhysicsTestFieldPreview/placement.json --preset plan --out-dir .work/ptf/shots
 ```
 
 ## 加一格

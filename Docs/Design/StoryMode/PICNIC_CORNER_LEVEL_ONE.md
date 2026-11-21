@@ -353,7 +353,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **E8** | 斜板 | 球从坡脚上坡：`support=ramp`、`supportId` 落在斜面槽位、`center.y` 随坡上升；坡脚没有隐形墙（不会在坡前被挡）。两张截图：坡脚进入 / 坡顶接缝 |
 | **E9** | 限时结束与结算 | 120 s 到点 → `SettleRound` 冻结 → 卡面显示「呈给国王」→ 3 s 后星 / 直径 / 评语；`GetBankedScoreUnits() == 0`；HUD 隐藏。**重试按钮本轮不验**（F2）：它没有 Collider，uGUI 那条也没接 `EventSystem` |
 | **E10** | 方向指示与入座视点 | 推杆时 `PushDirectionCue` 指向球的前进方向（截图）；点球入座后眼点在球后上方、球在画面下前方不糊镜头；`[ride] seated entered` 一行 |
-| **E11** | 截图清单（存 `Docs/Evidence/StoryLevel/<日期>/`） | ① 场景视图顶视（与 `/tmp/corner_layout/corner_absorb.png` 对照）；② 球视角：起步 / 台顶 / 壁龛口；③ 撞墙帧；④ 上台阶帧（含 `gap` 读数）；⑤ P2 链三帧；⑥ HUD 三行；⑦ 结果卡；⑧ 斜板上坡帧 |
+| **E11** | 截图清单（存 `Docs/Evidence/StoryLevel/<日期>/`） | ① 场景视图顶视；② 球视角：起步 / 台顶 / 壁龛口；③ 撞墙帧；④ 上台阶帧（含 `gap` 读数）；⑤ P2 链三帧；⑥ HUD 三行；⑦ 结果卡；⑧ 斜板上坡帧 |
 
 **E 轮的已知风险**（不进判据，但要写进报告）：`startOnLoad = 0` 意味着回合要**坐上球**才开始，而 ClientSim 里的坐姿驱动本仓**没有验证过**（`HUB_LOOP_PLAN` §10 第 2 条）。若坐不上，临时把场景实例上的 `startOnLoad` 改成 1 跑一轮，**在报告里写明这是验收临时值**（不要提交）。
 

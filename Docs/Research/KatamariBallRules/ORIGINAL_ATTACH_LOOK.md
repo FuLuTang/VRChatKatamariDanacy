@@ -45,18 +45,18 @@
 | ID | 来源 | 级别 | 用到什么 |
 |---|---|---|---|
 | S1 | [US7402104B2（Google Patents）](https://patents.google.com/patent/US7402104B2/en) | `[专利原文]` | 三个模型；吸附在接触位置或其附近；吸附列表存局部原点位姿与吸附序号；10% 体积门；显示层级与视点；S50–S58、S20–S24 流程。本机原文提取 `/tmp/orig_physics/patent.txt`（双栏 PDF 文本提取，行序错位，本文只转述并核对上下句，未逐字对照 PDF 版式） |
-| S2 | 《块魂》2004 英文说明书 “Viewing the screen”（OCR 本机 `/tmp/orig_physics/kd_manual.txt`） | `[官方]` | HUD 是直径；直径到档位画面变；太大物件被撞会抖 |
+| S2 | 《块魂》2004 英文说明书 “Viewing the screen”（OCR 本机 本机 OCR 文本，不入库） | `[官方]` | HUD 是直径；直径到档位画面变；太大物件被撞会抖 |
 | S3 | [Game Developer：Postmortem: The Singular Design of Namco's Katamari Damacy](https://www.gamedeveloper.com/design/postmortem-the-singular-design-of-namco-s-katamari-damacy-2004-) | `[开发者]` | d4 |
 | S4 | [KatamariMods `FramerateUncap/Plugin.cs`](https://github.com/The0x539/KatamariMods/blob/trunk/FramerateUncap/Plugin.cs)、[RerollPatcher `PropInterpolationPatch.cs`](https://github.com/squiddingme/RerollPatcher/blob/master/Patches/PropInterpolationPatch.cs) | `[解包/源码]` | `f32Scale`、`AttachableProp`（REROLL 的字段名；不解释球芯是否缩放） |
-| S5 | [本机核心研究 E2/E3/E5](</tmp/core_radius_findings.md#L59-L62>)：`~/KatamariRef/models/KatamariCore/original/core_*.obj`、`~/KatamariRef/meta/pages/github_il_practice_mod_README.md` 第 87–89 行；[专利 US7402104B2](https://patents.google.com/patent/US7402104B2/en) | `[本机网格实测]` + `[文献]` | **core_XX 是按关卡命名的皮肤；网格相同、约 5 cm**。27 个 OBJ（01–29，无 26/27）包围盒约 4.8×4.9×5.4 cm、等体积径约 4.65 cm，几何相同或微变，非尺寸档；专利 Mp 是初始显示模型，S50–S58 无放大 Mp，仅放大 Mh、变形 Mr。原作关卡与核的对应关系未知。**相反证据**：REROLL 玩家观察说核会长大（“the 'core' grows and absorbs all the objects”，[Steam 讨论](https://steamcommunity.com/app/848350/discussions/0/3561682880003061934/)，玩家观察，非实测）。网格相同只说明皮肤不按尺寸分档，不说明运行时显示缩放固定；录像 5.0→6.9 cm 段内未见变化，全程是否固定未定（b1 录像覆盖限制） |
+| S5 | [本机核心研究 E2/E3/E5](<Docs/Evidence/CoreRadius/core_radius_findings.md#L59-L62>)：`~/KatamariRef/models/KatamariCore/original/core_*.obj`、`~/KatamariRef/meta/pages/github_il_practice_mod_README.md` 第 87–89 行；[专利 US7402104B2](https://patents.google.com/patent/US7402104B2/en) | `[本机网格实测]` + `[文献]` | **core_XX 是按关卡命名的皮肤；网格相同、约 5 cm**。27 个 OBJ（01–29，无 26/27）包围盒约 4.8×4.9×5.4 cm、等体积径约 4.65 cm，几何相同或微变，非尺寸档；专利 Mp 是初始显示模型，S50–S58 无放大 Mp，仅放大 Mh、变形 Mr。原作关卡与核的对应关系未知。**相反证据**：REROLL 玩家观察说核会长大（“the 'core' grows and absorbs all the objects”，[Steam 讨论](https://steamcommunity.com/app/848350/discussions/0/3561682880003061934/)，玩家观察，非实测）。网格相同只说明皮肤不按尺寸分档，不说明运行时显示缩放固定；录像 5.0→6.9 cm 段内未见变化，全程是否固定未定（b1 录像覆盖限制） |
 | S6 | [日文 wiki 物件页](https://wikiwiki.jp/yawaka802/%E3%83%A2%E3%83%8E/%E3%83%97%E3%83%A9%E3%82%B9%E3%83%89%E3%83%A9%E3%82%A4%E3%83%90%E3%83%BC)、[5ch 帖](https://itest.5ch.io/krsw/test/read.cgi/ghard/1575809255)、[Vita 攻略](https://w.atwiki.jp/touchmykatamari/pages/24.html) | `[社区]` | d5 |
 | S7 | [B 站 BV14A411K7os「块魂/Katamari Damacy p01 第1~11关」](https://www.bilibili.com/video/BV14A411K7os/)（UP 主 Barry・吴；初代 PS2 美版，PCSX2，480p） | `[录像实测]` | a1、a3–a5、b1–b2、b4、c1、d3、e1；A 段 4:12–6:02（5.0→10.2 cm）、B 段约 13:15–14:50（5.1→约 10 cm）、C 段约 14:54–19:30（11.0→33.8 cm，HUD 连续） |
 | S8 | 本项目归档的两帧原作截图（[证据目录](../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)；第三方录像截图，内部证据，不入公开发布物） | `[实测画面]` | 叠压、凸出、轮廓；14.0 / 14.9 cm；画面里的物件名标签与 HUD 样式像 REROLL，来源未核实 |
 
 ## 本文改正了前人哪些读法
 
-1. **“深处物件按埋多深判消隐”不是原作的规则。** `/tmp/orig_physics/report.md` §10.6 的“件心 < 0.85 r_core 不渲染”是我们自己的设计；原作的消隐键是摄像机档位上的物件相对大小。
-2. **“球芯半径 0.95·r_phys、随体积长大”的 0.95 比例不是原作测得值。** 录像在 5.0→6.9 cm 段内未见核心变化（b1），之后核心被盖住无法再量，全程是否固定未定（见开放问题 5）；REROLL 玩家观察核会长大（S5）。`/tmp/orig_physics/report.md` §10.3/§10.6 的“核心随体积长大”与旧的 `r_visual = 0.95·r_phys` 都是推断。现行项目规则是核等体积直径 = 当前碰撞直径，是项目自己的决定，不是原作实测。
+1. **“深处物件按埋多深判消隐”不是原作的规则。** `Docs/Evidence/OriginalPhysicsNotes/report.md` §10.6 的“件心 < 0.85 r_core 不渲染”是我们自己的设计；原作的消隐键是摄像机档位上的物件相对大小。
+2. **“球芯半径 0.95·r_phys、随体积长大”的 0.95 比例不是原作测得值。** 录像在 5.0→6.9 cm 段内未见核心变化（b1），之后核心被盖住无法再量，全程是否固定未定（见开放问题 5）；REROLL 玩家观察核会长大（S5）。`Docs/Evidence/OriginalPhysicsNotes/report.md` §10.3/§10.6 的“核心随体积长大”与旧的 `r_visual = 0.95·r_phys` 都是推断。现行项目规则是核等体积直径 = 当前碰撞直径，是项目自己的决定，不是原作实测。
 3. **“原作没有拉到球面的步骤”要拆开读。** 专利无拉近步骤，但**接触位置本身**由物件碰撞模型决定，物件表面接触球的碰撞盒时才粘。我们当前的触发是“球半径 + 物件外接球半径（中心到中心）”，比“表面接触”松，这才是悬浮的来源（设计文档 §1）。
 4. **簇外径 / HUD 的两个读数矛盾**（b4）：不要在任何设计里把 2.5 或 1.15 当定值。
 

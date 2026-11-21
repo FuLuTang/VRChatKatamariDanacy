@@ -1,0 +1,1604 @@
+{
+  "schema": "katamari.placement/0",
+  "level": {
+    "id": "physics_test_field_preview",
+    "scene": "PhysicsTestField",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ballDiameterStart": 0.3,
+    "ballDiameterMax": 2.2,
+    "bounds": [
+      [
+        -14.0,
+        -15.0
+      ],
+      [
+        14.0,
+        16.5
+      ]
+    ],
+    "spawnClearanceM": 0.5,
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "blocking": 6,
+      "propSupports": 6
+    },
+    "expected": {
+      "propCount": 0,
+      "valueUnits": 0
+    },
+    "arena": {
+      "id": "physics_test_field_preview",
+      "notes": "merged nine-cell compact preview; not committed"
+    }
+  },
+  "props": [],
+  "structures": [
+    {
+      "id": "C14_plate",
+      "kind": "plate",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -10.5,
+        0.014,
+        -10.0
+      ],
+      "size": [
+        3.0,
+        0.028,
+        3.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "0.028 m plate: the P1 thin-piece case; compact pad, 1.5 m runway before the plate"
+    },
+    {
+      "id": "C14_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.0,
+        -10.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        9.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C14_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -7.5,
+        0.2,
+        -10.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C14_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -13.5,
+        0.2,
+        -10.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C14_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.2,
+        -5.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C14_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.2,
+        -14.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C08_step",
+      "kind": "step",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -10.5,
+        0.025,
+        0.0
+      ],
+      "size": [
+        4.0,
+        0.05,
+        1.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "step rise 0.050 m; south face at z=-0.75, 2.75 m runway from the start"
+    },
+    {
+      "id": "C08_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        9.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C08_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -7.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C08_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -13.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C08_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.2,
+        4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C08_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.2,
+        -4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C09_step",
+      "kind": "step",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -3.5,
+        0.0375,
+        0.0
+      ],
+      "size": [
+        4.0,
+        0.075,
+        1.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "step rise 0.075 m; south face at z=-0.75, 2.75 m runway from the start"
+    },
+    {
+      "id": "C09_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        -3.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        9.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C09_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -0.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C09_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -6.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C09_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -3.5,
+        0.2,
+        4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C09_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -3.5,
+        0.2,
+        -4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C10_step",
+      "kind": "step",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        3.5,
+        0.05,
+        0.0
+      ],
+      "size": [
+        4.0,
+        0.1,
+        1.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "step rise 0.100 m; south face at z=-0.75, 2.75 m runway from the start"
+    },
+    {
+      "id": "C10_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        3.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        9.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C10_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        6.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C10_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C10_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        3.5,
+        0.2,
+        4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C10_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        3.5,
+        0.2,
+        -4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C06_ramp",
+      "kind": "ramp_probe",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        10.5,
+        0.2357,
+        -1.6717
+      ],
+      "size": [
+        4.0,
+        0.2,
+        0.7832
+      ],
+      "rotationQuat": [
+        -0.422618,
+        0.0,
+        0.0,
+        0.906308
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "50 deg board authored as a box (the authoring gate refuses role=ramp over 45 deg); its world AABB is the fallback wall, and the criteria importer bakes its +Y face so the driver can ask motor.AddRamp and read the refusal"
+    },
+    {
+      "id": "C06_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        10.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        9.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C06_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        13.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C06_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        7.5,
+        0.2,
+        0.0
+      ],
+      "size": [
+        9.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C06_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        10.5,
+        0.2,
+        4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C06_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        10.5,
+        0.2,
+        -4.5
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C01_ramp",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        -10.5,
+        0.2801,
+        11.0308
+      ],
+      "size": [
+        4.0,
+        0.04,
+        6.8842
+      ],
+      "rotationQuat": [
+        -0.043619,
+        0.0,
+        0.0,
+        0.999048
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "meets": "C01_top",
+      "notes": "walking surface is local +Y; the 4 cm board hangs below it"
+    },
+    {
+      "id": "C01_top",
+      "kind": "landing",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -10.5,
+        0.3,
+        15.208
+      ],
+      "size": [
+        4.0,
+        0.6,
+        1.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "top landing at 0.600, butted to the ramp top edge"
+    },
+    {
+      "id": "C01_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.0,
+        11.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        10.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C01_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -7.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C01_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -13.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C01_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.2,
+        16.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C01_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -10.5,
+        0.2,
+        6.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C03_ramp",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        -3.5,
+        0.2819,
+        8.2518
+      ],
+      "size": [
+        4.0,
+        0.04,
+        1.4197
+      ],
+      "rotationQuat": [
+        -0.21644,
+        0.0,
+        0.0,
+        0.976296
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "meets": "C03_top",
+      "notes": "walking surface is local +Y; the 4 cm board hangs below it"
+    },
+    {
+      "id": "C03_top",
+      "kind": "landing",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -3.5,
+        0.3,
+        9.6367
+      ],
+      "size": [
+        4.0,
+        0.6,
+        1.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "top landing at 0.600, butted to the ramp top edge"
+    },
+    {
+      "id": "C03_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        -3.5,
+        0.0,
+        11.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        10.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C03_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -0.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C03_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -6.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C03_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -3.5,
+        0.2,
+        16.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C03_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -3.5,
+        0.2,
+        6.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C05_ramp",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        3.5,
+        0.2859,
+        7.9141
+      ],
+      "size": [
+        4.0,
+        0.04,
+        0.8485
+      ],
+      "rotationQuat": [
+        -0.382683,
+        0.0,
+        0.0,
+        0.92388
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "meets": "C05_top",
+      "notes": "walking surface is local +Y; the 4 cm board hangs below it"
+    },
+    {
+      "id": "C05_top",
+      "kind": "landing",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        3.5,
+        0.3,
+        8.95
+      ],
+      "size": [
+        4.0,
+        0.6,
+        1.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "top landing at 0.600, butted to the ramp top edge"
+    },
+    {
+      "id": "C05_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        3.5,
+        0.0,
+        11.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        10.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C05_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        6.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C05_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C05_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        3.5,
+        0.2,
+        16.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C05_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        3.5,
+        0.2,
+        6.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C13_deck",
+      "kind": "plateau",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        10.5,
+        0.3,
+        12.0
+      ],
+      "size": [
+        5.0,
+        0.6,
+        4.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "0.6 m plateau; the ramp arrives at its south face (z=10), the north edge (z=14) is the square drop"
+    },
+    {
+      "id": "C13_ramp",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        10.5,
+        0.2804,
+        8.5039
+      ],
+      "size": [
+        5.0,
+        0.04,
+        3.0594
+      ],
+      "rotationQuat": [
+        -0.098538,
+        0.0,
+        0.0,
+        0.995133
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "meets": "C13_deck",
+      "notes": "walking surface is local +Y; the 4 cm board hangs below it"
+    },
+    {
+      "id": "C13_ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        10.5,
+        0.0,
+        11.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        10.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
+    },
+    {
+      "id": "C13_wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        13.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C13_wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        7.5,
+        0.2,
+        11.0
+      ],
+      "size": [
+        10.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C13_wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        10.5,
+        0.2,
+        16.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    },
+    {
+      "id": "C13_wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        10.5,
+        0.2,
+        6.0
+      ],
+      "size": [
+        6.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
+    }
+  ],
+  "cameras": [
+    {
+      "id": "top",
+      "type": "ortho_top",
+      "location": [
+        0.0,
+        60.0,
+        0.75
+      ],
+      "target": [
+        0.0,
+        0.0,
+        0.75
+      ],
+      "coverage_m": 34.0
+    },
+    {
+      "id": "overview_3q",
+      "type": "perspective",
+      "location": [
+        34.0,
+        34.0,
+        -30.0
+      ],
+      "target": [
+        0.0,
+        0.2,
+        0.5
+      ],
+      "lens": 50
+    }
+  ],
+  "renderPresets": [
+    {
+      "id": "plan",
+      "camera": "top",
+      "engine": "WORKBENCH",
+      "res": [
+        1200,
+        1200
+      ]
+    },
+    {
+      "id": "overview",
+      "camera": "overview_3q",
+      "engine": "WORKBENCH",
+      "res": [
+        1280,
+        720
+      ]
+    }
+  ]
+}

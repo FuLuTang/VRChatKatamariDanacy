@@ -42,7 +42,7 @@
 | ID | 来源 | 级别 | 用到什么 |
 |---|---|---|---|
 | S1 | [US7402104B2](https://patents.google.com/patent/US7402104B2/en) | `[专利]` | 行进参数含惯性；最大速度与加速度随体积增大；上坡速度门；加速器与刹车按键 |
-| S2 | 初代 2004 英文手册、WLK 英文手册（OCR 本机 `/tmp/orig_physics/kd_manual.txt`、`wlk_manual.txt`，逐字符空格需去除后检索） | `[官方]` | Brake、Dash、原地旋转、「brake wisely」 |
+| S2 | 初代 2004 英文手册、WLK 英文手册（OCR 本机 本机 OCR 文本，不入库，逐字符空格需去除后检索） | `[官方]` | Brake、Dash、原地旋转、「brake wisely」 |
 | S3 | [REROLL Speedrun Notes · Boosts](https://shookietea.github.io/reroll-notes/mechanics/boosts/boosts/) | `[社区]` | gacha 计数、冲刺门槛、能量与 huff 数值 |
 | S4 | [KatamariMods FramerateUncap](https://github.com/The0x539/KatamariMods/blob/trunk/FramerateUncap/Plugin.cs) | `[解包/源码]` | 模拟 tick 1/30 s，原生库 |
 | S5 | B 站 BV14A411K7os（见上） | `[录像弱]` | 起停时间 |

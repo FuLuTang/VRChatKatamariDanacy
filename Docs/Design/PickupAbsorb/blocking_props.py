@@ -74,7 +74,7 @@ def try_box_from_centre_and_extents(centre, extents) -> Optional[Bounds]:
     """由中心与全尺寸算最小/最大角；负尺寸、非有限值和不可表示的结果都拒绝。
 
     宿主没有 collider 时用它把 `propBounds` 变成挡路盒，公式就是
-    `position ± bounds / 2`（BLOCKING_PROPS_PLAN §5.3）。零尺寸是合法的点盒。
+    `position ± bounds / 2`（`PickupFieldHost.UpdatePropObstacles`）。零尺寸是合法的点盒。
     """
     centre_v = _finite_vector(centre)
     extents_v = _finite_vector(extents)
@@ -94,7 +94,7 @@ def try_distance_to_box(point, minimum, maximum) -> Optional[float]:
     """点到轴对齐盒的距离；盒内（含表面）= 0。
 
     这是挡路筛选的度量：3 m 长凳的中心可能在 1.6 m 外，近面却在 0.1 m 外，
-    所以用"球心到盒"而不是中心距（BLOCKING_PROPS_PLAN §2 A）。倒置盒
+    所以用"球心到盒"而不是中心距（球心到 AABB 的距离，不是中心距）。倒置盒
     （minimum > maximum）是数据错，拒绝；零尺寸的点盒合法。
     """
     point_v = _finite_vector(point)
@@ -141,7 +141,7 @@ def select_nearest(ball_centre, radius_m, minima, maxima, candidate, count,
                    ) -> Optional[Tuple[Tuple[int, ...], Tuple[float, ...]]]:
     """按 AABB 距离选出本帧要注册为挡路盒的道具，返回 (下标, 距离)。
 
-    规则（BLOCKING_PROPS_PLAN §5.1、§6）：
+    规则（与 `BlockingPropMath.SelectNearest` 一致）：
 
     1. 只有 `candidate[i]` 为真且 `i < count` 的条目参与。
     2. 上一批 `previous_indices[0:previous_count]` 里仍在

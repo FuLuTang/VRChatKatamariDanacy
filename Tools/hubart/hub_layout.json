@@ -1,118 +1,437 @@
 {
- "schema": "katamari.hub-layout/2",
- "notes": "Hub-local Unity metres: origin HubCenter, +Y up, +Z north (left-handed). A board's readable side faces its local -Z; yawDeg turns it about +Y. Tools/hubart/build_hub_room.py builds the room model from this file: floor, walls, decor, each board's coloured frame (size + frame margin), legs and bolts, and one Anchor_Board_<id> empty at the board's canvas plane (canvasDepthM in front of the board plane). The board panels themselves are the prefabs Assets/VRC_Katamari/Prefabs/Hub/HubBoard_<id>.prefab (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md); Editor/Hub/HubAssembler.Room.cs instantiates them at the anchor pose (scale canvasMetresPerUnit) and wires them.",
+ "schema": "katamari.hub-layout/3",
+ "notes": "Hub-local Unity metres: origin HubCenter, +Y up, +Z north (left-handed). A board's readable side faces its local -Z; yawDeg turns it about +Y. Tools/hubart/build_hub_room.py builds the room model from this file: floor, walls, decor, each board's frame (size + frame margin), legs and bolts, and one Anchor_Board_<id> empty at the board's canvas plane (canvasDepthM in front of the board plane). The board panels themselves are the prefabs Assets/VRC_Katamari/Prefabs/Hub/HubBoard_<id>.prefab (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md); Editor/Hub/HubAssembler.Room.cs instantiates them at the anchor pose (scale canvasMetresPerUnit) and wires them. Surfaces: the room's materials (one Art/Hub/Materials/<name>.mat each, built by the assembler with the shader below): colour (sRGB, multiplied over the texture), smoothness, and optionally a texture from 'textures' with the metres one copy of it covers (the model's UVs are in metres, so the material tiling is 1 / metresPerTile). Textures and sprites: import settings the assembler applies to each file under Art/Hub (sprite border = left, bottom, right, top in pixels).",
  "canvasMetresPerUnit": 0.001,
  "canvasDepthM": 0.06,
  "model": {
   "fbx": "Assets/VRC_Katamari/Art/Hub/HubRoomArt.fbx",
   "rootName": "HubRoomArt"
  },
- "palette": [
+ "shader": "Standard",
+ "surfaces": [
   {
-   "name": "Hub_Cream",
+   "name": "Hub_FloorWood",
    "rgb": [
-    1.0,
-    0.96,
-    0.86
+    1,
+    1,
+    1
+   ],
+   "smoothness": 0.25,
+   "texture": "HubFloor_HoneyWood",
+   "metresPerTile": 1.6
+  },
+  {
+   "name": "Hub_RugFelt",
+   "rgb": [
+    1,
+    1,
+    1
+   ],
+   "smoothness": 0.05,
+   "texture": "HubFloor_SageFelt",
+   "metresPerTile": 1.0
+  },
+  {
+   "name": "Hub_Terrazzo",
+   "rgb": [
+    1,
+    1,
+    1
+   ],
+   "smoothness": 0.3,
+   "texture": "HubFloor_Terrazzo",
+   "metresPerTile": 1.2
+  },
+  {
+   "name": "Hub_WallPlaster",
+   "rgb": [
+    1,
+    1,
+    1
+   ],
+   "smoothness": 0.1,
+   "texture": "HubWall_Plaster",
+   "metresPerTile": 1.0
+  },
+  {
+   "name": "Hub_FrameWood",
+   "rgb": [
+    1,
+    1,
+    1
+   ],
+   "smoothness": 0.2,
+   "texture": "HubFloor_HoneyWood",
+   "metresPerTile": 1.6
+  },
+  {
+   "name": "Hub_Walnut",
+   "rgb": [
+    0.549,
+    0.4157,
+    0.2902
+   ],
+   "smoothness": 0.2,
+   "texture": "HubFloor_HoneyWood",
+   "metresPerTile": 1.6
+  },
+  {
+   "name": "Hub_Oat",
+   "rgb": [
+    0.7961,
+    0.7529,
+    0.651
+   ],
+   "smoothness": 0.1
+  },
+  {
+   "name": "Hub_Paper",
+   "rgb": [
+    0.9255,
+    0.8902,
+    0.8118
+   ],
+   "smoothness": 0.1
+  },
+  {
+   "name": "Hub_Slate",
+   "rgb": [
+    0.2039,
+    0.2118,
+    0.1843
+   ],
+   "smoothness": 0.15
+  },
+  {
+   "name": "Hub_Brick",
+   "rgb": [
+    0.7059,
+    0.3804,
+    0.2902
+   ],
+   "smoothness": 0.15
+  },
+  {
+   "name": "Hub_Sage",
+   "rgb": [
+    0.5333,
+    0.6353,
+    0.4941
+   ],
+   "smoothness": 0.1
+  },
+  {
+   "name": "Hub_Lake",
+   "rgb": [
+    0.3843,
+    0.5608,
+    0.6353
+   ],
+   "smoothness": 0.15
+  },
+  {
+   "name": "Hub_Gold",
+   "rgb": [
+    0.9098,
+    0.7569,
+    0.298
+   ],
+   "smoothness": 0.25
+  }
+ ],
+ "textures": [
+  {
+   "name": "HubFloor_HoneyWood",
+   "file": "Assets/VRC_Katamari/Art/Hub/Textures/HubFloor_HoneyWood.png",
+   "maxSize": 1024,
+   "anisoLevel": 2
+  },
+  {
+   "name": "HubFloor_SageFelt",
+   "file": "Assets/VRC_Katamari/Art/Hub/Textures/HubFloor_SageFelt.png",
+   "maxSize": 512,
+   "anisoLevel": 2
+  },
+  {
+   "name": "HubFloor_Terrazzo",
+   "file": "Assets/VRC_Katamari/Art/Hub/Textures/HubFloor_Terrazzo.png",
+   "maxSize": 1024,
+   "anisoLevel": 2
+  },
+  {
+   "name": "HubWall_Plaster",
+   "file": "Assets/VRC_Katamari/Art/Hub/Textures/HubWall_Plaster.png",
+   "maxSize": 512,
+   "anisoLevel": 1
+  }
+ ],
+ "sprites": [
+  {
+   "name": "HubCard_Normal",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubCard_Normal.png",
+   "maxSize": 128,
+   "border": [
+    40,
+    40,
+    40,
+    40
    ]
   },
   {
-   "name": "Hub_Pink",
-   "rgb": [
-    1.0,
-    0.55,
-    0.72
+   "name": "HubCard_Highlighted",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubCard_Highlighted.png",
+   "maxSize": 128,
+   "border": [
+    40,
+    40,
+    40,
+    40
    ]
   },
   {
-   "name": "Hub_Sky",
-   "rgb": [
-    0.42,
-    0.78,
-    1.0
+   "name": "HubCard_Pressed",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubCard_Pressed.png",
+   "maxSize": 128,
+   "border": [
+    40,
+    40,
+    40,
+    40
    ]
   },
   {
-   "name": "Hub_Lemon",
-   "rgb": [
-    1.0,
-    0.86,
-    0.25
+   "name": "HubCard_Disabled",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubCard_Disabled.png",
+   "maxSize": 128,
+   "border": [
+    40,
+    40,
+    40,
+    40
    ]
   },
   {
-   "name": "Hub_Mint",
-   "rgb": [
-    0.45,
-    0.88,
-    0.66
+   "name": "HubButtonGo_Normal",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonGo_Normal.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Grape",
-   "rgb": [
-    0.62,
-    0.45,
-    0.95
+   "name": "HubButtonGo_Highlighted",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonGo_Highlighted.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Tomato",
-   "rgb": [
-    1.0,
-    0.38,
-    0.3
+   "name": "HubButtonGo_Pressed",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonGo_Pressed.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Navy",
-   "rgb": [
-    0.13,
-    0.17,
-    0.38
+   "name": "HubButtonGo_Disabled",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonGo_Disabled.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_White",
-   "rgb": [
-    0.98,
-    0.98,
-    0.97
+   "name": "HubButtonVersus_Normal",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonVersus_Normal.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Wood",
-   "rgb": [
-    0.86,
-    0.62,
-    0.38
+   "name": "HubButtonVersus_Highlighted",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonVersus_Highlighted.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Orange",
-   "rgb": [
-    1.0,
-    0.62,
-    0.22
+   "name": "HubButtonVersus_Pressed",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonVersus_Pressed.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Leaf",
-   "rgb": [
-    0.36,
-    0.72,
-    0.3
+   "name": "HubButtonVersus_Disabled",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonVersus_Disabled.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
    ]
   },
   {
-   "name": "Hub_Peach",
-   "rgb": [
-    1.0,
-    0.84,
-    0.72
+   "name": "HubButtonPlain_Normal",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonPlain_Normal.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
+   ]
+  },
+  {
+   "name": "HubButtonPlain_Highlighted",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonPlain_Highlighted.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
+   ]
+  },
+  {
+   "name": "HubButtonPlain_Pressed",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonPlain_Pressed.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
+   ]
+  },
+  {
+   "name": "HubButtonPlain_Disabled",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubButtonPlain_Disabled.png",
+   "maxSize": 256,
+   "border": [
+    56,
+    40,
+    56,
+    40
+   ]
+  },
+  {
+   "name": "HubRounded",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubRounded.png",
+   "maxSize": 128,
+   "border": [
+    48,
+    48,
+    48,
+    48
+   ]
+  },
+  {
+   "name": "HubStrip_Story",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubStrip_Story.png",
+   "maxSize": 512,
+   "border": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "name": "HubStrip_Versus",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubStrip_Versus.png",
+   "maxSize": 512,
+   "border": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "name": "HubBadge_Versus",
+   "file": "Assets/VRC_Katamari/Art/Hub/Sprites/HubBadge_Versus.png",
+   "maxSize": 256,
+   "border": [
+    0,
+    0,
+    0,
+    0
    ]
   }
  ],
+ "cardPreviews": {
+  "notes": "Placeholder thumbnail colour per level id (sRGB), written by the assembler onto LevelCard_i/Preview until each level has a screenshot sprite; a level not listed takes 'story' or 'versus' by its mode.",
+  "story": [
+   0.6157,
+   0.6863,
+   0.4863
+  ],
+  "versus": [
+   0.6392,
+   0.5647,
+   0.5333
+  ],
+  "levels": {
+   "_ref_cancer": [
+    0.8235,
+    0.7608,
+    0.6039
+   ],
+   "story_01_bench_size": [
+    0.5608,
+    0.6863,
+    0.4314
+   ],
+   "physics_test_field": [
+    0.651,
+    0.6392,
+    0.6
+   ],
+   "terrain_contact_lab": [
+    0.7608,
+    0.6275,
+    0.3765
+   ],
+   "_ref_wlk_vs2": [
+    0.651,
+    0.502,
+    0.4314
+   ],
+   "_ref_vs00": [
+    0.6039,
+    0.5412,
+    0.5176
+   ]
+  }
+ },
  "boards": [
   {
    "id": "Levels",
@@ -126,8 +445,8 @@
     6.4,
     2.7
    ],
-   "face": "Hub_Cream",
-   "frame": "Hub_Pink"
+   "face": "Hub_Paper",
+   "frame": "Hub_FrameWood"
   },
   {
    "id": "Help",
@@ -141,8 +460,8 @@
     3.2,
     2.3
    ],
-   "face": "Hub_Cream",
-   "frame": "Hub_Sky"
+   "face": "Hub_Slate",
+   "frame": "Hub_Slate"
   },
   {
    "id": "Settings",
@@ -156,8 +475,8 @@
     3.2,
     2.3
    ],
-   "face": "Hub_Cream",
-   "frame": "Hub_Mint"
+   "face": "Hub_Paper",
+   "frame": "Hub_FrameWood"
   }
  ],
  "spawnLocal": [

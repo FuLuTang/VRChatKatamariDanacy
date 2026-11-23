@@ -16,9 +16,11 @@ space transform, FBX_SCALE_UNITS), the same as Docs/Art/OriginalModels/props/scr
 That mapping is a mirror, so the script checks it with an asymmetric probe instead of trusting
 it: the export's import-side check is the Unity operator's (HUB_ROOM.md, anchors read back).
 
-Everything is generated here from primitive shapes and flat colours - no reference-game
-asset, no texture file. Materials are named Hub_<colour>; the FBX carries the names only and
-the Unity assembler builds the matching materials.
+Everything is generated here from primitive shapes - no reference-game asset. Materials are
+named after the layout's surfaces (hub_layout.json "surfaces", e.g. Hub_FloorWood); the FBX
+carries the names and metre UVs only (UV0 = world metres, see metre_uvs) and the Unity
+assembler builds the matching materials with the surfaces' colours, tiling textures and
+smoothness. The preview renders load the same textures (after the export).
 """
 
 import json
@@ -242,32 +244,28 @@ def sphere(name, radius, center_u, mat, parent=None):
 # ------------------------------------------------------------------------------ room ---
 
 def build(layout):
+    """Direction 1 ("warm wood and paper"): every surface is one of the layout's surfaces
+    (hub_layout.json "surfaces"; textures tile on the metre UVs set by metre_uvs)."""
     global ROOT, COLL
-    pal = {e["name"]: srgb_to_linear(e["rgb"]) for e in layout["palette"]}
-    M = {k: material(k, v) for k, v in pal.items()}
+    M = {e["name"]: material(e["name"], srgb_to_linear(e["rgb"]), rough=1.0 - e.get("smoothness", 0.2))
+         for e in layout["surfaces"]}
     COLL = bpy.data.collections.new("HubRoomArt")
     bpy.context.scene.collection.children.link(COLL)
     ROOT = bpy.data.objects.new(layout["model"]["rootName"], None)
     COLL.objects.link(ROOT)
 
-    # Floor: cream base with a checker of big pastel tiles, inset 1 cm so the imported
-    # placement floor (hub_floor, 4 cm slab at y=0) stays the walkable collider.
-    box("Floor", [ROOM_W, 0.02, ROOM_D], [0, 0.021, 0], M["Hub_Cream"])
-    tile = 1.6
-    colours = ["Hub_Peach", "Hub_Sky", "Hub_Lemon", "Hub_Mint"]
-    nx, nz = int(ROOM_W / tile), int(ROOM_D / tile)
-    k = 0
-    for ix in range(nx):
-        for iz in range(nz):
-            if (ix + iz) % 2:
-                continue
-            cx = -ROOM_W / 2 + tile * (ix + 0.5)
-            cz = -ROOM_D / 2 + tile * (iz + 0.5)
-            box("FloorTile_%02d" % k, [tile - 0.04, 0.004, tile - 0.04], [cx, 0.033, cz],
-                M[colours[(ix // 2 + iz) % 4]])
-            k += 1
+    # Floor: honey wood planks, inset 1 cm so the imported placement floor (hub_floor, 4 cm
+    # slab at y=0) stays the walkable collider.
+    box("Floor", [ROOM_W, 0.02, ROOM_D], [0, 0.021, 0], M["Hub_FloorWood"])
+    # Reading rug in front of the level board (sage felt): the solo players' area.
+    lv = next(b for b in layout["boards"] if b["id"] == "Levels")
+    rug_w = lv["size"][0] - 0.8
+    box("ReadingRug", [rug_w, 0.012, 2.6], [lv["center"][0], 0.037, lv["center"][2] - 1.75],
+        M["Hub_RugFelt"], bevel=0.004)
+    box("ReadingRugEdge", [rug_w + 0.12, 0.008, 2.72], [lv["center"][0], 0.034, lv["center"][2] - 1.75],
+        M["Hub_Walnut"])
 
-    # Walls: two-tone (pink lower band, sky upper), wood skirting, white cornice.
+    # Walls: lime plaster, walnut skirting and chair rail, oat cornice.
     walls = [("North", [0, 0, ROOM_D / 2], [ROOM_W, 0, 0.1]),
              ("South", [0, 0, -ROOM_D / 2], [ROOM_W, 0, 0.1]),
              ("West", [-ROOM_W / 2, 0, 0], [0.1, 0, ROOM_D]),
@@ -279,28 +277,19 @@ def build(layout):
                   else 0], s) for n, c, s in walls]
     for name, c, s in walls:
         sx, sz = (s[0], 0.08) if s[0] > 1 else (0.08, s[2])
-        box("Wall%s_Lower" % name, [sx, 1.1, sz], [c[0], 0.55, c[2]], M["Hub_Pink"])
-        box("Wall%s_Upper" % name, [sx, WALL_H - 1.1, sz], [c[0], 1.1 + (WALL_H - 1.1) / 2, c[2]],
-            M["Hub_Sky"])
-        box("Wall%s_Skirt" % name, [sx + 0.04, 0.14, sz + 0.04], [c[0], 0.07, c[2]], M["Hub_Wood"])
-        box("Wall%s_Rail" % name, [sx + 0.06, 0.07, sz + 0.06], [c[0], 1.12, c[2]], M["Hub_White"])
+        box("Wall%s" % name, [sx, WALL_H, sz], [c[0], WALL_H / 2, c[2]], M["Hub_WallPlaster"])
+        box("Wall%s_Skirt" % name, [sx + 0.04, 0.16, sz + 0.04], [c[0], 0.08, c[2]], M["Hub_Walnut"])
+        box("Wall%s_Rail" % name, [sx + 0.05, 0.06, sz + 0.05], [c[0], 1.05, c[2]], M["Hub_Walnut"])
         box("Wall%s_Cornice" % name, [sx + 0.08, 0.12, sz + 0.08], [c[0], WALL_H - 0.06, c[2]],
-            M["Hub_White"])
-    # Polka dots on the upper walls of the south side, for the behind-you view.
-    dot_cols = ["Hub_Lemon", "Hub_White", "Hub_Pink", "Hub_Mint"]
-    for i in range(14):
-        x = -7.0 + i * 1.07
-        y = 1.6 + (0.45 if i % 2 else 0.0)
-        d = cylinder("WallSouth_Dot_%02d" % i, 0.16, 0.02, [x, y, -ROOM_D / 2 + 0.06],
-                     M[dot_cols[i % 4]], 20)
-        d.rotation_euler = Euler((math.radians(90), 0, 0))
+            M["Hub_Oat"])
 
     # ---- boards ----
-    # The model carries only each board's coloured frame, legs and corner bolts. The panel
-    # itself (face, title band, cards, rows, text, buttons) is a world-space uGUI prefab
+    # The model carries only each board's frame and legs. The panel itself (face, title band,
+    # cards, rows, text, buttons) is a world-space uGUI prefab
     # (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md) that the Unity assembler places at
     # Anchor_Board_<id>: the board's centre, canvasDepthM in front of the board plane, just in
-    # front of the frame's front face (frame depth 0.10 -> front face at 0.05).
+    # front of the frame's front face (frame depth 0.10 -> front face at 0.05). A clickable
+    # board has a wooden frame; a read-only screen (Help) has a thin slate one.
     # Anchors are direct children of the root, never grandchildren: with
     # bake_space_transform the 4.0 exporter converts a node's transform by its parent's
     # *converted* local matrix, so the axis change is applied once for a root child and lost
@@ -309,41 +298,23 @@ def build(layout):
     canvas_depth = layout["canvasDepthM"]
     for b in layout["boards"]:
         w, h = b["size"]
-        frame = rounded_panel("Board%s_Frame" % b["id"], w + 0.24, h + 0.24, 0.10, 0.22,
-                              M[b["frame"]], ROOT)
+        screen = b["frame"] == "Hub_Slate"
+        margin = 0.08 if screen else 0.24
+        frame = rounded_panel("Board%s_Frame" % b["id"], w + margin, h + margin, 0.10,
+                              0.06 if screen else 0.22, M[b["frame"]], ROOT)
         place_on_board(frame, b, 0, 0, 0.0)
         empty("Anchor_Board_%s" % b["id"], b, 0, 0, canvas_depth, w, h, ROOT)
-        # Feet / brackets so the boards stand, not float.
+        # Feet so the boards stand, not float.
         for side in (-1, 1):
             leg = box("Board%s_Leg%s" % (b["id"], "L" if side < 0 else "R"),
                       [0.12, b["center"][1] - h / 2, 0.12],
-                      [0, 0, 0], M["Hub_Wood"], bevel=0.02)
+                      [0, 0, 0], M["Hub_Walnut"], bevel=0.02)
             p = board_point(b, side * (w / 2 - 0.4), 0, -0.02)
             leg.location = u2b([p.x, (b["center"][1] - h / 2) / 2, p.z])
-        # Sun-burst bolts in the frame corners, outside the panel.
-        for i, (sx, sy) in enumerate([(-1, 1), (1, 1), (-1, -1), (1, -1)]):
-            bolt = sphere("Board%s_Bolt%d" % (b["id"], i), 0.06, [0, 0, 0], M["Hub_Lemon"])
-            bolt.location = u2b(board_point(b, sx * (w / 2 + 0.06), sy * (h / 2 + 0.06), 0.07))
 
-    # ---- decor: bunting along the side and back walls, a katamari, plants, lamps ----
-    flag_cols = ["Hub_Tomato", "Hub_Orange", "Hub_Lemon", "Hub_Mint", "Hub_Sky", "Hub_Grape"]
-    runs = [([-7.9, 2.62, -3.9], [7.9, 2.62, -3.9]), ([-7.9, 2.62, -3.6], [-7.9, 2.62, 1.0]),
-            ([7.9, 2.62, -3.6], [7.9, 2.62, 1.0])]
-    k = 0
-    for p0, p1 in runs:
-        a0, a1 = Vector(p0), Vector(p1)
-        n = max(2, int((a1 - a0).length / 0.55))
-        for j in range(n):
-            q0 = a0.lerp(a1, (j + 0.1) / n)
-            q1 = a0.lerp(a1, (j + 0.9) / n)
-            sag = 0.10 * math.sin(math.pi * (j + 0.5) / n)
-            tip = (q0 + q1) / 2 + Vector((0, -0.34 - sag, 0))
-            q0 = q0 + Vector((0, -sag, 0))
-            q1 = q1 + Vector((0, -sag, 0))
-            flat_triangle("Bunting_%02d" % k, q0, q1, tip, M[flag_cols[k % 6]])
-            k += 1
-    ball_cols = ["Hub_Pink", "Hub_Lemon", "Hub_Sky", "Hub_Mint", "Hub_Grape", "Hub_Orange"]
-    core = sphere("DecorBall_Core", 0.42, [-6.6, 0.47, -2.6], M["Hub_Mint"])
+    # ---- decor: a katamari, plants, paper lamps; small muted accents only ----
+    ball_cols = ["Hub_Brick", "Hub_Gold", "Hub_Lake", "Hub_Paper", "Hub_Sage", "Hub_Walnut"]
+    sphere("DecorBall_Core", 0.42, [-6.6, 0.47, -2.6], M["Hub_Oat"])
     for k in range(16):
         a = k * 2.399963
         z = 1 - 2 * (k + 0.5) / 16
@@ -354,35 +325,48 @@ def build(layout):
         else:
             sphere("DecorBall_Bit%02d" % k, 0.09, p, M[ball_cols[k % 6]])
     for k, (x, z) in enumerate([(-7.3, 3.3), (7.3, 3.3), (-7.3, -3.3), (7.3, -3.3)]):
-        cylinder("Plant%d_Pot" % k, 0.22, 0.4, [x, 0.2, z], M["Hub_Tomato"])
-        sphere("Plant%d_Leaves" % k, 0.36, [x, 0.72, z], M["Hub_Leaf"])
-        sphere("Plant%d_Leaves2" % k, 0.24, [x + 0.12, 1.02, z - 0.05], M["Hub_Leaf"])
-    # Ceiling lamps (emissive in Blender only; Unity lighting is the assembler's).
+        cylinder("Plant%d_Pot" % k, 0.22, 0.4, [x, 0.2, z], M["Hub_Brick"])
+        sphere("Plant%d_Leaves" % k, 0.36, [x, 0.72, z], M["Hub_Sage"])
+        sphere("Plant%d_Leaves2" % k, 0.24, [x + 0.12, 1.02, z - 0.05], M["Hub_Sage"])
+    # Paper pendant lamps (emissive in Blender only; Unity lighting is the assembler's).
     lamp_mat = material("Hub_LampGlow", srgb_to_linear([1.0, 0.95, 0.8]), emit=2.0)
     for k, lp in enumerate(layout["lampsLocal"]):
-        cylinder("Lamp%d_Shade" % k, 0.35, 0.18, [lp[0], 2.85, lp[2]], M["Hub_Lemon"])
+        cylinder("Lamp%d_Shade" % k, 0.35, 0.18, [lp[0], 2.85, lp[2]], M["Hub_Paper"])
         sphere("Lamp%d_Bulb" % k, 0.14, [lp[0], 2.72, lp[2]], lamp_mat)
-    # Spawn mark: a welcome star on the floor where the player appears.
+    # Spawn mark: a terrazzo disc inlaid in the floor with a small gold star.
     sp = layout["spawnLocal"]
-    star = star_mesh("SpawnStar", 0.42, 0.2, M["Hub_Lemon"])
-    star.location = u2b([sp[0], 0.04, sp[2]])
+    cylinder("SpawnDisc", 0.55, 0.012, [sp[0], 0.037, sp[2]], M["Hub_Terrazzo"], 40)
+    cylinder("SpawnDiscRim", 0.6, 0.008, [sp[0], 0.034, sp[2]], M["Hub_Walnut"], 40)
+    star = star_mesh("SpawnStar", 0.26, 0.12, M["Hub_Gold"])
+    star.location = u2b([sp[0], 0.044, sp[2]])
     return boards
 
 
-def flat_triangle(name, p0_u, p1_u, p2_u, mat):
-    """One-sided triangle (Unity points) whose front faces the room centre."""
-    me = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    vs = [bm.verts.new(u2b(p)) for p in (p0_u, p1_u, p2_u)]
-    f = bm.faces.new(vs)
-    bm.normal_update()
-    centre = (vs[0].co + vs[1].co + vs[2].co) / 3
-    if f.normal.dot(u2b([0, 1.5, 0]) - centre) < 0:
-        f.normal_flip()
-    bm.to_mesh(me)
-    bm.free()
-    me.materials.append(mat)
-    return link(bpy.data.objects.new(name, me))
+def metre_uvs():
+    """UV0 of every mesh = its world position in metres, projected along the face's dominant
+    axis (floors and ceilings: x/z, walls: the wall's own horizontal axis and height). The
+    materials tile 1 / metresPerTile per UV unit, so a texture keeps its size on every surface
+    and lines up across neighbouring objects."""
+    bpy.context.view_layer.update()
+    for ob in COLL.all_objects:
+        if ob.type != "MESH":
+            continue
+        me = ob.data
+        uv = me.uv_layers.active or me.uv_layers.new(name="UVMap")
+        mw = ob.matrix_world
+        rot = mw.to_3x3()
+        for poly in me.polygons:
+            n = rot @ poly.normal
+            ax, ay, az = abs(n.x), abs(n.y), abs(n.z)
+            for li in poly.loop_indices:
+                co = mw @ me.vertices[me.loops[li].vertex_index].co
+                if az >= ax and az >= ay:      # Blender z is up: floor / ceiling
+                    u, v = co.x, co.y
+                elif ax >= ay:                 # faces along Blender x
+                    u, v = co.y, co.z
+                else:                          # faces along Blender y
+                    u, v = co.x, co.z
+                uv.data[li].uv = (u, v)
 
 
 def star_mesh(name, r_out, r_in, mat):
@@ -410,12 +394,13 @@ def star_mesh(name, r_out, r_in, mat):
 # --------------------------------------------------------------------------- preview ---
 
 def preview_panels(layout, boards):
-    """Flat cream rectangles where the panel prefabs go, preview only (Unity draws the panels)."""
-    pal = {e["name"]: srgb_to_linear(e["rgb"]) for e in layout["palette"]}
-    cream = material("Preview_Panel", pal["Hub_Cream"])
+    """Flat rectangles in each board's face colour where the panel prefabs go, preview only
+    (Unity draws the panels)."""
+    pal = {e["name"]: srgb_to_linear(e["rgb"]) for e in layout["surfaces"]}
     for b in layout["boards"]:
         w, h = b["size"]
-        face = rounded_panel("PreviewPanel_%s" % b["id"], w, h, 0.002, 0.16, cream, None)
+        face_mat = material("Preview_Face_" + b["face"], pal[b["face"]])
+        face = rounded_panel("PreviewPanel_%s" % b["id"], w, h, 0.002, 0.16, face_mat, None)
         COLL.objects.unlink(face)
         bpy.context.scene.collection.objects.link(face)
         face.parent = None
@@ -438,6 +423,36 @@ def render(path, cam_u, look_u, lens, samples, res=(1600, 900)):
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print("[hubart] preview " + path)
+
+
+def preview_textures(layout):
+    """Preview only, after the FBX export: give the textured surfaces their image (tiled on the
+    metre UVs), so the renders show what Unity will draw. The exported FBX carries material
+    names only; the assembler builds the real materials."""
+    tex = {t["name"]: t["file"] for t in layout.get("textures", [])}
+    for e in layout["surfaces"]:
+        m = MATERIALS.get(e["name"])
+        if m is None or not e.get("texture"):
+            continue
+        path = os.path.join(REPO, "VRChatKatamariDanacyUnity", tex[e["texture"]])
+        if not os.path.exists(path):
+            continue
+        nodes, links = m.node_tree.nodes, m.node_tree.links
+        bsdf = nodes.get("Principled BSDF")
+        img = nodes.new("ShaderNodeTexImage")
+        img.image = bpy.data.images.load(path, check_existing=True)
+        coord = nodes.new("ShaderNodeTexCoord")
+        mapping = nodes.new("ShaderNodeMapping")
+        k = 1.0 / e["metresPerTile"]
+        mapping.inputs["Scale"].default_value = (k, k, 1.0)
+        tint = nodes.new("ShaderNodeMixRGB")
+        tint.blend_type = "MULTIPLY"
+        tint.inputs["Fac"].default_value = 1.0
+        tint.inputs["Color2"].default_value = tuple(srgb_to_linear(e["rgb"])) + (1.0,)
+        links.new(coord.outputs["UV"], mapping.inputs["Vector"])
+        links.new(mapping.outputs["Vector"], img.inputs["Vector"])
+        links.new(img.outputs["Color"], tint.inputs["Color1"])
+        links.new(tint.outputs["Color"], bsdf.inputs["Base Color"])
 
 
 def setup_render(samples):
@@ -516,6 +531,7 @@ def main():
         bpy.data.objects.remove(ob, do_unlink=True)
     check_handedness()
     boards = build(layout)
+    metre_uvs()
     meshes = sum(1 for o in COLL.all_objects if o.type == "MESH")
     anchors = sum(1 for o in COLL.all_objects if o.name.startswith("Anchor_"))
     tris = 0
@@ -530,6 +546,7 @@ def main():
         print("[hubart] joined into %d mesh objects" % meshes)
         export_fbx(a["fbx"])
     if a["preview_on"]:
+        preview_textures(layout)
         setup_render(a["samples"])
         preview_panels(layout, boards)
         d = a["preview_dir"]

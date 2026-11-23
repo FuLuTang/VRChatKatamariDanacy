@@ -108,7 +108,8 @@ namespace VRCKatamari.Editor.Hub
 
             RemoveLegacyPanel(c);
             Dictionary<string, Material> materials = EnsureArtMaterials(layout, c);
-            AssembleRoomArt(layout, center, materials, c);
+            Transform art = AssembleRoomArt(layout, center, materials, c);
+            RemoveStaleArtMaterials(layout, art, c);
             AssembleRoomLights(layout, center, c);
             EnsureEventSystem(c);
 
@@ -181,6 +182,10 @@ namespace VRCKatamari.Editor.Hub
                         number.text = (i + 1).ToString();
                         c.Changed++;
                     }
+                    bool versus = offered[i].Entry != null && offered[i].Entry.IsVersus;
+                    ApplyCardLook(card, versus, c);
+                    ApplyCardPreview(card, layout.CardPreviewColor(offered[i].Entry != null ? offered[i].Entry.id : null,
+                        versus), c);
                 }
             }
 
@@ -203,7 +208,9 @@ namespace VRCKatamari.Editor.Hub
                     WireSettingArrow(row, "Less", parts.Settings, c);
                     WireSettingArrow(row, "More", parts.Settings, c);
                 }
+                CheckPanelSprites(settingsBoard, c);
             }
+            CheckPanelSprites(levels, c);
 
             // Display wiring.
             if (parts.Display != null)
@@ -274,6 +281,147 @@ namespace VRCKatamari.Editor.Hub
             WireStoreListeners(parts, c);
             MarkDirty();
             return parts;
+        }
+
+        // ---- level card look (HUB_PANEL_PREFAB.md「方向一外观」): a story card and a versus card are
+        // the same prefab card; the versus one shows VersusBadge, the striped edge strip and the
+        // brick start pill, the story one its number disc, the sage strip and the tomato pill.
+        internal const string CardStoryStripName = "StoryStrip";
+        internal const string CardVersusStripName = "VersusStrip";
+        internal const string CardVersusBadgeName = "VersusBadge";
+        internal const string CardNumberDiscName = "NumberDisc";
+        internal const string CardNumberName = "Number";
+        internal const string CardStartPillName = "StartPill";
+        internal const string CardVersusPillName = "VersusPill";
+        internal static readonly string[] CardLookChildren =
+        {
+            CardStoryStripName, CardVersusStripName, CardVersusBadgeName, CardNumberDiscName,
+            CardNumberName, CardStartPillName, CardVersusPillName,
+        };
+
+        /// <summary>
+        /// Which of a card's look children are on: a versus card shows its badge, striped strip
+        /// and brick pill; a story card its sage strip, number disc and number, and tomato pill.
+        /// Pure, for tests.
+        /// </summary>
+        internal static bool CardChildActive(string childName, bool versus)
+        {
+            switch (childName)
+            {
+                case CardVersusStripName:
+                case CardVersusBadgeName:
+                case CardVersusPillName:
+                    return versus;
+                case CardStoryStripName:
+                case CardNumberDiscName:
+                case CardNumberName:
+                case CardStartPillName:
+                    return !versus;
+                default:
+                    return true;
+            }
+        }
+
+        // Instance overrides like the card's other scene data; a card prefab without the look
+        // children (built before direction 1) is a PROBLEM pointing at the spec, not rebuilt.
+        private static void ApplyCardLook(Transform card, bool versus, Counters c)
+        {
+            foreach (string name in CardLookChildren)
+            {
+                Transform child = card.Find(name);
+                if (child == null)
+                {
+                    c.Problems.Add(card.name + "/" + name + " is missing from " + PanelPrefabPath("Levels")
+                        + " (HUB_PANEL_PREFAB.md, level card look)");
+                    continue;
+                }
+                bool on = CardChildActive(name, versus);
+                if (child.gameObject.activeSelf != on)
+                {
+                    Undo.RecordObject(child.gameObject, "Level card look");
+                    child.gameObject.SetActive(on);
+                    c.Changed++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Prefix of every direction-1 panel sprite (<c>Art/Hub/Sprites/Hub*.png</c>). A panel
+        /// Image or Button sprite state that still uses Unity's built-in <c>UISprite</c> or no
+        /// sprite is a leftover of the old look.
+        /// </summary>
+        internal const string PanelSpritePrefix = "Hub";
+
+        /// <summary>True when a sprite name is one of ours (direction 1), not the built-in UISprite or none.</summary>
+        internal static bool IsPanelSprite(string spriteName)
+        {
+            return !string.IsNullOrEmpty(spriteName)
+                && spriteName.StartsWith(PanelSpritePrefix, StringComparison.Ordinal);
+        }
+
+        // Read-back only (the prefab is the operator's): every Image on the board and every
+        // Button's sprite states must use the direction-1 sprites. One PROBLEM per board, naming
+        // the count and the first offender, so an old look cannot pass assembly unnoticed.
+        private static void CheckPanelSprites(Transform board, Counters c)
+        {
+            if (board == null) return;
+            int bad = 0;
+            string first = null;
+            foreach (Image image in board.GetComponentsInChildren<Image>(true))
+            {
+                string name = image.sprite != null ? image.sprite.name : "";
+                if (IsPanelSprite(name)) continue;
+                bad++;
+                if (first == null) first = PanelPath(board, image.transform) + " (" + (name.Length > 0 ? name : "no sprite") + ")";
+            }
+            foreach (Button button in board.GetComponentsInChildren<Button>(true))
+            {
+                if (button.transition != Selectable.Transition.SpriteSwap)
+                {
+                    bad++;
+                    if (first == null) first = PanelPath(board, button.transform) + " (transition " + button.transition + ")";
+                    continue;
+                }
+                SpriteState st = button.spriteState;
+                foreach (Sprite sprite in new[] { st.highlightedSprite, st.pressedSprite, st.disabledSprite })
+                {
+                    if (IsPanelSprite(sprite != null ? sprite.name : "")) continue;
+                    bad++;
+                    if (first == null) first = PanelPath(board, button.transform) + " (sprite state)";
+                    break;
+                }
+            }
+            if (bad > 0)
+            {
+                c.Problems.Add(board.name + ": " + bad + " Image/Button(s) still have the old look (first: " + first
+                    + "); restyle per HUB_PANEL_PREFAB.md「方向一外观」");
+            }
+        }
+
+        private static string PanelPath(Transform root, Transform t)
+        {
+            string path = t.name;
+            for (Transform p = t.parent; p != null && p != root; p = p.parent) path = p.name + "/" + path;
+            return path;
+        }
+
+        // Placeholder thumbnail: the card's Preview Image takes the level's colour from
+        // hub_layout.json cardPreviews (an instance override, like the card's number) until the
+        // level has a screenshot sprite.
+        private static void ApplyCardPreview(Transform card, Color color, Counters c)
+        {
+            Transform t = card.Find("Preview");
+            Image preview = t == null ? null : t.GetComponent<Image>();
+            if (preview == null)
+            {
+                c.Problems.Add(card.name + "/Preview is not an Image in " + PanelPrefabPath("Levels")
+                    + " (HUB_PANEL_PREFAB.md, level card)");
+                return;
+            }
+            if (preview.color == color) return;
+            Undo.RecordObject(preview, "Level card preview colour");
+            preview.color = color;
+            c.Changed++;
         }
 
         private static Transform Board(RoomParts parts, string id)
@@ -399,27 +547,41 @@ namespace VRCKatamari.Editor.Hub
                     AssetDatabase.CreateFolder("Assets/VRC_Katamari/Art", "Hub");
                 AssetDatabase.CreateFolder("Assets/VRC_Katamari/Art/Hub", "Materials");
             }
-            Shader shader = Shader.Find("Standard");
-            foreach (KeyValuePair<string, Color> pair in layout.Palette)
+            Shader shader = Shader.Find(layout.ShaderName);
+            if (shader == null)
             {
-                string path = ArtMaterialFolder + "/" + pair.Key + ".mat";
+                c.Problems.Add("hub layout shader '" + layout.ShaderName + "' is not in the project");
+                shader = Shader.Find("Standard");
+            }
+            foreach (HubRoomLayout.Surface surface in layout.Surfaces.Values)
+            {
+                string path = ArtMaterialFolder + "/" + surface.Name + ".mat";
                 var m = AssetDatabase.LoadAssetAtPath<Material>(path);
                 if (m == null)
                 {
-                    m = new Material(shader) { name = pair.Key };
+                    m = new Material(shader) { name = surface.Name };
                     AssetDatabase.CreateAsset(m, path);
                     c.Created++;
                 }
-                if (m.color != pair.Value || m.GetFloat("_Glossiness") != 0.25f)
+                Texture2D texture = null;
+                HubRoomLayout.TextureSpec spec;
+                if (!string.IsNullOrEmpty(surface.Texture) && layout.Textures.TryGetValue(surface.Texture, out spec))
                 {
-                    m.color = pair.Value;
-                    m.SetFloat("_Glossiness", 0.25f);
-                    m.SetFloat("_Metallic", 0f);
+                    texture = AssetDatabase.LoadAssetAtPath<Texture2D>(spec.File);
+                    if (texture == null)
+                    {
+                        c.Problems.Add("hub surface '" + surface.Name + "' texture " + spec.File
+                            + " is not imported (sync the repository and let Unity import it)");
+                    }
+                }
+                if (ApplySurface(m, shader, surface, texture))
+                {
                     EditorUtility.SetDirty(m);
                     c.Changed++;
                 }
-                result[pair.Key] = m;
+                result[surface.Name] = m;
             }
+
             string glowPath = ArtMaterialFolder + "/Hub_LampGlow.mat";
             var glow = AssetDatabase.LoadAssetAtPath<Material>(glowPath);
             if (glow == null)
@@ -434,6 +596,74 @@ namespace VRCKatamari.Editor.Hub
             result["Hub_LampGlow"] = glow;
             AssetDatabase.SaveAssets();
             return result;
+        }
+
+        /// <summary>
+        /// Writes one surface onto its material (shader, colour, smoothness, metal 0, texture
+        /// and metre tiling); true when anything changed. A surface without a texture clears it.
+        /// </summary>
+        internal static bool ApplySurface(Material m, Shader shader, HubRoomLayout.Surface surface,
+            Texture2D texture)
+        {
+            bool changed = false;
+            if (m.shader != shader) { m.shader = shader; changed = true; }
+            if (m.color != surface.Color) { m.color = surface.Color; changed = true; }
+            if (m.HasProperty("_Glossiness") && !Mathf.Approximately(m.GetFloat("_Glossiness"), surface.Smoothness))
+            {
+                m.SetFloat("_Glossiness", surface.Smoothness);
+                changed = true;
+            }
+            if (m.HasProperty("_Metallic") && m.GetFloat("_Metallic") != 0f)
+            {
+                m.SetFloat("_Metallic", 0f);
+                changed = true;
+            }
+            if (m.mainTexture != texture) { m.mainTexture = texture; changed = true; }
+            Vector2 tiling = texture != null ? surface.Tiling : Vector2.one;
+            if (m.mainTextureScale != tiling) { m.mainTextureScale = tiling; changed = true; }
+            if (m.mainTextureOffset != Vector2.zero) { m.mainTextureOffset = Vector2.zero; changed = true; }
+            return changed;
+        }
+
+        /// <summary>
+        /// Deletes the <c>Hub_*.mat</c> files the layout no longer names (an older palette), but
+        /// only once the room model uses nothing else: while the model still carries an old
+        /// material name, its material is kept so the room keeps drawing until the FBX is rebuilt.
+        /// </summary>
+        internal static void RemoveStaleArtMaterials(HubRoomLayout layout, Transform art, Counters c)
+        {
+            if (art == null || !AssetDatabase.IsValidFolder(ArtMaterialFolder)) return;
+            var used = new HashSet<string>(StringComparer.Ordinal);
+            foreach (MeshRenderer r in art.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                foreach (Material m in r.sharedMaterials)
+                {
+                    if (m != null) used.Add(m.name.Replace(" (Instance)", ""));
+                }
+            }
+            var unknown = new List<string>();
+            foreach (string name in used)
+            {
+                if (!layout.Surfaces.ContainsKey(name) && name != "Hub_LampGlow") unknown.Add(name);
+            }
+            if (unknown.Count > 0)
+            {
+                unknown.Sort(StringComparer.Ordinal);
+                c.Problems.Add("the hub art model uses material(s) that are not surfaces of "
+                    + HubRoomLayout.RepoRelativePath + ": " + string.Join(", ", unknown.ToArray())
+                    + " (rebuild the model with Tools/hubart/build_hub_room.py)");
+                return;
+            }
+            foreach (string guid in AssetDatabase.FindAssets("t:Material", new[] { ArtMaterialFolder }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                string name = Path.GetFileNameWithoutExtension(path);
+                if (layout.Surfaces.ContainsKey(name) || name == "Hub_LampGlow") continue;
+                if (!name.StartsWith("Hub_", StringComparison.Ordinal)) continue;
+                AssetDatabase.DeleteAsset(path);
+                c.Changed++;
+                c.Notes.Add("deleted the old hub material " + path + " (not a surface any more)");
+            }
         }
 
         internal static Transform AssembleRoomArt(HubRoomLayout layout, Transform center,

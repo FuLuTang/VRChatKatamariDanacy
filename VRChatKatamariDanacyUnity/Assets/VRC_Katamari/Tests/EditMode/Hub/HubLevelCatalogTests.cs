@@ -43,6 +43,7 @@ namespace VRCKatamari.Tests
             object level = Level(catalog, 0);
             Assert.AreEqual("story", Field(level, "id"));
             Assert.AreEqual("round", Field(level, "kind"));
+            Assert.AreEqual("story", Field(level, "mode"));
             Assert.AreEqual(false, Field(level, "allowAbort"));
             Assert.AreEqual(true, Field(level, "stars"));
             Assert.IsNull(Field(level, "source"));
@@ -204,6 +205,20 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void AVersusModeIsReadAndAnUnknownModeIsAnErrorNamingTheLevel()
+        {
+            string versus = "{'id':'vs','name':'VS','scenes':['H'],'content':'C','kind':'freeRoam','mode':'versus'}";
+            object level = Level(ParseOk(Wrap("'levels':[" + versus + "]")), 0);
+            Assert.AreEqual("versus", Field(level, "mode"));
+            Assert.AreEqual("freeRoam", Field(level, "kind"));
+
+            string odd = "{'id':'lab','name':'Lab','scenes':['H'],'content':'C','entry':'E','mode':'coop'}";
+            List<string> errors = ParseFail(Wrap("'levels':[" + odd + "]"));
+            AssertAnyContains(errors, "'lab'");
+            AssertAnyContains(errors, "mode");
+        }
+
+        [Test]
         public void AnIslandOffsetWithNonZeroYIsAnError()
         {
             List<string> errors = ParseFail(MultiLevelJson().Replace("'offset':[0,0,0]", "'offset':[0,3,0]"));
@@ -320,6 +335,10 @@ namespace VRCKatamari.Tests
                 (string[])Field(hub, "levels"));
             Assert.AreEqual(6, ((Array)Field(catalog, "levels")).Length);
             Assert.AreEqual(6, CallExpectedCardCount(catalog, "AllMapsHub"));
+            var versus = new List<string>();
+            foreach (object level in (Array)Field(catalog, "levels"))
+                if ((string)Field(level, "mode") == "versus") versus.Add((string)Field(level, "id"));
+            CollectionAssert.AreEquivalent(new[] { "_ref_wlk_vs2", "_ref_vs00" }, versus);
         }
 
         [Test]

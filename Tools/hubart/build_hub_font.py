@@ -43,8 +43,13 @@ SOURCE_INDEX = 2  # 简体中文版 Noto Sans CJK Bold
 SOURCE_LICENCE = "/usr/share/doc/fonts-noto-cjk/copyright"
 FAMILY = "HubPanelSans"
 SETTINGS_ARROWS = "◀▶"
-# 本次指定保留的 33 字中，下面这些不来自当前结算卡正文；只保留这些字，不扫描进行中 HUD。
-REQUIRED_EXTRA = "余击剩去坐当流程第"
+# 指定保留、但不来自上面生成源的字（不扫描进行中 HUD）：
+#   结算卡正文用字：余击剩去坐当流程第
+#   大厅第一批面板设计稿（.work 设计稿 hub_batch1：对战卡、对战屏、准备区、观战、翻页）的新字与
+#   「2–4 人」的连接号；这些文案还没进 HubPanelTextMath，写进代码后可从这里删掉重复的字。
+REQUIRED_EXTRA = ("余击剩去坐当流程第"
+                  "交人他传位其分剧加名圈备定情战扣条瞰站观走跟送钟锁闲随项鸟"
+                  "–")
 # 本次只补字：保留旧字符集已有、当前生成源不再提供的码位，避免共享字体回退。
 LEGACY_EXTRA = "松離"
 

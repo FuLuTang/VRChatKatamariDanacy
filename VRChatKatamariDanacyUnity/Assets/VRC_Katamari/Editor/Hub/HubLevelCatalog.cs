@@ -40,7 +40,7 @@ namespace VRCKatamari.Editor.Hub
     /// </para>
     /// <para>
     /// Schema. <c>katamari.hub-levels/0</c> (one scene, one level) and <c>/1</c> (adds
-    /// <c>hubs[]</c> and the per-level <c>kind</c>, <c>allowAbort</c>, <c>stars</c>,
+    /// <c>hubs[]</c> and the per-level <c>kind</c>, <c>mode</c>, <c>allowAbort</c>, <c>stars</c>,
     /// <c>source</c>, <c>island</c>, <c>start</c>, <c>round</c>, <c>arenaFirst</c>) are both
     /// accepted; every added field is optional and an absent one means today's single-level
     /// behaviour. Unknown fields are ignored, so a newer file still loads. The text is read
@@ -57,6 +57,11 @@ namespace VRCKatamari.Editor.Hub
 
         public const string KindRound = "round";
         public const string KindFreeRoam = "freeRoam";
+
+        /// <summary>Default <c>mode</c>: a story / practice map (the level card's story look).</summary>
+        public const string ModeStory = "story";
+        /// <summary>A versus map: the level card wears the versus look (VERSUS badge, striped edge).</summary>
+        public const string ModeVersus = "versus";
 
         public sealed class RoomBlock
         {
@@ -117,8 +122,13 @@ namespace VRCKatamari.Editor.Hub
             public string entry;
             public bool roundFromPlacement;
 
-            /// <summary><c>round</c> (default) or <c>freeRoam</c>.</summary>
+            /// <summary><c>round</c> (default) or <c>freeRoam</c>: how the level is played today.</summary>
             public string kind = KindRound;
+            /// <summary>
+            /// <c>story</c> (default) or <c>versus</c>: what kind of map it is, independent of
+            /// <see cref="kind"/> (the versus maps are free roam until the versus round exists).
+            /// </summary>
+            public string mode = ModeStory;
             /// <summary>Whether a running round may be given up by going back to the room.</summary>
             public bool allowAbort;
             /// <summary>False = the result card draws no stars for this level.</summary>
@@ -133,6 +143,11 @@ namespace VRCKatamari.Editor.Hub
             public bool IsFreeRoam
             {
                 get { return string.Equals(kind, KindFreeRoam, StringComparison.Ordinal); }
+            }
+
+            public bool IsVersus
+            {
+                get { return string.Equals(mode, ModeVersus, StringComparison.Ordinal); }
             }
 
             /// <summary>A free roam level may omit its entry marker.</summary>
@@ -308,6 +323,7 @@ namespace VRCKatamari.Editor.Hub
             level.entry = node.GetString("entry");
             level.roundFromPlacement = node.GetBool("roundFromPlacement", false);
             level.kind = node.GetString("kind", KindRound);
+            level.mode = node.GetString("mode", ModeStory);
             level.allowAbort = node.GetBool("allowAbort", false);
             level.stars = node.GetBool("stars", true);
             level.arenaFirst = node.GetString("arenaFirst");
@@ -335,6 +351,12 @@ namespace VRCKatamari.Editor.Hub
             {
                 errors.Add(where + ".kind is '" + level.kind + "', expected '" + KindRound
                     + "' or '" + KindFreeRoam + "'");
+            }
+            if (!string.Equals(level.mode, ModeStory, StringComparison.Ordinal)
+                && !string.Equals(level.mode, ModeVersus, StringComparison.Ordinal))
+            {
+                errors.Add(where + ".mode is '" + level.mode + "', expected '" + ModeStory
+                    + "' or '" + ModeVersus + "'");
             }
             if (string.IsNullOrEmpty(level.entry) && !level.IsFreeRoam)
             {

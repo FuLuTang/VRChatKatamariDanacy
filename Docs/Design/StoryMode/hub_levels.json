@@ -189,6 +189,7 @@
       "content": "LevelContent/_ref_wlk_vs2",
       "roundFromPlacement": false,
       "kind": "freeRoam",
+      "mode": "versus",
       "allowAbort": true,
       "source": {
         "scene": "Assets/_RefUnlicensed/Scenes/RefWlkVs2.unity",
@@ -223,6 +224,7 @@
       "content": "LevelContent/_ref_vs00",
       "roundFromPlacement": false,
       "kind": "freeRoam",
+      "mode": "versus",
       "allowAbort": true,
       "source": {
         "scene": "Assets/_RefUnlicensed/Scenes/RefVs00.unity",

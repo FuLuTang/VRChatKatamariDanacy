@@ -63,6 +63,7 @@ class HubLevelsTest(unittest.TestCase):
         for lv in self.data["levels"]:
             lid = lv["id"]
             self.assertIn(lv.get("kind", "round"), ("round", "freeRoam"), lid)
+            self.assertIn(lv.get("mode", "story"), ("story", "versus"), lid)
             for key in ("allowAbort", "stars", "roundFromPlacement"):
                 if key in lv:
                     self.assertIsInstance(lv[key], bool, f"{lid}: {key}")
@@ -110,6 +111,12 @@ class HubLevelsTest(unittest.TestCase):
         for hub in self.data.get("hubs", []):
             self.assertGreaterEqual(len(hub["levels"]), 1)
         self.assertEqual(len(self.data["hubs"][0]["levels"]), 6)
+
+    def test_the_versus_maps_are_marked_versus(self):
+        # The level card's versus look follows this flag (HUB_PANEL_PREFAB.md, level cards).
+        modes = {lv["id"]: lv.get("mode", "story") for lv in self.data["levels"]}
+        self.assertEqual(sorted(k for k, v in modes.items() if v == "versus"),
+                         ["_ref_vs00", "_ref_wlk_vs2"])
 
     def test_levels_do_not_override_the_global_ball_cap(self):
         for level in self.data["levels"]:

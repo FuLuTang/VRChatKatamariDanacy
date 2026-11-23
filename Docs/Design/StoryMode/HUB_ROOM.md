@@ -62,7 +62,9 @@
 
 ## 外观与布局
 
-房间在 Blender 里建模：[build_hub_room.py](<../../../Tools/hubart/build_hub_room.py>) 读 [hub_layout.json](<../../../Tools/hubart/hub_layout.json>)，生成 `Art/Hub/HubRoomArt.fbx`（无头 Blender 4.0.2 或 Windows 3.6，用法见脚本头注释）。只用基本形体和纯色。风格是原作式明快色块：奶油色地面 + 粉/天蓝/柠檬/薄荷大方格，墙面下粉上蓝、木色踢脚和白色腰线，三块板的圆角彩框（粉/天蓝/薄荷）+ 木腿 + 角上黄色圆钉，彩旗、四盆植物、一颗装饰块魂、三盏吊灯、出生点黄星。约 1.9 万三角，按材质合并成 13 个网格。**模型里不再有板面、卡片、设置行和文字锚点**：这些全在面板 Prefab 里。
+房间在 Blender 里建模：[build_hub_room.py](<../../../Tools/hubart/build_hub_room.py>) 读 [hub_layout.json](<../../../Tools/hubart/hub_layout.json>)（schema `/3`），生成 `Art/Hub/HubRoomArt.fbx`（无头 Blender 4.0.2 或 Windows 3.6，用法见脚本头注释）。风格是方向一「暖木纸屋」（owner 2026-11-21；取色依据与分层规则：中性 ≥60%、材质 20–30%、分区 5–10%、强调 ≤5%）：蜂蜜木地板，灰泥白墙，胡桃木踢脚和腰线，燕麦色檐线；选关板前铺鼠尾草毛毡读板毯（单人区）；出生点是嵌在地板里的水磨石圆加金色小星；能点的板用蜂蜜木框，只看的「怎么玩」板用板岩色细框；四盆陶盆植物，一颗低饱和的装饰块魂，三盏纸灯。没有彩色地砖、彩旗、波点。约 1.3 万三角，按材质合并成 14 个网格。**模型里没有板面、卡片、设置行和文字锚点**：这些全在面板 Prefab 里。
+
+材质：每个网格材质对应 hub_layout.json `surfaces` 里的一项（名字相同，例如 `Hub_FloorWood`）：颜色（sRGB，乘在贴图上）、平滑度，以及可选的平铺贴图和「一张贴图铺多少米」。模型的 UV 以米为单位（`metre_uvs`：按面的主法线把世界坐标投影成 UV），所以材质的 Tiling = 1 / 每张米数，同一张贴图在任何面上都是同样大小、相邻物体的纹理能对上。四张平铺贴图是生图制作的（owner 2026-11-21 决定），在 `Art/Hub/Textures/`：`HubFloor_HoneyWood`（1024²，1.6 m）、`HubWall_Plaster`（512²，1 m）、`HubFloor_Terrazzo`（1024²，1.2 m）、`HubFloor_SageFelt`（512²，1 m）。导入设置（Repeat、mipmap、最大尺寸、压缩、Android ASTC 覆盖）由 `Editor/Hub/HubTexturePostprocessor` 按 json 的 `textures` 表自动设置，不用手点。
 
 面板是三个 Prefab（`Assets/VRC_Katamari/Prefabs/Hub/HubBoard_{Levels,Help,Settings}.prefab`），由 Unity 操作员按 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>) 搭建：World Space Canvas，同物体 VRC_UiShape + BoxCollider + GraphicRaycaster，Default 层，缩放 0.001（1 画布单位 = 1 mm），板面/色带/卡片是圆角 Image，全部文字是 TextMeshProUGUI（Raycast Target 关），卡片与 ◀ ▶ 是 uGUI Button（Navigation None），onClick 在编辑器里绑定到本物体 UdonBehaviour 的 `SendCustomEvent("Press")`。中日英文字用一个静态 TMP 字体资产 `HubPanelSans SDF`（Noto Sans CJK SC Bold 的子集，字符集 [hub_panel_charset.txt](<../../../Tools/hubart/hub_panel_charset.txt>) 由 [build_hub_font.py](<../../../Tools/hubart/build_hub_font.py>) 生成）。
 
@@ -70,14 +72,14 @@
 
 字号（em，米 = 画布 Font Size / 1000）：板标题 0.17–0.22，关名 0.15，目标行 0.09，记录行 0.082，提示行 0.085，规则 0.078，制作信息 0.075，操作表 0.066，设置行 0.066–0.07。3 m 处 0.066 m 约 1.26°，大于常用的 1° 头显可读下限；最终可读性仍由 owner 戴头显判断。
 
-模型导出后用 [verify_hub_fbx.py](<../../../Tools/hubart/verify_hub_fbx.py>) 独立核对（直接解析 FBX，按 Unity 导入规则换算，与 hub_layout.json 比对），预期 `[hub-fbx] anchors 3 of 3 within 2 cm`、`RESULT PASS`。锚点 `Anchor_Board_<id>` 在每块板的 Canvas 中心，必须是模型根的直接子节点（4.0 导出器开 bake_space_transform 时只转换根的直接子节点）。网格名 `Art_Hub_<颜色>`，材质名 `Hub_<颜色>`。
+模型导出后用 [verify_hub_fbx.py](<../../../Tools/hubart/verify_hub_fbx.py>) 独立核对（直接解析 FBX，按 Unity 导入规则换算，与 hub_layout.json 比对），预期 `[hub-fbx] anchors 3 of 3 within 2 cm`、`RESULT PASS`。锚点 `Anchor_Board_<id>` 在每块板的 Canvas 中心，必须是模型根的直接子节点（4.0 导出器开 bake_space_transform 时只转换根的直接子节点）。网格名 `Art_<表面名>`，材质名 = 表面名。
 
 Unity 侧（HubAssembler.Room）：
 
-- 实例化模型为场景根 `HubRoomArt`，放在 HubCenter，删掉模型上的 Collider（墙和地面的碰撞来自 placement 导入），渲染器标 BatchingStatic + OccludeeStatic；按材质名换成 `Art/Hub/Materials/Hub_<颜色>.mat`（Standard，颜色取自 hub_layout.json）。三个 `Anchor_Board_*` 与布局比对，偏差超过 2 cm 记 PROBLEM。报告行 `hub art anchors: 3 of 3 within 2 cm`。
+- 实例化模型为场景根 `HubRoomArt`，放在 HubCenter，删掉模型上的 Collider（墙和地面的碰撞来自 placement 导入），渲染器标 BatchingStatic + OccludeeStatic；按材质名换成 `Art/Hub/Materials/<表面名>.mat`：着色器取 json 的 `shader`（现为 Standard），写颜色、平滑度、金属度 0、贴图与 Tiling（`HubAssembler.ApplySurface`）。贴图还没导入时记 PROBLEM。模型用到的材质名都是表面以后，删掉 `Materials/` 里不再是表面的旧 `Hub_*.mat`（模型还带旧名时只报 PROBLEM、不删，房间照常显示）。三个 `Anchor_Board_*` 与布局比对，偏差超过 2 cm 记 PROBLEM。报告行 `hub art anchors: 3 of 3 within 2 cm`。
 - 场景里确保正好一个 EventSystem（StoryMode 底板已有；没有就加 EventSystem + StandaloneInputModule）。
 - 每块板放一个面板 Prefab 实例（场景根 `HubBoard_<id>`，位置 = HubCenter + 板 Canvas 中心，旋转 = 板偏航，缩放 0.001）。同名但不是该 Prefab 实例的旧物体（旧版生成的 Canvas）删掉换成实例。Prefab 缺失记 PROBLEM 并指向施工图，不在代码里重建面板。
-- 写实例覆盖：`LevelCard_i` 的 HubStartButton.launcher / levelIndex = i、`Number` 文字 = i+1；多余卡片设为不激活；每个箭头的 HubSettingButton.settings；HubPanelDisplay 的全部文字引用（按施工图物体名）；HubRoomHost.levelButtons（卡片根）与 promptText（`Text_Prompt`）。
+- 写实例覆盖：`LevelCard_i` 的 HubStartButton.launcher / levelIndex = i、`Number` 文字 = i+1；卡片外观按关卡的 `mode`（hub_levels.json，`versus` = 对战图）开关 `StoryStrip` / `VersusStrip` / `VersusBadge` / `Number`（HUB_PANEL_PREFAB「方向一外观」），缺这几个子物体记 PROBLEM；多余卡片设为不激活；每个箭头的 HubSettingButton.settings；HubPanelDisplay 的全部文字引用（按施工图物体名）；HubRoomHost.levelButtons（卡片根）与 promptText（`Text_Prompt`）。
 - 回读：每个面板根 World Space Canvas、VRCUiShape、GraphicRaycaster、BoxCollider、非 UI/UiMenu 层、缩放 0.001–0.01、TMP 不挡射线且有字体、无旧 Text、Selectable 的 Navigation 全为 None；每个按钮 Button + 射线 Image、自身无 Collider、onClick 恰好一条 `SendCustomEvent("Press")` 指向本物体的 backing UdonBehaviour。
 - `HubRoomLights`：三盏暖色点光（范围 9 m、无阴影）挂在吊灯下。
 - 删除旧的 `HubPads`、`HubLevelPanel`、`HubPrompt`。
@@ -87,7 +89,7 @@ Unity 侧（HubAssembler.Room）：
 ## Unity 操作员：装配与验证
 
 1. 同步源码（含 `Art/Hub/HubRoomArt.fbx`、`Art/Hub/Fonts/HubPanelSans-Bold.otf` 与 `OFL.txt`、`Runtime/VRCKatamari.Runtime.asmdef` 新增的 `Unity.TextMeshPro` 引用）；退出 Play，确认没有未保存的源场景修改。不要重启 Editor，不碰 ProjectSettings.asset。让 Unity 导入、编译 C# 与 UdonSharp，检查 Console。.meta 由 Unity 生成。编译后 Linux 侧的 `csharp_check` 需要 `--refresh` 取新 csproj。
-2. FBX 导入设置：Scale Factor 1、Convert Units 开、Bake Axis Conversion 关（默认值）。
+2. FBX 导入设置：Scale Factor 1、Convert Units 开、Bake Axis Conversion 关（默认值）。`Art/Hub/Textures/*.png` 与 `Art/Hub/Sprites/*.png` 的导入设置由 `HubTexturePostprocessor` 自动设；首次导入后回读 `HubFloor_HoneyWood`：Wrap Repeat、Generate Mip Maps 开、Max Size 1024，`HubCard_Normal`：Sprite、Border (40,40,40,40)、Wrap Clamp、无 mipmap。不对就对这两个文件 Reimport。
 3. 按 [HUB_PANEL_PREFAB](<HUB_PANEL_PREFAB.md>)「字体」生成 `HubPanelSans SDF.asset`（记 Characters missing，应为 0），再按「搭建步骤」建三个 Prefab，并按其第 4 步回读；按「结算卡」建 `Prefabs/Story/RideResultCard.prefab`。
 4. 打开 AllMapsHub 场景，执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（大厅装配后自动跑骑乘装配）。预期 `problems=0`；报告里应有 `hub art anchors: 3 of 3 within 2 cm`；缺 Udon variables 时按已有流程：编译 → 保存 → 重开 → 重建。装配会给缺 U# 程序资产的行为脚本补建 `<Name>.asset` 并编译（报告行 `created U# program assets: …`，什么都不缺时没有这行；也可单独跑 `VRC Katamari/Udon/Create Missing Program Assets`）。碰撞线框、性能诊断、物品名 HUD 的接线由装配完成，不再手工补；报告应有 `[allmaps] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`（宿主数随关卡变化：motor 1 + 每个 PickupFieldHost + 每个 MotionHost）；任何一处没接上都是 `PROBLEM`，场景不保存。连跑两次，第二次 `result: +27 ~135`（与第一次相同：输出每次从基础场景重建），汇总行不变。
 5. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期一行 `[hub-check] diagnostics wired 5/5 hosts, catch-name wired 3/3, wireframe settings wired`、一行 `[hub-check] result card ok: retry wired, return wired` 和 `0 problem(s), 6 level card(s), 6 level entry/entries, 28 setting arrow(s)`（卡片数 = `hubs[AllMapsHub].levels` 的长度，检查不再写死；上一版四关里两张 freeRoam 关同样无入口标记，入口条数仍等于关数）。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`（蓝色 Prefab 实例图标）、`EventSystem`（一个）、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`/`HubResultBoard`；`FollowRigRoot/RidePanels/RideResultCard` 是蓝色 Prefab 实例。

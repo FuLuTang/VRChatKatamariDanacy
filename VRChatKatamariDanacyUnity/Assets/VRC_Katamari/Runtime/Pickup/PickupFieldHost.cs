@@ -5,6 +5,7 @@ using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Core;
 using VRCKatamari.Diagnostics;
+using VRCKatamari.Story;
 
 namespace VRCKatamari.Pickup
 {
@@ -257,6 +258,11 @@ namespace VRCKatamari.Pickup
         // restore moved props on a field reset; it is also asked whether a row is falling so
         // a falling prop is neither a wall nor a floor. Null = no stack fall (old behaviour).
         [SerializeField] private PropFallHost fallHost;
+        // The level's arena host. A prop that has a same-id static solid (the reference level's
+        // big scenery) takes that solid out of the motor when it is rolled up, and a field reset
+        // puts it back. Null = nothing is removed (older scenes, levels with no twin solids);
+        // the importer wires it, and the host's staticBoxItemIds says which boxes are twins.
+        [SerializeField] private LevelArenaHost arenaHost;
 
         [Header("Radii and cadence")]
         [SerializeField] private float activationRadiusM = DefaultActivationRadiusM;
@@ -682,6 +688,10 @@ namespace VRCKatamari.Pickup
             // Props the stack fall moved while they were free go back to where they started
             // (attached ones were restored by the loop above).
             if (fallHost != null) fallHost.ResetFalls();
+            // The solids that left with their props come back with them. A no-op when the
+            // motor's static table was dropped meanwhile (a level switch): the next Register
+            // bakes every box again, so nothing is registered twice.
+            if (arenaHost != null) arenaHost.RestoreRemovedSolids();
 
             // The withdraw list goes too: the caller has already had the motor clear its
             // candidate queue, so nothing this host listed is queued any more and the next
@@ -1681,6 +1691,9 @@ namespace VRCKatamari.Pickup
                 if (index < 0) continue;
                 AttachProp(index, i);
                 if (fallHost != null) fallHost.OnPropAbsorbed(index);
+                // The prop is gone from the world, so its own collision goes with it: no
+                // invisible wall where a rolled-up lantern stood.
+                if (arenaHost != null) arenaHost.RemoveSolidsOf(absorbedId);
                 if (absorbFeedback != null && Collecting())
                 {
                     int screamId = GetPropAbsorbSoundClass(index);

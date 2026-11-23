@@ -673,12 +673,14 @@ class ReferenceLevelTests(unittest.TestCase):
         self.assertIn("raw-AABB criterion would count 47", notes)
         self.assertIn("sparrow_001", notes)            # D-5 declaration + non-uniform notice
         self.assertEqual(len(report.warnings), 1)      # the declared overlap budget
-        # Notes since the per-level cap was removed (OPEN_DECISIONS (n)): the absorbable
-        # note compares against the level's own reachable 1.65 m instead of the retired
-        # 1.2 m cap, so 28 scenery props are small enough for the gate there. They are
-        # summarised in ONE note; the other two are the sparrow D-5 declaration and the
-        # structure proxy.
-        self.assertIn("28 marked absorbable:false", notes, "\n".join(report.notes))
+        # Notes since the per-level cap was removed (OPEN_DECISIONS (n)) and since the converter
+        # writes absorbable:false only for the original's permanent marks (owner 2026-11-22):
+        # the six false props (the sparrow's D-5 declaration and the five clouds) are all small
+        # enough for the gate at the level's own reachable size, and they are summarised in ONE
+        # note; the other two are the sparrow D-5 declaration and the structure proxy.
+        self.assertIn("6 marked absorbable:false", notes, "\n".join(report.notes))
+        for cloud in range(1, 6):
+            self.assertIn("scattered_clouds_00%d" % cloud, notes)
         self.assertEqual(len([note for note in report.notes
                               if "absorbable disagreements" in note]), 1)
         self.assertEqual(len(report.notes), 3)

@@ -20,11 +20,12 @@ The derived rules, stated once (they are the file's design decisions):
   (``[terrain_mesh]`` forbids degenerates), leaving 3,455.
 * **chunks** are consecutive runs of 512 triangles, and each chunk is also one broad-phase
   AABB: the JSON can then say "this box owns exactly these triangles" with no holes.
-* **structures** are the props that are *never absorbable at this level's design ceiling*
+* **structures** are the props the ball cannot reach *at this level's design ceiling*
   (gate > 1.20 m, the original's ``MAX_DIAMETER``) **and** whose AABB the extractor's
-  collision space covers by at least half.  84 props are never absorbable; 35 of them sit in
-  the covered core and get an analytic box; the other 49 (buildings and trees outside the
-  collision mesh) are background scenery — the activity wall keeps the ball away from them,
+  collision space covers by at least half.  84 props are out of reach at 1.20 m; 35 of them
+  sit in the covered core and get an analytic box (a same-id twin of the prop: the runtime
+  removes the box when the ball rolls its prop up); the other 49 (buildings and trees outside
+  the collision mesh) are background scenery — the activity wall keeps the ball away from them,
   so they get no solid.  The collision AABBs are broad-phase volumes of the stage mesh, not
   per-object proxies, so they are used as *evidence of solid space*, never as solids
   themselves.
@@ -35,7 +36,9 @@ The derived rules, stated once (they are the file's design decisions):
   *original instance's* (that is the point of a reference rebuild; the v1 file had the
   position flattened to y = 0 and every rotation identity), ``volumeK`` is the original's own
   solid/bbox ratio (``1 / bboxOverSolidVolume``, whose median is 0.700), ``growthMm3`` is
-  ``round(0.8 * k * aabb)`` and ``absorbable`` follows the gate at 1.20 m.  The six non-unit
+  ``round(0.8 * k * aabb)`` and ``absorbable`` is only the permanent "cannot be rolled up"
+  mark (the first game has none; the one non-uniform scale and the cloud motion class are
+  declared false), never the size gate (owner 2026-11-22).  The six non-unit
   scales are applied; the one non-uniform one is kept and marked (D-5: it may be a decal, so
   it stays out of gameplay).
 
@@ -861,15 +864,20 @@ def scaled_parts(parts, scale):
 
 
 def build_structures(placements, boxes, max_diameter_m=DESIGN_MAX_DIAMETER_M):
-    """Split the 511 props into scenery-with-solid, scenery-background and pickups."""
+    """Split the 511 props into scenery-with-solid, scenery-background and pickups.
+
+    "Scenery" here means out of reach at the level's design ceiling (the original's
+    MAX_DIAMETER), which is a statement about the stage's collision space.  It says nothing
+    about whether a bigger ball may roll the prop up: that is the size gate's business.
+    """
     solids = []
-    report = {"neverAbsorbable": 0, "withSolid": 0, "background": 0,
+    report = {"outOfReach": 0, "withSolid": 0, "background": 0,
               "backgroundItems": [], "reasons": []}
     for entry in placements:
         gate = entry["absorbDiameterReqMm"]
         if gate <= core.floor_mm(max_diameter_m):
             continue
-        report["neverAbsorbable"] += 1
+        report["outOfReach"] += 1
         covered = coverage(entry["worldAabb"], boxes)
         if covered >= SCENERY_COVERAGE:
             solid = {
@@ -1092,10 +1100,19 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         gate_mm = core.absorb_diameter_req_mm(size, volume_k)
         growth = core.item_growth_mm3(size, volume_k, volume_penalty)
         non_uniform = len({round(value, 6) for value in scale}) > 1
-        # D-5 (owner 2026-11-16): the one non-uniform scale the extraction carries has
-        # unverified semantics (a 1.7x0.3x0.3 cm sheet for a 13 m building), so it is kept for
-        # the audit trail but declared out of gameplay: not absorbable, no collider proxy.
-        absorbable = (not non_uniform) and gate_mm <= core.floor_mm(max_diameter_m)
+        # ``absorbable`` is the original's PERMANENT "cannot be rolled up" mark, never a
+        # reading of the size gate (owner 2026-11-22: the original's gate decides, so a big
+        # prop the ball outgrows is rolled up like any other).  The first game has no such
+        # mark for any instance, so only two declarations remain:
+        #  * D-5 (owner 2026-11-16): the one non-uniform scale the extraction carries has
+        #    unverified semantics (a 1.7x0.3x0.3 cm sheet for a 13 m building), so it is kept
+        #    for the audit trail but declared out of gameplay: not absorbable, no collider;
+        #  * the cloud motion class: ``ambient`` props are scenery by definition and the
+        #    validator refuses ``absorbable:true`` on them ([prop_behaviour]).
+        # The structure SOLIDS (build_structures) still follow "gate > MAX_DIAMETER": they are
+        # the collision space the original's stage carries, not a statement about the props.
+        motion_class = (motion_by_item.get(prop.get("itemId")) or {}).get("class")
+        absorbable = (not non_uniform) and motion_class != "clouds"
         world = core.world_aabb(tuple(position), tuple(size), tuple(quat))
         zone_code = instance.get("zone")
         zone = zone_names.get(zone_code) if zone_code is not None else None
@@ -1181,6 +1198,15 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "renderPresets": [],
         "regions": [],
     }
+    # The wall's authored height must exceed the largest ball radius the level's own content can
+    # produce (validator [activity_wall_height]); that reach is derived from the props, so it is
+    # set after the document exists.  The runtime wall is a plane (height is documentation), and
+    # since the original's gate decides what is rolled up, the reach is far above the design
+    # ceiling (owner 2026-11-22).
+    reach = core.reachable_ball_diameter_m(document)
+    if reach is not None:
+        wall = document["activityArea"]["walls"][0]
+        wall["heightM"] = max(wall["heightM"], n4(math.ceil(reach / 2.0) + 1.0))
     if level_id == "_ref_cancer":
         apply_cancer_hit_areas(document)
     sidecar, index_width = sidecar_bytes(terrain)
@@ -1870,13 +1896,13 @@ def main(argv=None):
         print("  classes: ride %d / climb %d / wall %d"
               % (report["terrain"]["ride"], report["terrain"]["climb"],
                  report["terrain"]["wall"]))
-        print("  props: %d (%d absorbable, %d never, %d with a parent); defs: %d"
+        print("  props: %d (%d absorbable, %d declared never, %d with a parent); defs: %d"
               % (report["props"]["total"], report["props"]["absorbable"],
                  report["props"]["neverAbsorbable"], report["props"]["withParent"],
                  report["defs"]))
-        print("  structures: %d solids (of %d never-absorbable props; %d are background "
-              "outside the collision space); %d split into parts, %d static OBBs"
-              % (report["structures"]["withSolid"], report["structures"]["neverAbsorbable"],
+        print("  structures: %d solids (of %d props out of reach at the design ceiling; %d are "
+              "background outside the collision space); %d split into parts, %d static OBBs"
+              % (report["structures"]["withSolid"], report["structures"]["outOfReach"],
                  report["structures"]["background"],
                  report["structures"].get("splitSolids", 0),
                  placement_v2.static_obb_count(document["structures"]["solids"],

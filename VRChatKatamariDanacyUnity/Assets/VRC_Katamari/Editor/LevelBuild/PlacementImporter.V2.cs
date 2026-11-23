@@ -519,9 +519,10 @@ namespace VRCKatamari.Editor.LevelBuild
                 {
                     report.V2AbsorbableDeclarations = true;
                     report.Note(V2Tag + "the document declares at least one absorbable:false prop. " +
-                                "This round stores and reports the declaration but does not enforce " +
-                                "it: PickupFieldHost has no absorbable column, so the gate still " +
-                                "decides from k * aabb (owner ruling D)");
+                                "The importer stores and reports the declaration but does not enforce " +
+                                "it: PickupFieldHost has no absorbable column, so the gate decides " +
+                                "from k * aabb (owner ruling D; a same-id static solid leaves with " +
+                                "its prop, see PlacementImporter.ArenaMotor)");
                 }
             }
 

@@ -196,7 +196,7 @@ class RuleTests(unittest.TestCase):
         small = dict(inside, itemId="small_001", absorbDiameterReqMm=300)
         solids, report = build.build_structures([inside, outside, small], [box])
         self.assertEqual([solid["id"] for solid in solids], ["big_001"])
-        self.assertEqual(report["neverAbsorbable"], 2)
+        self.assertEqual(report["outOfReach"], 2)
         self.assertEqual(report["withSolid"], 1)
         self.assertEqual(report["background"], 1)
         self.assertEqual(solids[0]["collision"], "box")
@@ -449,6 +449,25 @@ class RealExtractionTests(unittest.TestCase):
         lowest = min(point[1] for point in build.read_sidecar(self.sidecar)["vertices"])
         self.assertLess(document["activityArea"]["killPlane"]["y"], document["meta"]["groundY"])
         self.assertLess(document["meta"]["groundY"], lowest)
+
+    def test_absorbable_is_the_permanent_mark_not_the_size_gate(self):
+        """Owner 2026-11-22: the original's gate decides, so a big prop is absorbable:true.
+
+        Only two declarations stay false: the one non-uniform scale (D-5) and the cloud
+        class (the validator refuses absorbable:true on an ambient prop).
+        """
+        document = self.document
+        false_ids = sorted(prop["itemId"] for prop in document["props"]
+                           if not prop["absorbable"])
+        self.assertEqual(false_ids, ["scattered_clouds_001", "scattered_clouds_002",
+                                     "scattered_clouds_003", "scattered_clouds_004",
+                                     "scattered_clouds_005", "sparrow_001"])
+        solids = {solid["id"] for solid in document["structures"]["solids"]}
+        twins = [prop for prop in document["props"] if prop["itemId"] in solids]
+        self.assertEqual(len(twins), 35)
+        self.assertTrue(all(prop["absorbable"] for prop in twins),
+                        "a solid's twin prop is rolled up by the original's gate")
+        self.assertTrue(any(prop["absorbDiameterReqMm"] > 1200 for prop in twins))
 
     def test_the_spawn_is_authored_and_rests_on_the_terrain(self):
         """The reference level's spawn is a measured point, not the field-centre guess.

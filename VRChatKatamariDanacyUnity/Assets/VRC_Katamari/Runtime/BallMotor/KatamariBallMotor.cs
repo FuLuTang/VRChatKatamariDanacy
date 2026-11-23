@@ -738,6 +738,10 @@ namespace VRCKatamari.BallMotor
         private int[] staticObbRole;
         private float[] staticObbBoundingRadius;
         private int staticObbCount;
+        // Bumped whenever the whole static table is dropped (ClearObbs). A host that registered
+        // solids remembers the value it saw, so a later per-solid remove or restore can tell
+        // that the table it wrote into has since been replaced by another level's.
+        private int staticObbEpoch;
         private int staticObbOverflowCount;
         private int staticObbRefusalCount;
         private string staticObbRefusalReason;
@@ -4638,10 +4642,92 @@ namespace VRCKatamari.BallMotor
             // moves down to index 0, so the logical range stays contiguous.
             MovePropBlock(staticObbCount, 0);
             staticObbCount = 0;
+            staticObbEpoch = staticObbEpoch + 1;
             windowPreviousCount = 0;
             nearObbCount = 0;
             windowDroppedCount = 0;
             contactIncomplete = false;
+        }
+
+        /// <summary>
+        /// Removes ONE static OBB: the entry with this surface id whose centre is at
+        /// <paramref name="center"/>. Returns false (and changes nothing) when there is none.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The use is a prop that was rolled up while it had a same-id static solid (the
+        /// reference level's big scenery): the prop leaves, so its collision must leave with
+        /// it. The surface id alone is not trusted as a key - two arena hosts that were never
+        /// given different offsets mint the same ids - so the baked centre is part of the key.
+        /// </para>
+        /// <para>
+        /// The table layout invariant ("static prefix, then the prop block, no gaps") is kept
+        /// by shifting every later static entry AND the whole prop block (OBB or proxy view)
+        /// down by one slot, so the prop block's counts, its slots' surface ids (100 + block
+        /// slot) and the proxy columns stay exactly as they were; the vacated slot is reset.
+        /// The static counters and the refusal counters are untouched, the near set and its
+        /// hysteresis are dropped (the next step rebuilds them), and <see cref="GetStaticObbEpoch"/>
+        /// does NOT change (the table is the same one, one entry shorter).
+        /// </para>
+        /// </remarks>
+        public bool RemoveStaticObb(int surfaceId, Vector3 center)
+        {
+            if (staticObbCenter == null) return false;
+            int found = -1;
+            for (int i = 0; i < staticObbCount; i++)
+            {
+                if (staticObbSurfaceId[i] != surfaceId) continue;
+                Vector3 at = staticObbCenter[i];
+                if (Mathf.Abs(at.x - center.x) > 1e-4f) continue;
+                if (Mathf.Abs(at.y - center.y) > 1e-4f) continue;
+                if (Mathf.Abs(at.z - center.z) > 1e-4f) continue;
+                found = i;
+                break;
+            }
+            if (found < 0) return false;
+
+            int blockLength = propProxyCount > propObbCount ? propProxyCount : propObbCount;
+            int end = staticObbCount + blockLength;
+            for (int slot = found + 1; slot < end; slot++)
+            {
+                CopyObbSlot(slot, slot - 1);
+                CopyProxySlot(slot, slot - 1);
+            }
+            // The last slot of the logical table is now a duplicate of its neighbour: reset
+            // it so a stale proxy kind cannot be read as a live entry later.
+            int vacated = end - 1;
+            staticObbSurfaceId[vacated] = 0;
+            staticObbRole[vacated] = 0;
+            staticObbBoundingRadius[vacated] = 0f;
+            if (staticProxyKind != null && vacated < staticProxyKind.Length)
+            {
+                staticProxyKind[vacated] = ProxyContactMath.KindBox;
+                staticProxyRadius[vacated] = 0f;
+                staticProxyHalfHeight[vacated] = 0f;
+                staticProxyAxis[vacated] = ProxyContactMath.AxisX;
+                staticProxyHullStart[vacated] = 0;
+                staticProxyHullCount[vacated] = 0;
+                staticProxyFaceStart[vacated] = 0;
+                staticProxyFaceCount[vacated] = 0;
+            }
+            staticObbCount = staticObbCount - 1;
+            // The near set holds COPIES of the entries it selected, and FillNearWindow returns
+            // early when the new selection is empty and the old one was forgotten: without
+            // this the removed solid would keep blocking from the stale copy until the ball
+            // moved far enough to rebuild the window.
+            nearObbCount = 0;
+            windowPreviousCount = 0;
+            return true;
+        }
+
+        /// <summary>
+        /// Counts how many times the whole static table has been dropped (ClearObbs, hence
+        /// ClearObstacles). A per-solid remove or restore is only meaningful while this still
+        /// reads what the registering host saw.
+        /// </summary>
+        public int GetStaticObbEpoch()
+        {
+            return staticObbEpoch;
         }
 
         /// <summary>
@@ -5090,6 +5176,23 @@ namespace VRCKatamari.BallMotor
             {
                 CopyObbSlot(fromBase + i, toBase + i);
             }
+        }
+
+        // The proxy columns of a slot. They are only meaningful for the prop block (a static
+        // entry keeps the default box kind), and the hull/face tables they index are
+        // block-local, so moving a slot never has to touch those tables.
+        private void CopyProxySlot(int from, int to)
+        {
+            if (staticProxyKind == null) return;
+            if (from == to) return;
+            staticProxyKind[to] = staticProxyKind[from];
+            staticProxyRadius[to] = staticProxyRadius[from];
+            staticProxyHalfHeight[to] = staticProxyHalfHeight[from];
+            staticProxyAxis[to] = staticProxyAxis[from];
+            staticProxyHullStart[to] = staticProxyHullStart[from];
+            staticProxyHullCount[to] = staticProxyHullCount[from];
+            staticProxyFaceStart[to] = staticProxyFaceStart[from];
+            staticProxyFaceCount[to] = staticProxyFaceCount[from];
         }
 
         private void CopyObbSlot(int from, int to)

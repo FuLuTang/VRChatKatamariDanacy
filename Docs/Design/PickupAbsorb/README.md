@@ -230,8 +230,9 @@ absorb ⇔ boxDistance ≤ contactLimit
 5. **`valueUnits` 必须是整数**。`TryAbsorbValueToLedgerGain` 对小数、负数、非有限值、超出 int32 的值一律返回 `false`（`PickupAbsorbMath.cs:411-422`），两个模型都没定义取整规则，所以它不四舍五入。非整数价值的后果不是“少加一点”，而是这件道具永远提交不了、永久占槽。
 6. **障碍注册与吸收判定无关**。`AddPlane` / `AddObb` 喂的是接触求解（`KatamariBallMotor.StepContactV2`），本层的接触判定没有遮挡项（`PickupAbsorbMath.cs:80-84` 明说“models no occlusion”）。所以隔着一面已注册的墙，只要中心距够近，照样能吸——想让墙挡住吸收，本层没有这个能力，只能在宿主侧不提交。
 7. **账本必须已在 `Playing`**：`TrySubmitClaim` 的阶段门在 `GrowthLedgerMath.cs:435`。否则每个候选都判定为“可吸”却提交失败，表现为“零拒绝、零吸收、队列满”（第 7 节用它区分账本问题）。
-8. **候选收集、空间索引、道具生命周期不在本层**：本层不扫场景，只判定宿主递进来的一条。
-9. **队列里只放“眼下可能吸到的”，且是其中最近的**（`PickupFieldHost.ScanProps`，选择逻辑在纯函数 `PickupCandidateSelection.OfferProp`）。每次扫描：激活半径内的自由道具，先过尺寸门——就是 `PickupAbsorbMath.IsBeyondAbsorbLimit(物件自身尺寸, k, 电机当前语义直径)`，与电机判定和挡路分类同一个函数，不复制门的数学——过了的才参与“最近 4 件”（4 = 电机容量）；然后**先撤回**本宿主已入队但不在本次选择里的（被更近的挤掉、球滚远、门已不过），**再提交**选中的。已判定为吸、尚未提交的条目不撤回。球长大后每次扫描都用当前直径，先前吸不了的自然进入。吸不了的大件不进队列，仍由 `UpdatePropObstacles` 当墙/台阶（那条路径只读同一个尺寸门，不读队列），所以它们不再产生 `RejectItemTooLarge` 拒绝事件；队列里剩下的拒绝基本只有 `RejectOutOfReach`（在激活半径内、过了门、还没到 reach）。激活半径用球心到物件中心的距离，不随球径缩放。
+8. **同 id 的静态固体随 prop 一起走**（owner 2026-11-22：蟹座大物件按原作门槛，球够大就卷走）。参考关卡的大件是「同 id 的 prop + 静态固体」两样东西：固体是 `LevelArenaHost` 登记到电机静态 OBB 表里的盒子，prop 才进拾取场。`ConsumeAbsorbedEvents` 处理该 prop 的吸收事件时调 `LevelArenaHost.RemoveSolidsOf(itemId)`（`PickupFieldHost.arenaHost`，导入器接线；按 `staticBoxItemIds` 平行数组匹配，不按物体名），`ResetField` 里调 `RestoreRemovedSolids()` 放回；电机侧是 `RemoveStaticObb(surfaceId, center)`（后面的静态项与道具块整体下移一格，道具块的计数与 100+槽 的面 id 不变）和 `GetStaticObbEpoch()`（换关清表后，旧宿主的移除/恢复都变成空操作，不会写进新关的表）。多个宿主共用一个电机（大厅）时，每个宿主只动自己登记的盒。
+9. **候选收集、空间索引、道具生命周期不在本层**：本层不扫场景，只判定宿主递进来的一条。
+10. **队列里只放“眼下可能吸到的”，且是其中最近的**（`PickupFieldHost.ScanProps`，选择逻辑在纯函数 `PickupCandidateSelection.OfferProp`）。每次扫描：激活半径内的自由道具，先过尺寸门——就是 `PickupAbsorbMath.IsBeyondAbsorbLimit(物件自身尺寸, k, 电机当前语义直径)`，与电机判定和挡路分类同一个函数，不复制门的数学——过了的才参与“最近 4 件”（4 = 电机容量）；然后**先撤回**本宿主已入队但不在本次选择里的（被更近的挤掉、球滚远、门已不过），**再提交**选中的。已判定为吸、尚未提交的条目不撤回。球长大后每次扫描都用当前直径，先前吸不了的自然进入。吸不了的大件不进队列，仍由 `UpdatePropObstacles` 当墙/台阶（那条路径只读同一个尺寸门，不读队列），所以它们不再产生 `RejectItemTooLarge` 拒绝事件；队列里剩下的拒绝基本只有 `RejectOutOfReach`（在激活半径内、过了门、还没到 reach）。激活半径用球心到物件中心的距离，不随球径缩放。
 
 ### 7. 静默零吸收的排查顺序
 

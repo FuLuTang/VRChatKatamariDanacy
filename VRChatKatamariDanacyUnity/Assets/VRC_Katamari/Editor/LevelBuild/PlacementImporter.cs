@@ -202,6 +202,8 @@ namespace VRCKatamari.Editor.LevelBuild
         private const string GroundOffsetField = "groundOffset";
         private const string BoundaryWallsField = "boundaryWalls";
         private const string StaticBoxesField = "staticBoxes";
+        private const string StaticBoxItemIdsField = "staticBoxItemIds";
+        private const string PickupArenaHostField = "arenaHost";
         private const string RampBoxesField = "rampBoxes";
         private const string AllowedKindsField = "allowedKinds";
 
@@ -387,7 +389,9 @@ namespace VRCKatamari.Editor.LevelBuild
             /// <summary>
             /// v2's <c>absorbable</c> declaration. Stored and reported, not enforced: the
             /// pickup host has no absorbable column and the gate decides absorbability from
-            /// k * aabb, so honouring it would need a runtime column (deferred, owner ruling D).
+            /// k * aabb (owner ruling D, kept by the owner on 2026-11-22: a big prop is rolled up
+            /// once the ball outgrows its gate). The reference converter therefore writes false
+            /// only for the original's permanent marks, never for "too big for this level's ball".
             /// </summary>
             public bool absorbable = true;
             public float[] position;
@@ -3804,6 +3808,10 @@ namespace VRCKatamari.Editor.LevelBuild
             // The part index of each box on its object: the name sort below is not stable, so
             // this keeps a split solid's boxes in their document order on every import.
             var boxOrder = new Dictionary<BoxCollider, int>();
+            // The item id of the pickup prop a solid is the collision of (a same-id twin,
+            // StructureEntry.bodyIsProp): the runtime takes that solid out of the motor when the
+            // prop is rolled up. The id comes from the data, not from the object's name.
+            var boxTwinItemId = new Dictionary<BoxCollider, string>();
             var rampList = new List<BoxCollider>();
             Vector3 floorNormal = Vector3.up;
             float floorOffset = 0f;
@@ -3887,6 +3895,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     {
                         boxList.Add(parts[part]);
                         boxOrder[parts[part]] = part;
+                        if (structure.bodyIsProp) boxTwinItemId[parts[part]] = structure.id;
                     }
                 }
             }
@@ -3952,6 +3961,27 @@ namespace VRCKatamari.Editor.LevelBuild
                 boxes.GetArrayElementAtIndex(i).objectReferenceValue = boxList[i];
             }
 
+            // Parallel to staticBoxes. Written in full on every import (never merged), so a
+            // solid that stopped being a twin loses its id and a re-import is idempotent.
+            SerializedProperty boxItemIds = serialized.FindProperty(StaticBoxItemIdsField);
+            int twinBoxes = 0;
+            if (boxItemIds == null)
+            {
+                report.Error("LevelArenaHost is missing '" + StaticBoxItemIdsField + "'; solids " +
+                             "that share an id with a prop will stay when the prop is rolled up");
+            }
+            else
+            {
+                boxItemIds.arraySize = boxList.Count;
+                for (int i = 0; i < boxList.Count; i++)
+                {
+                    string twinId;
+                    bool twin = boxTwinItemId.TryGetValue(boxList[i], out twinId);
+                    boxItemIds.GetArrayElementAtIndex(i).stringValue = twin ? twinId : "";
+                    if (twin) twinBoxes++;
+                }
+            }
+
             ramps.arraySize = rampList.Count;
             for (int i = 0; i < rampList.Count; i++)
             {
@@ -3987,6 +4017,8 @@ namespace VRCKatamari.Editor.LevelBuild
                              ". The arena fields are set on the proxy but not on the backing " +
                              "UdonBehaviour; run the import again once the compile has finished");
             }
+
+            WirePickupArenaHost(host, levelRoot, twinBoxes, report);
 
             if (arenaMotor != null)
             {

@@ -325,7 +325,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 - **`parts`：稀疏件拆成几个盒（2026-11-19）。** 凸包占自身 AABB 不到 0.6 的件，单盒会在空处造墙（晒衣架凸包占 0.30，单盒是 1.43 m × 2 m 的实墙，原作关卡碰撞在盒内地面以上没有三角）。生成器（`ref_v2_from_extract.def_parts` → `collider_proxy.solid_parts`）对这类件从**模型三角网**（不是凸包：一根立杆加横跨全宽的底脚，其凸包本身就是整片楔形）自顶向下切分：每轮在所有盒 × 3 轴 × 15 个等分切位里选去掉空体积最多的一刀，穿过切面的三角精确裁成两段，所以相邻盒无缝；去掉的空体积 < 整体 AABB 的 2% 或已有 4 盒即停；盒每轴至少 1 cm，向外取整到 0.1 mm；按低角 (y, x, z) 排序。确定性：同一网格同一输出。导入器给这类固体挂 `parts.length` 个 `BoxCollider`（按文档顺序），全部进 `LevelArenaHost.staticBoxes`；只把**最高的那个盒**的顶抬到 `size` 顶，其余盒保留自身高度。`collider` 原样保留（`spawn_reach` 与编辑器仍用真凸包）。
 - `meta.expected.staticObbs` 只计参与本关球碰撞的固体：每个 1 个，带 `parts` 的记子盒数（`placement_v2.static_obb_count`）。蟹座 35 条固体里有 1 条异区晒衣夹（4 个子盒），所以静态 OBB 从 65 降至 61；容量仍是 256。
 
-**固体的三种显示方式（谁画模型）**：①**同 id 的 prop**（蟹座的 35 个固体）：固体只是碰撞，模型由同 `itemId` 的 prop 画，所以该 prop 也进拾取场（行为见 OPEN_DECISIONS 里 `absorbable:false` 未被运行时强制一条）；要求 `shape:"proxy"`。②**`def`**（本次新增）：固体自己带一个显示模型，不需要 prop，所以不进拾取场、不会被卷入；用于原作里「不可卷入的障碍」（木柱、栅栏、树、气球）。③**两者都没有**：画占位方块（旧行为，初代 V_00 的 35 个固体就是这样）。`visible:false` 把三者都关掉。
+**固体的三种显示方式（谁画模型）**：①**同 id 的 prop**（蟹座的 35 个固体）：固体只是碰撞，模型由同 `itemId` 的 prop 画，所以该 prop 也进拾取场：球够大（原作门槛）就能卷走它，卷走时同 id 的固体一起从电机静态表移除，重置时放回（`PickupFieldHost.arenaHost` → `LevelArenaHost.RemoveSolidsOf` / `RestoreRemovedSolids`，导入器把 `structures.solids` 里与 prop 同 id 的盒写进 `LevelArenaHost.staticBoxItemIds`）；要求 `shape:"proxy"`。②**`def`**（本次新增）：固体自己带一个显示模型，不需要 prop，所以不进拾取场、不会被卷入；用于原作里「不可卷入的障碍」（木柱、栅栏、树、气球）。③**两者都没有**：画占位方块（旧行为，初代 V_00 的 35 个固体就是这样）。`visible:false` 把三者都关掉。
 
 **v1 的 `role=boundary` 不再进 `structures`**：它本质是活动范围，迁移到 `activityArea`（§5）。**`role=ground` 也不再进 `structures`**：平地由 `meta.groundY` 兜底，真地形由 `terrain` 表达。转换器遇到无法无损映射的边界（非矩形、非轴对齐）时保留为 `role:"boundary"` 并记 warning，不猜。
 
@@ -420,7 +420,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `volumeK` | number | 否 | 逐件覆盖；缺省取 def 的 `volumeK`，再缺省 0.70（PARITY_AUDIT G13）。范围 `0 < k ≤ 32` |
 | `volumeMm3` | int | 是（派生） | `round(k · aabb.x · aabb.y · aabb.z · 1e9)`，定点 `long`（已定 (r)）。工具写、校验器复算；差 > 1 mm³ 报 `[prop_volume_stale]` |
 | `absorbDiameterReqMm` | int | 是（派生） | `floor_mm((60 · volumeMm3 / π)^(1/3))`；原作门的整毫米口径（已定：按原作算式，k × bbox） |
-| `absorbable` | bool | 是 | 作者声明；false 的件永远不可吸（结构件/装饰）。校验器在本关可达球径处比较「声明 vs 可吸门」，不一致只记一条汇总 note、不报错（v2 里它是作者声明，不是派生） |
+| `absorbable` | bool | 是 | 作者声明；false 的件永远不可吸（结构件/装饰）。**写 false 只用于原作的永久不可卷入标记，不用于「这关的球够不着」**（owner 2026-11-22）：初代蟹座没有这种标记，大件靠门槛。运行时对 `absorbable:false` 的 prop 仍只按门槛判断（没有运行时列），所以 false 的 prop 应当是已被豁免出拾取场的贴花、云或走固体 def 的件。校验器在本关可达球径处比较「声明 vs 可吸门」，不一致只记一条汇总 note、不报错（v2 里它是作者声明，不是派生） |
 | `valueUnits` | int | 是 | 账本整数（≥1；0/小数当场拒绝，已定 (j)）。与 `volumeMm3` 是两个轴：一个记账、一个几何门 |
 | `parent` | string \| null | 否 | **单父指针**：父件的 `itemId`；null = 无父件。子件在父件被吃后**坠落**、不随父进账（已定 (s)） |
 | `inherit` | `"full"` \| `"position"` \| `"none"` | 否 | 父件运动如何传给子件：`full` = 位置+朝向（`linkAction` 0/1/3）；`position` = 只跟位置、朝向不跟（`linkAction` 6/4）；`none` = 不跟（脱钩/坠落）。缺省：有 `parent` 时 `full`，否则 `none`。**43/90 条父子是「自己 `moveType=-1` 却随父跑」**，靠这个字段表达 |

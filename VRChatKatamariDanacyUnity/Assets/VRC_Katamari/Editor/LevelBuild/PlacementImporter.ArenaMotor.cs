@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using VRC.Udon;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Pickup;
 using VRCKatamari.Story;
 
 namespace VRCKatamari.Editor.LevelBuild
@@ -138,6 +139,67 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return disabled;
+        }
+
+        /// <summary>
+        /// Links the level's <see cref="PickupFieldHost"/> to its arena host, so a rolled-up prop
+        /// takes its same-id static solid with it (<c>LevelArenaHost.RemoveSolidsOf</c>) and a
+        /// field reset puts it back.
+        /// </summary>
+        /// <remarks>
+        /// Wired only when the level has such twins (<paramref name="twinBoxes"/> &gt; 0); a
+        /// reference already set is kept, so a second import writes nothing. The pickup host is
+        /// the one under the level's root; a level with none gets one note, not an error (the
+        /// solids then stay, which is the old behaviour).
+        /// </remarks>
+        private static void WirePickupArenaHost(LevelArenaHost host, Transform levelRoot,
+            int twinBoxes, PlacementImportReport report)
+        {
+            if (twinBoxes <= 0 || host == null || levelRoot == null) return;
+            PickupFieldHost[] pickups = levelRoot.GetComponentsInChildren<PickupFieldHost>(true);
+            if (pickups.Length == 0)
+            {
+                report.Note(ArenaMotorTag + twinBoxes + " static box(es) are twins of pickup props " +
+                            "but the level has no PickupFieldHost, so they stay when the prop is " +
+                            "rolled up");
+                return;
+            }
+
+            int writes = 0;
+            for (int i = 0; i < pickups.Length; i++)
+            {
+                var serialized = new SerializedObject(pickups[i]);
+                SerializedProperty link = serialized.FindProperty(PickupArenaHostField);
+                if (link == null)
+                {
+                    report.Error(ArenaMotorTag + "PickupFieldHost has no '" + PickupArenaHostField +
+                                 "' field; rolled-up props will leave their solids behind");
+                    return;
+                }
+                if (link.objectReferenceValue == host) continue;
+                link.objectReferenceValue = host;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(pickups[i]);
+                writes++;
+                try
+                {
+                    UdonSharpEditorUtility.CopyProxyToUdon(pickups[i]);
+                }
+                catch (System.Exception exception)
+                {
+                    report.Error(ArenaMotorTag + "CopyProxyToUdon threw for PickupFieldHost: " +
+                                 exception.Message + "; run the import again once the compile " +
+                                 "has finished");
+                }
+            }
+
+            if (writes > 0)
+            {
+                report.V2SceneWiringWrites += writes;
+                report.Note(ArenaMotorTag + "PickupFieldHost.arenaHost linked to " +
+                            HierarchyPath(host.transform) + " (" + twinBoxes + " static box(es) " +
+                            "are twins of pickup props and leave with them)");
+            }
         }
 
         // True when the host's three geometry arrays hold no object at all.

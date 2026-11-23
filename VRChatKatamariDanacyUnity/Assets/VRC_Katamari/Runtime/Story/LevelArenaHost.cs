@@ -107,6 +107,13 @@ namespace VRCKatamari.Story
 
         [Header("Static boxes (solid and a support top; baked at Setup)")]
         [SerializeField] private BoxCollider[] staticBoxes;
+        // Parallel to staticBoxes: the item id of the PICKUP PROP this box is the collision of
+        // ("" = a plain solid that stays for good). Written by the importer from the level's
+        // solids that share an id with a prop, so a rolled-up prop can take its own solid with
+        // it (RemoveSolidsOf) and a field reset can bring it back (RestoreRemovedSolids). A
+        // GameObject name is NOT used: the importer renames objects, the id it writes here is
+        // the data's. Null or shorter than staticBoxes = no removable solids (older scenes).
+        [SerializeField] private string[] staticBoxItemIds;
 
         [Header("Static ramps (slab solids; baked at Setup)")]
         // Each entry's local +Y is the walking plane and its local +Z is the run; the
@@ -145,6 +152,25 @@ namespace VRCKatamari.Story
 
         private bool ready;
         private bool registrationSuspended;
+
+        // ---- Per-box registration record (parallel to staticBoxes; rebuilt by every Setup) ----
+        // What the motor was given for each static box, so a solid taken out with its prop can
+        // be put back byte-for-byte. A box that was not registered (null, refused, listed as a
+        // ramp) has boxRegistered false and is never touched.
+        private bool[] boxRegistered;
+        private bool[] boxRemoved;
+        private Vector3[] boxBakeCenter;
+        private Vector3[] boxBakeAxisX;
+        private Vector3[] boxBakeAxisY;
+        private Vector3[] boxBakeAxisZ;
+        private Vector3[] boxBakeHalfExtents;
+        private int[] boxBakeSurfaceId;
+        // The motor's static-table epoch seen right after this Setup. Another host clearing the
+        // table (a level switch) changes it, and then these records describe a table that no
+        // longer exists: remove and restore both become no-ops instead of writing into the
+        // new level's table.
+        private int registeredEpoch;
+        private int removedSolidCount;
         // Registration parameters (see Register). Zero by default so a scene that never calls
         // Register behaves exactly as before.
         private int boxSurfaceIdBase;
@@ -253,6 +279,7 @@ namespace VRCKatamari.Story
                 }
             }
 
+            ResetBoxRecords();
             if (staticBoxes != null)
             {
                 for (int i = 0; i < staticBoxes.Length; i++)
@@ -272,7 +299,7 @@ namespace VRCKatamari.Story
                         refusedCount = refusedCount + 1;
                         continue;
                     }
-                    if (RegisterBoxObb(box)) registeredBoxCount = registeredBoxCount + 1;
+                    if (RegisterBoxObb(box, i)) registeredBoxCount = registeredBoxCount + 1;
                     else refusedCount = refusedCount + 1;
                 }
             }
@@ -286,6 +313,7 @@ namespace VRCKatamari.Story
                 if (motor.TryBeginPlaying(Time.time)) beganPlaying = true;
             }
 
+            registeredEpoch = motor.GetStaticObbEpoch();
             ready = true;
             setupReport = "[arena] planes=" + registeredPlaneCount + "/"
                 + (boundaryWalls == null ? 0 : boundaryWalls.Length)
@@ -488,7 +516,7 @@ namespace VRCKatamari.Story
         /// Registers one static box as a true OBB under box surface id <c>1 + i</c> (plus
         /// the registration's box offset).
         /// </summary>
-        private bool RegisterBoxObb(BoxCollider box)
+        private bool RegisterBoxObb(BoxCollider box, int boxIndex)
         {
             Vector3 center;
             Vector3 axisX;
@@ -508,8 +536,135 @@ namespace VRCKatamari.Story
             if (!usable) return false;
             // The surface id is 1 + the box's registration order, so a diagnostic that
             // prints an id still names the same geometry.
-            return AddSolidObb(center, axisX, axisY, axisZ, halfExtents,
-                boxSurfaceIdBase + 1 + registeredBoxCount, ContactCodes.RoleBox, box.gameObject.name);
+            int surfaceId = boxSurfaceIdBase + 1 + registeredBoxCount;
+            if (!AddSolidObb(center, axisX, axisY, axisZ, halfExtents, surfaceId,
+                ContactCodes.RoleBox, box.gameObject.name)) return false;
+            if (boxRegistered != null && boxIndex >= 0 && boxIndex < boxRegistered.Length)
+            {
+                boxRegistered[boxIndex] = true;
+                boxBakeCenter[boxIndex] = center;
+                boxBakeAxisX[boxIndex] = axisX;
+                boxBakeAxisY[boxIndex] = axisY;
+                boxBakeAxisZ[boxIndex] = axisZ;
+                boxBakeHalfExtents[boxIndex] = halfExtents;
+                boxBakeSurfaceId[boxIndex] = surfaceId;
+            }
+            return true;
+        }
+
+        // Fresh, empty records for this Setup. Allocated per Setup (a setup-time event), sized
+        // to the serialized box array; a host with no boxes keeps no arrays.
+        private void ResetBoxRecords()
+        {
+            removedSolidCount = 0;
+            int count = staticBoxes == null ? 0 : staticBoxes.Length;
+            if (count == 0)
+            {
+                boxRegistered = null;
+                boxRemoved = null;
+                boxBakeCenter = null;
+                boxBakeAxisX = null;
+                boxBakeAxisY = null;
+                boxBakeAxisZ = null;
+                boxBakeHalfExtents = null;
+                boxBakeSurfaceId = null;
+                return;
+            }
+            boxRegistered = new bool[count];
+            boxRemoved = new bool[count];
+            boxBakeCenter = new Vector3[count];
+            boxBakeAxisX = new Vector3[count];
+            boxBakeAxisY = new Vector3[count];
+            boxBakeAxisZ = new Vector3[count];
+            boxBakeHalfExtents = new Vector3[count];
+            boxBakeSurfaceId = new int[count];
+        }
+
+        /// <summary>
+        /// Takes out of the motor the static solid(s) that are the collision of the pickup prop
+        /// <paramref name="itemId"/>, and returns how many OBBs were removed (a split solid has
+        /// one per part).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The reference level's big scenery (a lantern, a sliding door, a table) is two
+        /// things with one id: a prop the ball may roll up once it is big enough, and a static
+        /// solid that is that prop's collision. Rolling the prop up used to leave the solid
+        /// behind as an invisible wall. The pickup host calls this when it consumes the prop's
+        /// absorb event.
+        /// </para>
+        /// <para>
+        /// A no-op (0) when the host has not registered, when no box carries the id, when the
+        /// box was never registered with the motor, when it is already out, or when the
+        /// motor's table has been dropped since this Setup (another level's geometry is in
+        /// it now). The other boxes, their surface ids and the motor's prop block are not
+        /// touched, so two hosts on one motor never affect each other.
+        /// </para>
+        /// </remarks>
+        public int RemoveSolidsOf(string itemId)
+        {
+            if (!ready) return 0;
+            if (motor == null) return 0;
+            if (itemId == null || itemId.Length == 0) return 0;
+            if (staticBoxItemIds == null || boxRegistered == null) return 0;
+            if (motor.GetStaticObbEpoch() != registeredEpoch) return 0;
+            int removed = 0;
+            for (int i = 0; i < boxRegistered.Length; i++)
+            {
+                if (i >= staticBoxItemIds.Length) break;
+                if (!boxRegistered[i] || boxRemoved[i]) continue;
+                if (staticBoxItemIds[i] != itemId) continue;
+                if (!motor.RemoveStaticObb(boxBakeSurfaceId[i], boxBakeCenter[i])) continue;
+                boxRemoved[i] = true;
+                removed = removed + 1;
+            }
+            removedSolidCount = removedSolidCount + removed;
+            return removed;
+        }
+
+        /// <summary>
+        /// Puts back every solid <see cref="RemoveSolidsOf"/> took out, with the surface id and
+        /// bake it had, and returns how many were restored. The pickup host calls it from its
+        /// field reset (retry, hub switch, test-field reset).
+        /// </summary>
+        /// <remarks>
+        /// Restoring appends to the motor's table (order is not part of the contract; ids are).
+        /// If the table was dropped since Setup (a level switch cleared it), nothing is
+        /// written - the entries describe a table that is gone and the next <c>Register</c>
+        /// re-bakes every box from scratch - and the records are just forgotten, so a solid is
+        /// never registered twice.
+        /// </remarks>
+        public int RestoreRemovedSolids()
+        {
+            if (boxRemoved == null) return 0;
+            if (removedSolidCount <= 0) return 0;
+            bool sameTable = ready && motor != null && motor.GetStaticObbEpoch() == registeredEpoch;
+            int restored = 0;
+            for (int i = 0; i < boxRemoved.Length; i++)
+            {
+                if (!boxRemoved[i]) continue;
+                boxRemoved[i] = false;
+                if (!sameTable) continue;
+                if (motor.AddObb(boxBakeCenter[i], boxBakeAxisX[i], boxBakeAxisY[i],
+                    boxBakeAxisZ[i], boxBakeHalfExtents[i], boxBakeSurfaceId[i],
+                    ContactCodes.RoleBox))
+                {
+                    restored = restored + 1;
+                }
+                else
+                {
+                    NoteRefusal(RefusalObbInvalid, "restoring a removed solid: "
+                        + motor.GetLastStaticObbRefusalReason());
+                }
+            }
+            removedSolidCount = 0;
+            return restored;
+        }
+
+        /// <summary>Solids currently taken out because their prop was rolled up.</summary>
+        public int GetRemovedSolidCount()
+        {
+            return removedSolidCount;
         }
 
         /// <summary>

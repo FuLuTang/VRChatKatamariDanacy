@@ -38,6 +38,7 @@
 | Charge’n’Roll | WLK RR+ v20230608：`s16DashInputDuration=14`；`s32DashWheelSpinData` 分 3/4/5 档空转、+4 次自动出射；空转超时弱冲 ×0.67；`sResistance` 普通滚阻；`gYm_CoreDashStart` 取相机前向 | VR 左扳机／桌面 Shift 长按映射等效输入；滑行复用普通运动、保留原作寿命/恢复/喘气及反推刹车；速度和加速度倍率按本项目球径在 WLK RunParam 插值，方向取驾驶朝向 | 头部可自由观察，不让转头改变既定冲刺路线；用项目 Tuning 和世界速度刻度；球壳空转角速度仍为表现值。按反推、撞墙、寿命或关门终止；墙面判定用现有接触代理 | 恢复原作阶段和参数；保留输入／视角适配，待真机验收（[接触模型 §3.8](../BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)） | owner 2026-11-19 |
 | 球径上限 | 原作 Cancer `MAX_DIAMETER = 1.2 m`（`missions` 表、本机 REROLL Dump 导出表 `dump.csv`（含原作数据，不入库）、`DATAMODEL_NOTES.md` §1）；11 件需要 1.27–6.45 m，原作吸不到 | 我们不限 1.2 m；全局上限 400 m，球长到各自门槛且接触时，这 11 件可吸 | 所有地图共用同一上限 | 保留差异 | owner 2026-11-18 |
 | 视觉核心 | REROLL [玩家观察](https://steamcommunity.com/app/848350/discussions/0/3561682880003061934/)：“the 'core' grows and absorbs all the objects”；Takahashi 2004 postmortem 确认镜头随球变大自动拉远。证据强度：玩家观察 + 开发者镜头说法，非核/碰撞比例实测。专利 Mp/Mh/Mr 分离不证明核固定；core_XX 仍按关卡命名 | `BallView` 读当前碰撞半径 ×2，变化即写；`CoreSkinAssembler` 保留等体积径归一化子节点，先用 core_01；Unity 验证待做 | 消除粘附件与小核之间的空腔；参考资产仅本机占位，不进 git/上传 | restore（owner 2026-11-17）：核显示等体积直径 = 当前碰撞直径，不用弹簧；[装配与证据](../BallPresentation/CORE_SKIN.md) | owner 2026-11-17 |
+| 吸附物埋没删除 | 件整个落进删除球就删，删除球半径按原作「核显示半径」定：WLK = 开局 + 0.38 ×（当前 − 开局），件数 150→300 加深到当前半径（`Game_Mono.sRegCore` 0xC572A0、`Game_Core.sPostProcess` 0x98E420）；原作核显示比碰撞球小，判定用「件原点距离 + 包围半径」，每帧判；原作无交分缩小 | 同一删除半径公式与件数加深；核显示 = 碰撞球；判定用件 8 角点最远距离（整毫米）；只在半径或件数变化时判；交分缩小后不恢复；只关 Renderer 与 Animator | 核等于碰撞球是 owner 刻意设计（视觉核心行），所以 T < R 那段删掉的件本来就被核盖住；最远角点与针壳共用几何且更紧；我们的件吸附后不动，按变化判与每帧判结果相同；缩小不恢复：原作无此机制，删了不再出现与原作一致 | restore（删除规则）；keep（核等于碰撞球、判定几何、缩小不恢复） | owner 2026-11-23 |
 | 球核心视觉（生长弹簧） | 逻辑 30 Hz、画面另插值，没有公开的「生长弹簧」参数（`Docs/Evidence/OriginalPhysicsNotes/reroll_datamodel.md` §0、`DATAMODEL_NOTES.md`）；核随碰撞直径更新（见「视觉核心」行） | 核心直径直接跟随碰撞直径；生长弹簧与 0.95 缩放路径已删除（`BallView`） | `none -> remove from play`（owner 2026-11-16：开了仍读作「跳一下」，真因是价值定价而非缺平滑；见 `VISUAL_GROWTH_AUDIT.md` 顶部记录与 [WHY_OUR_GROWTH_IS_BIG.md](../../Research/ContentVolume/WHY_OUR_GROWTH_IS_BIG.md)） | remove (owner 2026-11-16: still reads as a jump; real cause is value pricing) | owner 2026-11-16 |
 | 骑手/座位尺度 | 小型王子骑在球后滚球，第三人称相机（`meta/DATAMODEL_NOTES.md` 的 `missions.CAMERA_FOV` / `initPos`；[研究核查](../../Research/KatamariBallRules/README.md) C3 王子シップ） | 玩家 avatar 经站立式 `VRCStation` 站在球后、脚在地上，手从肩向前下 52° 按在球背（第一人称，眼点 = 球心上 1.9001·r、后 1.0418·r）；**avatar 眼高按球径线性跟随 E = 2.9001·r ÷ η**（η 为入座时实测的站立头高 ÷ 眼高，`RideScaleMath.TryEyeHeightForDiameter`），触地点—球顶—视点成相似三角形；**眼高夹在 `[0.1, 100] m`**（`RideScaleMath.MaxSupportedEyeHeightMeters`，VRChat 不支持 >100 m 的头像缩放），所以球径约 69 m·η 以上骑手不再变大（球本身仍可长到 400 m）；面板随 E 缩放（[RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md) §1、§3） | VR 第一人称、没有第三人称追尾相机，手是玩家自己的控制器，所以用"手推着球"的站姿；骑手随球一起缩放（不是从原作学来的），代价是旁观者看到巨人推大球；η、手到球面的实测距离、面板可读性未在真机核对 | keep, owner decided 2026-11-18（VR 反馈后：站姿手推球、相似三角形） | owner 2026-11-18 |
 | 吸附物位姿 | 接触位置原地粘住，保持碰撞瞬间姿态，不缩放、不外推、不拉入（`[专利原文]` US7402104B2 + `[录像实测]` PS2 美版，[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) a1–a5） | 自身盒触碰物理等效球；在成功提交那一步、成长推出之前转球局部位姿写入事件环；宿主只消费冻结位姿，不用延迟后的球心/滚转重算（`AttachmentMath` / `PickupFieldHost`）。R33 残留主因与修复见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §1 | 接触时刻语义已还原；球侧 Mh 形状取舍见“吸收触发的几何”行，未用拉入补偿 | restore（触发即接触、原地冻结、不加嵌入偏移；待 Unity 复验） | Lead 2026-11-17 |
@@ -198,7 +199,7 @@
 | `C09` 入场可吃占比 | 进场立刻能吃的比例 | MAS1 59%、Cancer 35%；32 区域 12–76%、典型 ~26% | 67%（story_01）/ 见对照节（`_ref_mas1`） | — | 两边都"进场有得吃"；原作按区下降，我们没有区 |
 | `C10` 1–10 cm 类占比 | 小尺寸类的占比 | MAS1 76%、Cancer 3.8%；跨区衰减 MAS4 60→12→5.5→0%、MAS8 16.6→0 | 15%（story_01） | — | 原作第二区起不再放新小件（靠"世界整体上移"而不是"删小件"）；我们只有一个尺寸带 |
 | `C11` 尺寸-半径空间分布 | 小件是否集中在中央 | Cancer ρ=+0.354、MAS1 ρ=+0.219（大件在外、更稀疏） | ρ=+0.13（story_01） | ρ | 原作两个可测关都是正相关：中央是"饭碗"，地标是"地平线"；我们是弱正相关，中央不够挤 |
-| `C07` 埋没处理 | 旧物被吞后还画不画 | 录像 5.0→6.9 cm 段内未见核心变化、全程是否固定未定；后吸的件盖住先吸的，先吸的仍画出。消隐按**摄像机档位上的物件相对大小**（专利；阈值未知，录像只有区间约束）（[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) b1、c1、d1–d3） | **没有任何策略**；核心等体积直径 = 当前碰撞直径、随体积长大，先吸的件被长大的核包进去，被挡住的件自然看不见 | — | 球芯行的规则已覆盖该情形。不做埋没隐藏或剔除；原作的相对大小消隐默认不做，开放问题见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §3.3 |
+| `C07` 埋没处理 | 旧物被吞后还画不画 | 件整个落进删除球就删除（不画、停动画、同局不恢复、体积不变）。WLK：删除半径 = 开局半径 + 0.38 ×（当前 − 开局），卷入显示数 150→300 时线性加深到当前半径；初代：0.38 r，100→190 件加深到 0.845 r（零售版代码，[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md)「本文改正了前人哪些读法」第 1 条）。另有专利的摄像机档位相对大小消隐 | 按 WLK 口径删除（`AttachedDisplayMath`，宿主 `PickupFieldHost`）：吸附时记 8 角点最远距离，R 或件数变化时用有序数组 + 游标判，只关 Renderer 与 Animator；交分缩小后不恢复；其余件再按「最大 10 + 最近 10」显示。**未经 Unity 验证** | 偏离见「埋没删除」行 | 判据：蟹座 0.8 m 时删除件数落在离线估算区间（[`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §3.3） |
 
 ### 2.5 L 层：关卡规则与呈现（5 条）
 
@@ -231,7 +232,7 @@
 | H2 | 斜板不挡侧面/底面，球会穿过去 | **CONFIRMED-BY-CODE** | 旧位置权威不含坡；v2 改成实体 slab（设计，未验证） | `T04` |
 | H3 | 运行时没有堆叠支撑图，上面的东西不会掉 | **CONFIRMED-BY-CODE** | `PROP_BEHAVIOURS.md` §0.5（`support/stackedOn` 只喂 `placement_core.py:1268`）；`support_graph.py` 只有 Python 模型 | `C05` |
 | H4 | 运行时没有"行为"（移动/动画/轨道/坠落） | **CONFIRMED-BY-CODE** | `PROP_BEHAVIOURS.md` §3.1 是提案；`placement_core.PROP_KEYS` 会静默丢弃 `behaviour*` | `C04` |
-| H5 | 埋没的吸附物仍然可见 | **CONFIRMED-BY-CODE** | `Docs/Evidence/BallAudit/report.md` §E(c)：无 burial 代码；核心随体积长大才有“被吞”，被核挡住的件在画面上自然看不见，不做隐藏或剔除（`CONTACT_MODEL_V2.md` §4.3） | `C07` |
+| H5 | 埋没的吸附物仍然可见 | **FIXED-IN-CODE（未经 Unity 验证）** | 2026-11-23 起按 WLK 口径删除整件入删除球的吸附物（`AttachedDisplayMath`，`ATTACH_PLACEMENT.md` §3.3）；此前无 burial 代码（`Docs/Evidence/BallAudit/report.md` §E(c)） | `C07` |
 | H6 | 成长太快（单件回收 100% + 整数量化） | **CONFIRMED-BY-CODE** | `Docs/Evidence/GrowthAudit/report.md` §0.2/§4（44 个 def 中 43 个超过 10% 口径；最坏 +29.3% 直径）；原作默认 0.8 且末端 0.16 | `G06`/`G10` |
 | H7 | 内容量差一个量级，导致"两下就变大" | **CONFIRMED-BY-CODE** | 本文 `C01`–`C03`（654/127、107/44、2.46×/0.45×）；`reroll_numbers.md` §2.2（600–900 件/0.30→1.25 m） | `C01`–`C03`/`G10` |
 | H8 | 1 u = 4.1 L 的量化粒度太粗 | **CONFIRMED-BY-CODE** | `Docs/Evidence/GrowthAudit/report.md` §0.7（1 u = 起始球的 29%；99/127 件 <1 u） | `G06`/`S02` |
@@ -263,7 +264,7 @@
 | 类 | 判据 | 例子（本表） | 处置 |
 |---|---|---|---|
 | **参数差** | 机制相同，数值不同 | `G01` 起始球径、`G06` 回收比例、`L05` 星级档 | 决定要不要采纳原值（§5 D2） |
-| **缺机制** | 原作有、我们没有 | `C04` 行为字段、`C05` 堆叠、`C07` 埋没、`L01` 换档（`G08` 取整已于 2026-11-16 还原） | 立项；先看 `PROP_BEHAVIOURS.md` 的提案成本 |
+| **缺机制** | 原作有、我们没有 | `C04` 行为字段、`C05` 堆叠、`L01` 换档（`G08` 取整已于 2026-11-16 还原） | 立项；先看 `PROP_BEHAVIOURS.md` 的提案成本 |
 | **不同机制** | 两边都有，但形状不同 | `T03` 防穿模、`T04` 碰撞形状、`T05` 触发体、`S03`/`S04` 尺度 | 记录差异，**不许**写成"还原原作" |
 | **可接受偏差** | 差异存在但无玩法影响 | `M05` `H_cap`（锚点同量级）、`L04` HUD 单位 | 写进 evidence，不再追 |
 
@@ -276,7 +277,7 @@
 | **2** | 成长：`ΔV = 0.8·V_box`、`c` 0.0041→0.0005、取消 1 u 量化 | 代码（电机 + 账本）+ 数据（44 个 def 重定价） | 1–2 天 | `G06`、`G10`、`C03`；`growth_audit` 方案 A+C 已算过数值 |
 | **3** | 尺寸档/换区阈值表进关卡数据（先只做"读数 + 播报"，不做特效） | 数据 schema + 一次校验器改动 | 1 天 | `L01` 0→1 |
 | **4** | 行为字段 + 堆叠运行时（`parent` 父指针 + 每 tick 浮空复检 + 坠落） | `PROP_BEHAVIOURS.md` §10.9 的数据形状 + `placement_core` 同批改 | 3–5 天 | `C04`、`C05` |
-| **5** | 核心显示径跟随碰撞径（冻结旧件可被成长核包住；不新增埋没 cull） | `BallView` + 马达一个只读 getter + 删 0.95 常量与测试 | 0.5–1 天 | `C07`、视觉核心行 |
+| **5** | 核心显示径跟随碰撞径（冻结旧件可被成长核包住） | `BallView` + 马达一个只读 getter + 删 0.95 常量与测试 | 0.5–1 天 | `C07`、视觉核心行 |
 | **6** | 5 cm 球实跑 MAS1 灰盒（Unity） | `PhysicsTestField` 一套 cell + 球径 preset | 2 天 + Unity 操作 | `T01`/`T03`/`M0x` 的手感与每步成本；`S03` 从"算得出"变"量得到" |
 | **7** | 相机 37° 与 HUD cm 显示 | 场景 + HUD 一处 | 0.5 天 | `L03`、`L04` |
 

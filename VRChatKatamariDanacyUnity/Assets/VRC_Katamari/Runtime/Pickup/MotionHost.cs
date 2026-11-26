@@ -405,7 +405,7 @@ namespace VRCKatamari.Pickup
             // re-checks, so a prop is never written after it was taken.)
             if (t.parent != homeParent[i])
             {
-                rowMode[i] = ModeAway;
+                ParkAway(i);
                 return;
             }
             if (!frameHaveObserver) return;
@@ -476,6 +476,17 @@ namespace VRCKatamari.Pickup
             WriteRow(i, now, smooth, riding, parentRow, motionClass);
         }
 
+        // An absorbed prop rides the ball as a still: its Animator stops where it is (the
+        // first game turns the attached prop's animator off with its renderers,
+        // AttachableProp.UpdateMono). ReviveRow switches it back on when a reset returns the
+        // prop to its home parent.
+        private void ParkAway(int i)
+        {
+            rowMode[i] = ModeAway;
+            Animator animator = rowAnimators != null && i < rowAnimators.Length ? rowAnimators[i] : null;
+            if (animator != null && animator.enabled) animator.enabled = false;
+        }
+
         // The prop is parked (away, detached): watch for it coming back.
         private void DriveInactiveRow(int i, int mode)
         {
@@ -506,7 +517,7 @@ namespace VRCKatamari.Pickup
             }
             if (t.parent != homeParent[i])
             {
-                rowMode[i] = ModeAway;
+                ParkAway(i);
                 return;
             }
             if (rowWrote[i] && MotionHostMath.HasDriftedSquared(curPos[i], t.position, driftToleranceSq))

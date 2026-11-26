@@ -57,6 +57,15 @@ namespace VRCKatamari.Pickup
     /// the motor no longer holds simply falls out of the list).
     /// </para>
     /// <para>
+    /// What the ball draws (<see cref="AttachedDisplayMath"/>). An attached prop that lies
+    /// wholly inside the original's bury sphere is buried for the rest of the round; of the
+    /// rest only the biggest <c>displayBiggestCap</c> plus the most recent
+    /// <c>displayRecentCap</c> keep their renderers on. Both only switch
+    /// <c>Renderer.enabled</c> (back to the flag recorded when the prop attached); parent,
+    /// pose, ledger, volume and the needle shell do not change, and a field reset turns
+    /// every recorded renderer back to that flag.
+    /// </para>
+    /// <para>
     /// Attach or hide, never both. A prop whose pose the math refuses is hidden
     /// (<c>SetActive(false)</c>) and logged once with a reason code, because a prop that
     /// was absorbed but cannot be attached must not keep floating in the world. The two
@@ -264,6 +273,13 @@ namespace VRCKatamari.Pickup
         // the importer wires it, and the host's staticBoxItemIds says which boxes are twins.
         [SerializeField] private LevelArenaHost arenaHost;
 
+        [Header("Attached display (AttachedDisplayMath)")]
+        // How many attached props the ball draws: the biggest N plus the most recent N not
+        // already among them (owner 2026-11-23: 10 + 10 for the local ball). 0 in an older
+        // scene means the default. Props buried inside the ball are never drawn.
+        [SerializeField] private int displayBiggestCap = AttachedDisplayMath.DefaultBiggestCount;
+        [SerializeField] private int displayRecentCap = AttachedDisplayMath.DefaultRecentCount;
+
         [Header("Radii and cadence")]
         [SerializeField] private float activationRadiusM = DefaultActivationRadiusM;
         [SerializeField] private float scanIntervalSeconds = DefaultScanIntervalSeconds;
@@ -461,6 +477,38 @@ namespace VRCKatamari.Pickup
         private int proxyAppliedCount;
         private int proxyLogCount;
 
+        // ---- Attached display (allocated in Start, never serialized) ----
+        // Per row: attach order (-1 = not attached), volume key, buried flag, farthest box
+        // corner from the ball centre in whole mm. displayHist lists attached rows in attach
+        // order; displaySorted holds the live rows by farthest corner, buried up to the cursor.
+        private int[] displaySeq;
+        private long[] displayKey;
+        private bool[] displayBuried;
+        private int[] displayFarMm;
+        private int[] displayHist;
+        private int displayHistCount;
+        private int[] displaySorted;
+        private int displaySortedCount;
+        private int displayBuryCursor;
+        private int[] displayBig;
+        private int displayBigCount;
+        private int[] displayRecent;
+        private int displayRecentCount;
+        private int[] displayBigBefore;
+        private int[] displayRecentBefore;
+        private Vector3[] displayCorners;
+        // Every renderer under an attached prop, recorded the frame it attaches, with its
+        // enabled flag at that moment (the flag ResetField puts back).
+        private Renderer[] displayRenderers;
+        private bool[] displayRendererWasEnabled;
+        private int displayRendererCount;
+        private int[] displayRendererStart;
+        private int[] displayRendererLength;
+        private int displayShownCount;
+        private int buriedCount;
+        private int displayCheckedRadiusMm;
+        private int displayCheckedAttached;
+
         // Attached count by kind, grown in place; capacity is the prop count.
         private string[] kindTallyNames;
         private int[] kindTallyCounts;
@@ -574,6 +622,7 @@ namespace VRCKatamari.Pickup
             bool profile = performanceDiagnostics != null && performanceDiagnostics.sampling;
             long phaseStart = profile ? BallPerformanceMath.Timestamp() : 0L;
             ConsumeAbsorbedEvents();
+            UpdateBuried();
             if (profile) phaseStart = BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.AttachmentEvents, phaseStart);
             VerifyStaticRows();
             UpdatePropObstacles();
@@ -666,6 +715,7 @@ namespace VRCKatamari.Pickup
             // Withdraw first: the attached/hidden rows no longer hold a submit time, so
             // this only covers rows that were queued and left free.
             WithdrawSubmitted();
+            RestoreDisplayRenderers();
 
             int restored = 0;
             for (int i = 0; i < propCount; i++)
@@ -775,6 +825,18 @@ namespace VRCKatamari.Pickup
             return 0;
         }
 
+        /// <summary>Attached props whose renderers are drawn (the display cap's B and R groups).</summary>
+        public int GetDisplayedCount()
+        {
+            return displayShownCount;
+        }
+
+        /// <summary>Attached props buried inside the ball: never drawn again this round.</summary>
+        public int GetBuriedCount()
+        {
+            return buriedCount;
+        }
+
         /// <summary>Absorbed props this host could not attach and therefore hid.</summary>
         public int GetHiddenCount()
         {
@@ -861,6 +923,8 @@ namespace VRCKatamari.Pickup
                 blockingStickinessM = DefaultBlockingStickinessM;
             if (!KatamariMath.IsFiniteFloat(gridCellSizeM) || gridCellSizeM <= 0f)
                 gridCellSizeM = DefaultGridCellSizeM;
+            if (displayBiggestCap <= 0) displayBiggestCap = AttachedDisplayMath.DefaultBiggestCount;
+            if (displayRecentCap <= 0) displayRecentCap = AttachedDisplayMath.DefaultRecentCount;
         }
 
         /// <summary>
@@ -1049,6 +1113,22 @@ namespace VRCKatamari.Pickup
             kindTallyNames = new string[propCount];
             kindTallyCounts = new int[propCount];
             kindTallyCount = 0;
+            displaySeq = new int[propCount];
+            displayKey = new long[propCount];
+            displayBuried = new bool[propCount];
+            displayFarMm = new int[propCount];
+            displayHist = new int[propCount];
+            displaySorted = new int[propCount];
+            displayBig = new int[displayBiggestCap];
+            displayRecent = new int[displayRecentCap];
+            displayBigBefore = new int[displayBiggestCap];
+            displayRecentBefore = new int[displayRecentCap];
+            displayCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
+            displayRenderers = new Renderer[propCount > 0 ? propCount : 1];
+            displayRendererWasEnabled = new bool[displayRenderers.Length];
+            displayRendererStart = new int[propCount];
+            displayRendererLength = new int[propCount];
+            ClearDisplayState();
             attachedCount = 0;
             hiddenCount = 0;
             lastHiddenReason = HiddenReasonNone;
@@ -1796,13 +1876,14 @@ namespace VRCKatamari.Pickup
                 localRotation);
 
             propStates[index] = StateAttached;
+            attachedCount = attachedCount + 1;
+            RegisterDisplay(index, localPosition, localRotation);
             ForgetQueued(index);
             // The prop may have been supporting the ball or blocking it a moment ago. The
             // obstacle refresh runs later in this same Update, before the collecting gate,
             // so pulling the next scan forward makes the absorbed prop lose both roles in
             // the frame the event is consumed instead of up to one scan later.
             nextBlockingScanTime = 0f;
-            attachedCount = attachedCount + 1;
             if (objectiveKinds == null || objectiveKinds.Length == 0) TallyKind(kinds[index]);
             else if (index < objectiveKinds.Length) TallyKind(objectiveKinds[index]);
             Vector3 ballCenter = motor.GetCenterWorld();
@@ -1814,7 +1895,245 @@ namespace VRCKatamari.Pickup
                 + " contactMm=" + (contactRadius * 1000f).ToString("F1")
                 + " delaySteps=" + delaySteps
                 + " centerDeltaMm=" + (Vector3.Distance(ballCenter, contactCenter) * 1000f).ToString("F1")
-                + " attached=" + attachedCount);
+                + " attached=" + attachedCount
+                + " displayed=" + displayShownCount
+                + " buried=" + buriedCount);
+        }
+
+        // ------------------------------------------------------------------
+        // Attached display: bury first, then draw the biggest N + most recent N
+        // (AttachedDisplayMath). Only renderers are switched; parent, pose, ledger,
+        // volume, collision radius and the 16-pin shell are untouched.
+        // ------------------------------------------------------------------
+
+        // Every array the display layer reads, allocated together in AllocatePropStore and
+        // sized to the prop count.
+        private bool DisplayStoreReady()
+        {
+            return displaySeq != null && displayKey != null && displayBuried != null
+                && displayFarMm != null && displayHist != null && displaySorted != null
+                && displayBig != null && displayRecent != null && displayBigBefore != null
+                && displayRecentBefore != null && displayCorners != null
+                && displayRenderers != null && displayRendererWasEnabled != null
+                && displayRendererStart != null && displayRendererLength != null
+                && propOwnSizes != null && propTransforms != null;
+        }
+
+        private bool DisplayRowReady(int index)
+        {
+            if (!DisplayStoreReady()) return false;
+            return index >= 0 && index < displaySeq.Length && index < displayRendererStart.Length
+                && index < propOwnSizes.Length && index < propTransforms.Length;
+        }
+
+        private void ClearDisplayState()
+        {
+            AttachedDisplayMath.ResetRows(displaySeq, displayBuried, propCount);
+            displayHistCount = 0;
+            displaySortedCount = 0;
+            displayBuryCursor = 0;
+            displayBigCount = 0;
+            displayRecentCount = 0;
+            displayRendererCount = 0;
+            displayShownCount = 0;
+            buriedCount = 0;
+            displayCheckedRadiusMm = -1;
+            displayCheckedAttached = -1;
+        }
+
+        /// <summary>
+        /// Records the prop's renderers, decides whether it is already buried, and lets the
+        /// display cap show it (and hide at most one other prop).
+        /// </summary>
+        private void RegisterDisplay(int index, Vector3 localPosition, Quaternion localRotation)
+        {
+            // The display layer is optional for the attach itself: without its store (a host
+            // whose Start never allocated it) the prop simply stays drawn as before.
+            if (!DisplayRowReady(index)) return;
+            RecordDisplayRenderers(index);
+            // Hidden until the cap says otherwise; a refused registration keeps the prop drawn
+            // (nothing is lost, the cap just does not cover it).
+            SetDisplayRenderers(index, false);
+
+            float farthest;
+            int farMm = 0;
+            if (!RadialProxyShellMath.TryBuildAabbCorners(localPosition, localRotation,
+                propOwnSizes[index], displayCorners, out farthest)
+                || !AttachedDisplayMath.TryFloorMm(farthest, out farMm))
+            {
+                SetDisplayRenderers(index, true);
+                return;
+            }
+            displayFarMm[index] = farMm;
+            displayKey[index] = AttachedDisplayMath.VolumeKey(propOwnSizes[index]);
+
+            int buryMm;
+            bool buried = TryCurrentBuryRadiusMm(out buryMm) && farMm < buryMm;
+            int shown;
+            int hidden;
+            if (!AttachedDisplayMath.TryAttach(index, buried, displayKey, displaySeq, displayBuried,
+                displayHist, ref displayHistCount, displayBig, ref displayBigCount, displayBiggestCap,
+                displayRecent, ref displayRecentCount, displayRecentCap,
+                out shown, out hidden))
+            {
+                SetDisplayRenderers(index, true);
+                return;
+            }
+            if (buried)
+            {
+                buriedCount = buriedCount + 1;
+                return;
+            }
+            AttachedDisplayMath.TryInsertByFar(index, displayFarMm, displaySorted,
+                ref displaySortedCount, displayBuryCursor);
+            if (shown >= 0)
+            {
+                SetDisplayRenderers(shown, true);
+                displayShownCount = displayShownCount + 1;
+            }
+            if (hidden >= 0)
+            {
+                SetDisplayRenderers(hidden, false);
+                displayShownCount = displayShownCount - 1;
+            }
+        }
+
+        /// <summary>
+        /// Buries the props that now lie wholly inside the bury sphere. Runs only when the
+        /// collision radius (whole mm) or the attached count changed; the cursor only moves
+        /// forward, so a bank shrink buries nothing new and brings nothing back. A frame that
+        /// buries a shown prop rebuilds the two groups once.
+        /// </summary>
+        private void UpdateBuried()
+        {
+            if (!DisplayStoreReady() || motor == null) return;
+            int radiusMm;
+            if (!AttachedDisplayMath.TryFloorMm(motor.GetCollisionRadiusWorldM(), out radiusMm)) return;
+            if (radiusMm == displayCheckedRadiusMm && attachedCount == displayCheckedAttached) return;
+            displayCheckedRadiusMm = radiusMm;
+            displayCheckedAttached = attachedCount;
+
+            int buryMm;
+            if (!TryCurrentBuryRadiusMm(out buryMm)) return;
+            bool rebuild = false;
+            int row = AttachedDisplayMath.NextToBury(displayFarMm, displaySorted,
+                displaySortedCount, ref displayBuryCursor, buryMm);
+            while (row >= 0)
+            {
+                if (AttachedDisplayMath.MarkBuried(row, displaySeq, displayBuried, displayBig,
+                    displayBigCount, displayRecent, displayRecentCount)) rebuild = true;
+                buriedCount = buriedCount + 1;
+                row = AttachedDisplayMath.NextToBury(displayFarMm, displaySorted,
+                    displaySortedCount, ref displayBuryCursor, buryMm);
+            }
+            // At most one rebuild per call, and this call runs only when the radius or the
+            // attached count changed: a burst of burials costs one O(n x (N + N)) pass.
+            if (rebuild) RebuildDisplay();
+        }
+
+        // One full recompute of the groups, then renderers switched only where membership
+        // changed (the before/after diff over at most bigCap + recentCap rows each).
+        private void RebuildDisplay()
+        {
+            int bigBefore = displayBigCount;
+            int recentBefore = displayRecentCount;
+            for (int i = 0; i < bigBefore; i++) displayBigBefore[i] = displayBig[i];
+            for (int i = 0; i < recentBefore; i++) displayRecentBefore[i] = displayRecent[i];
+            if (!AttachedDisplayMath.TryRebuild(displayKey, displaySeq, displayBuried, displayHist,
+                displayHistCount, displayBig, ref displayBigCount, displayBiggestCap,
+                displayRecent, ref displayRecentCount, displayRecentCap)) return;
+            for (int i = 0; i < bigBefore; i++) SyncDisplayRow(displayBigBefore[i]);
+            for (int i = 0; i < recentBefore; i++) SyncDisplayRow(displayRecentBefore[i]);
+            for (int i = 0; i < displayBigCount; i++) SyncDisplayRow(displayBig[i]);
+            for (int i = 0; i < displayRecentCount; i++) SyncDisplayRow(displayRecent[i]);
+            displayShownCount = displayBigCount + displayRecentCount;
+        }
+
+        private void SyncDisplayRow(int row)
+        {
+            SetDisplayRenderers(row, AttachedDisplayMath.IsShown(row, displayBig, displayBigCount,
+                displayRecent, displayRecentCount));
+        }
+
+        private bool TryCurrentBuryRadiusMm(out int buryMm)
+        {
+            buryMm = 0;
+            if (motor == null) return false;
+            return AttachedDisplayMath.TryBuryRadiusMm(motor.GetCollisionRadiusWorldM(),
+                0.5f * motor.GetStartDiameterWorldM() * CollisionPerSemanticDiameter(),
+                attachedCount, out buryMm);
+        }
+
+        // The start diameter is semantic; the bury sphere is in collision radii. Both come
+        // from the motor's own size ratio, measured instead of re-derived.
+        private float CollisionPerSemanticDiameter()
+        {
+            float semantic = motor.GetSemanticDiameterWorldM();
+            float collision = motor.GetCollisionRadiusWorldM();
+            if (!KatamariMath.IsFiniteFloat(semantic) || semantic <= 0f) return 1f;
+            if (!KatamariMath.IsFiniteFloat(collision) || collision <= 0f) return 1f;
+            return 2f * collision / semantic;
+        }
+
+        private void RecordDisplayRenderers(int index)
+        {
+            displayRendererStart[index] = displayRendererCount;
+            displayRendererLength[index] = 0;
+            Transform prop = propTransforms[index];
+            if (prop == null) return;
+            Renderer[] found = prop.GetComponentsInChildren<Renderer>(true);
+            if (found == null || found.Length == 0) return;
+            if (displayRendererCount + found.Length > displayRenderers.Length)
+            {
+                int capacity = displayRenderers.Length * 2;
+                while (capacity < displayRendererCount + found.Length) capacity = capacity * 2;
+                Renderer[] grownRenderers = new Renderer[capacity];
+                bool[] grownEnabled = new bool[capacity];
+                for (int i = 0; i < displayRendererCount; i++)
+                {
+                    grownRenderers[i] = displayRenderers[i];
+                    grownEnabled[i] = displayRendererWasEnabled[i];
+                }
+                displayRenderers = grownRenderers;
+                displayRendererWasEnabled = grownEnabled;
+            }
+            for (int i = 0; i < found.Length; i++)
+            {
+                displayRenderers[displayRendererCount] = found[i];
+                displayRendererWasEnabled[displayRendererCount] = found[i] != null && found[i].enabled;
+                displayRendererCount = displayRendererCount + 1;
+            }
+            displayRendererLength[index] = found.Length;
+        }
+
+        // Shown = each renderer back to the flag it had when the prop attached (a skeletal
+        // prop's static mesh stays off); hidden = every renderer off.
+        private void SetDisplayRenderers(int index, bool shown)
+        {
+            if (!DisplayRowReady(index)) return;
+            int start = displayRendererStart[index];
+            int end = start + displayRendererLength[index];
+            for (int i = start; i < end; i++)
+            {
+                Renderer renderer = displayRenderers[i];
+                if (renderer == null) continue;
+                bool want = shown && displayRendererWasEnabled[i];
+                if (renderer.enabled != want) renderer.enabled = want;
+            }
+        }
+
+        private void RestoreDisplayRenderers()
+        {
+            if (!DisplayStoreReady()) return;
+            for (int i = 0; i < displayRendererCount; i++)
+            {
+                Renderer renderer = displayRenderers[i];
+                if (renderer == null) continue;
+                if (renderer.enabled != displayRendererWasEnabled[i])
+                    renderer.enabled = displayRendererWasEnabled[i];
+                displayRenderers[i] = null;
+            }
+            ClearDisplayState();
         }
 
         /// <summary>

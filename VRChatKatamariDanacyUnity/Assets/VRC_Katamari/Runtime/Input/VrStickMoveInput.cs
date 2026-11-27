@@ -71,6 +71,9 @@ namespace VRCKatamari.Input
         [Tooltip("Optional hub settings for hand swap, stick deadzone and turn sensitivity.")]
         [SerializeField] private HubSettingsHost settings;
 
+        [Tooltip("Optional dash cue (haptics + sound); presentation only.")]
+        [SerializeField] private DashCueHost dashCue;
+
         private bool settingsRead;
         private int settingsRevision;
         private bool swapHands;
@@ -91,14 +94,14 @@ namespace VRCKatamari.Input
         {
             bool wasOpen = InputOpen();
             rideGateOpen = open;
-            if (wasOpen && !InputOpen()) ZeroAxes();
+            if (wasOpen && !InputOpen()) ZeroAxes("ride gate closed");
         }
 
         public void SetRoundGate(bool open)
         {
             bool wasOpen = InputOpen();
             roundGateOpen = open;
-            if (wasOpen && !InputOpen()) ZeroAxes();
+            if (wasOpen && !InputOpen()) ZeroAxes("round gate closed");
         }
 
         /// <summary>Switches scheme; unknown values are refused. The entry the owner's settings UI calls.</summary>
@@ -162,6 +165,13 @@ namespace VRCKatamari.Input
         /// </summary>
         public override void InputUse(bool value, UdonInputEventArgs args)
         {
+            if (value)
+            {
+                // 每次按下都记一行，含被前三道过滤挡掉的情况（不会每帧刷）。
+                Debug.Log("[input] use pressed hand=" + args.handType + " vr=" + isVr
+                    + " vrKnown=" + vrKnown + " motor=" + (motor != null)
+                    + " rideGate=" + rideGateOpen + " roundGate=" + roundGateOpen);
+            }
             if (args.handType != HandType.LEFT) return;
             if (!TryDetectVr()) return;
             if (motor == null) return;
@@ -172,39 +182,51 @@ namespace VRCKatamari.Input
                 {
                     Debug.Log("[input] left trigger dash refused (rideGate=" + rideGateOpen
                         + " roundGate=" + roundGateOpen + ")");
+                    if (dashCue != null) dashCue.NotifyRefused();
                     return;
                 }
                 bool accepted = motor.BeginDashCharge();
                 Debug.Log(accepted
                     ? "[input] dash charge begin"
                     : "[input] dash charge refused (huff, no dash life or dash already active)");
+                if (!accepted && dashCue != null) dashCue.NotifyRefused();
                 return;
             }
 
             // 松开时即使门已经关闭也清理状态，但不出射。
             if (!InputOpen())
             {
-                motor.CancelDash();
+                CancelDashWithLog("trigger released after gate closed");
                 return;
             }
             motor.ReleaseDashCharge();
         }
 
+        // 蓄力、待出射或冲刺被取消时记一行原因；没有任何冲刺状态时静默，避免刷屏。
+        private void CancelDashWithLog(string reason)
+        {
+            if (motor == null) return;
+            if (motor.IsDashCharging() || motor.IsDashing())
+                Debug.Log("[input] dash cancelled: " + reason);
+            motor.CancelDash();
+            if (dashCue != null) dashCue.NotifyCancelled();
+        }
+
         public override void OnStationExited(VRCPlayerApi player)
         {
             if (player == null || !player.isLocal) return;
-            ZeroAxes();
+            ZeroAxes("station exited");
         }
 
         public override void OnPlayerRespawn(VRCPlayerApi player)
         {
             if (player == null || !player.isLocal) return;
-            ZeroAxes();
+            ZeroAxes("player respawned");
         }
 
         private void OnDisable()
         {
-            ZeroAxes();
+            ZeroAxes("input behaviour disabled");
         }
 
         // The one VR test both the per-frame path and the trigger handler use. IsUserInVR is
@@ -225,14 +247,14 @@ namespace VRCKatamari.Input
             return rideGateOpen && roundGateOpen;
         }
 
-        private void ZeroAxes()
+        private void ZeroAxes(string reason)
         {
             forward = 0f;
             turn = 0f;
             lateral = 0f;
             // 非本平台不写共享马达，也不取消另一输入适配器的冲刺。
             if (!isVr) return;
-            if (motor != null) motor.CancelDash();
+            CancelDashWithLog(reason);
             PushAxes();
         }
 

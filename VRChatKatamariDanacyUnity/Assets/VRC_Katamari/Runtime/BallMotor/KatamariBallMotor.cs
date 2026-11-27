@@ -1456,7 +1456,7 @@ namespace VRCKatamari.BallMotor
             float sizeScale = CurrentSizeScale();
             float diameterM = semanticDiameterWorldM;
             float baseSpeedMps = maxSpeedMps * sizeScale;
-            DashMath.TryBrake(dashState, inputForward);
+            if (DashMath.TryBrake(dashState, inputForward)) Debug.Log("[input] dash ended: brake");
             bool charging = DashMath.IsCharging(dashState);
             float speedScale;
             float accelerationScale;
@@ -1546,10 +1546,14 @@ namespace VRCKatamari.BallMotor
 
             // 以本步的球径快照推进计时；普通减速或坡面速度变低不结束冲刺。
             bool autoLaunched;
+            bool wasDashing = DashMath.IsDashing(dashState);
             if (DashMath.TryStep(dashState, dt, diameterM, hitWall, out autoLaunched) && autoLaunched)
             {
                 Debug.Log("[input] dash fired (full auto)");
             }
+            // 撞墙那一步已经打过一行；寿命耗尽进入喘气才打这一行，保证每次冲刺只有一行结束日志。
+            if (wasDashing && !hitWall && !DashMath.IsDashing(dashState) && DashMath.IsHuffed(dashState))
+                Debug.Log("[input] dash ended: life out");
             if (profile)
             {
                 BallPerformanceMath.Split(performanceDiagnostics, BallPerformanceMath.StepTail, phaseStart);
@@ -1819,6 +1823,10 @@ namespace VRCKatamari.BallMotor
             Vector3 center = ballCenterWorld;
             Vector3 planar = planarVelocity;
             Vector3 beforeContact = planar;
+            // 撞墙判定要「求解前」的爬墙状态：本步里爬墙通道接管的面，正是被撞的面。
+            bool climbWasActive = climbActive;
+            int climbWasSurfaceId = climbSurfaceId;
+            float bottomBeforeStep = ballCenterWorld.y - radius;
             float vertical = contactVerticalVelocity;
             int contactCount;
             int dominantSurfaceId;
@@ -1997,15 +2005,29 @@ namespace VRCKatamari.BallMotor
             ApplyNeedleVelocityResponse(v2CoreContactCount);
             if (DashMath.IsDashing(dashState))
             {
-                // 不做第二次查询：只看求解器本步的接触记录和实际法向速度修正。
-                for (int i = 0; i < v2ContactCount; i++)
+                // 不做第二次查询：只看求解器本步的接触记录和实际水平速度变化。
+                // 求解后记录的深度已被推回 0，所以不看深度；障碍高度取记录的顶面。
+                for (int i = 0; i < v2CoreContactCount; i++)
                 {
-                    if (contactClassesV2[i] != ContactCodes.ClassClimb ||
-                        contactDepthsV2[i] <= 0f ||
-                        (climbActive && contactSurfaceIdsV2[i] == climbSurfaceId)) continue;
-                    if (!DashMath.IsBlockedByWall(contactNormalsV2[i], beforeContact, planarVelocity)) continue;
+                    if (contactClassesV2[i] != ContactCodes.ClassClimb) continue;
+                    float topY = contactTopYV2[i];
+                    float obstacleHeight = topY >= float.MaxValue ? float.MaxValue : topY - bottomBeforeStep;
+                    bool wasClimbingThisFace = climbWasActive && contactSurfaceIdsV2[i] == climbWasSurfaceId;
+                    if (!DashMath.IsDashWallHit(contactNormalsV2[i], contactAnglesV2[i], obstacleHeight,
+                        radius, beforeContact, planarVelocity, wasClimbingThisFace)) continue;
                     hitWall = true;
                     break;
+                }
+                if (hitWall)
+                {
+                    // 撞墙结束冲刺，爬墙通道不能顺势接管：关掉并进入冷却。
+                    Debug.Log("[input] dash ended: wall hit speedBefore=" + beforeContact.magnitude
+                        + " speedAfter=" + planarVelocity.magnitude);
+                    climbActive = false;
+                    climbCooldown = ContactTuning.ClimbCooldownS;
+                    climbAlongSpeed = 0f;
+                    climbSpeedWorldMps = 0f;
+                    climbHeightWorldM = 0f;
                 }
             }
 

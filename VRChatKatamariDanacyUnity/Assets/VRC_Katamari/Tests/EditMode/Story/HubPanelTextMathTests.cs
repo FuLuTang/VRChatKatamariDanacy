@@ -128,7 +128,7 @@ namespace VRCKatamari.Tests
             StringAssert.Contains("left stick rolls", vrSimple);
             string pc = HubPanelTextMath.ControlsBody(HubSettingsMath.LangEn, false, 0, "");
             StringAssert.Contains("Dash key", pc);
-            StringAssert.Contains("Dash: Shift", HubPanelTextMath.ControlsBody(HubSettingsMath.LangEn, false, 0, "Shift"));
+            StringAssert.Contains("Dash: hold Shift", HubPanelTextMath.ControlsBody(HubSettingsMath.LangEn, false, 0, "Shift"));
         }
 
         [Test]

@@ -82,6 +82,9 @@ namespace VRCKatamari.Input
     {
         [SerializeField] private KatamariBallMotor motor;
 
+        [Tooltip("Optional dash cue (sound); presentation only.")]
+        [SerializeField] private DashCueHost dashCue;
+
         // Adapter state only: the last axis values this layer pushed. No other
         // behaviour may write the motor's axes.
         private float forward;
@@ -127,7 +130,7 @@ namespace VRCKatamari.Input
         {
             bool wasOpen = InputOpen();
             rideGateOpen = open;
-            if (wasOpen && !InputOpen()) ZeroAxes();
+            if (wasOpen && !InputOpen()) ZeroAxes("ride gate closed");
         }
 
         /// <summary>
@@ -138,7 +141,7 @@ namespace VRCKatamari.Input
         {
             bool wasOpen = InputOpen();
             roundGateOpen = open;
-            if (wasOpen && !InputOpen()) ZeroAxes();
+            if (wasOpen && !InputOpen()) ZeroAxes("round gate closed");
         }
 
         public override void InputMoveVertical(float value, UdonInputEventArgs args)
@@ -168,20 +171,20 @@ namespace VRCKatamari.Input
         public override void OnStationExited(VRCPlayerApi player)
         {
             if (player == null || !player.isLocal) return;
-            ZeroAxes();
+            ZeroAxes("station exited");
         }
 
         public override void OnPlayerRespawn(VRCPlayerApi player)
         {
             if (player == null || !player.isLocal) return;
-            ZeroAxes();
+            ZeroAxes("player respawned");
         }
 
         // OnDisable is a Unity lifecycle message forward to Udon, not a member of
         // UdonSharpBehaviour, so it is an ordinary method and must not be override.
         private void OnDisable()
         {
-            ZeroAxes();
+            ZeroAxes("input behaviour disabled");
         }
 
         // VR players drive through VrStickMoveInput, which reads both thumbsticks; the left
@@ -198,14 +201,24 @@ namespace VRCKatamari.Input
             return rideGateOpen && roundGateOpen;
         }
 
-        private void ZeroAxes()
+        private void ZeroAxes(string reason)
         {
             forward = 0f;
             turn = 0f;
             // 非本平台不写共享马达，也不取消另一输入适配器的冲刺。
             if (IsVrPlayer()) return;
-            if (motor != null) motor.CancelDash();
+            CancelDashWithLog(reason);
             PushAxes();
+        }
+
+        // 蓄力、待出射或冲刺被取消时记一行原因；没有任何冲刺状态时静默，避免刷屏。
+        private void CancelDashWithLog(string reason)
+        {
+            if (motor == null) return;
+            if (motor.IsDashCharging() || motor.IsDashing())
+                Debug.Log("[input] dash cancelled: " + reason);
+            motor.CancelDash();
+            if (dashCue != null) dashCue.NotifyCancelled();
         }
 
         // Update is a Unity lifecycle message forward to Udon, not a member of
@@ -221,7 +234,7 @@ namespace VRCKatamari.Input
                 if (!debugDriveActive) return;
                 debugDriveActive = false;
                 Debug.Log("[input] debug drive off");
-                ZeroAxes();
+                ZeroAxes("debug drive ended");
                 return;
             }
 
@@ -234,7 +247,7 @@ namespace VRCKatamari.Input
                 debugDriveEnabled = false;
                 debugDriveActive = false;
                 Debug.Log("[input] debug drive expired after=" + debugDriveSeconds + "s");
-                ZeroAxes();
+                ZeroAxes("debug drive ended");
                 return;
             }
 
@@ -243,7 +256,7 @@ namespace VRCKatamari.Input
             // round and a respawn undriven even with the override on.
             if (!InputOpen())
             {
-                if (forward != 0f || turn != 0f) ZeroAxes();
+                if (forward != 0f || turn != 0f) ZeroAxes("gate closed during debug drive");
                 return;
             }
 
@@ -269,21 +282,32 @@ namespace VRCKatamari.Input
             if (down == shiftWasDown) return;
             shiftWasDown = down;
 
+            if (down)
+            {
+                Debug.Log("[input] shift pressed motor=" + (motor != null)
+                    + " rideGate=" + rideGateOpen + " roundGate=" + roundGateOpen);
+            }
             if (motor == null) return;
 
             if (down)
             {
-                if (!InputOpen()) return;
+                if (!InputOpen())
+                {
+                    Debug.Log("[input] shift dash refused (gate closed)");
+                    if (dashCue != null) dashCue.NotifyRefused();
+                    return;
+                }
                 bool accepted = motor.BeginDashCharge();
                 Debug.Log(accepted
                     ? "[input] dash charge begin"
                     : "[input] dash charge refused (huff, no dash life or dash already active)");
+                if (!accepted && dashCue != null) dashCue.NotifyRefused();
                 return;
             }
 
             if (!InputOpen())
             {
-                motor.CancelDash();
+                CancelDashWithLog("shift released after gate closed");
                 return;
             }
             motor.ReleaseDashCharge();

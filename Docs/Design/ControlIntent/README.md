@@ -122,12 +122,13 @@ VR 长按左扳机（`InputUse` 的 LEFT），桌面长按任一 Shift。只转�
 
 | 球径 | 空转 | 满蓄自动出射 |
 |---|---:|---:|
-| <60 m | 3 次等效输入，1.40 s | 7 次，3.27 s |
-| 60–<300 m | 4 次，1.87 s | 8 次，3.73 s |
-| ≥300 m | 5 次，2.33 s | 9 次，4.20 s |
+| <60 m | 第 3 次输入，0.4 s | 第 7 次，1.2 s |
+| 60–<300 m | 第 4 次，0.6 s | 第 8 次，1.4 s |
+| ≥300 m | 第 5 次，0.8 s | 第 9 次，1.6 s |
 
-- 每次等效输入 = `s16DashInputDuration` 14 帧 / 30 Hz；这是长按换算，不是原作玩家交替用时。空转前松开不冲，空转后提前松开按 `f32DashHelpSpeedCoef=0.67` 弱冲。球壳和吸附物空转，不转驾驶朝向或骑手视角。
-- 沿驾驶朝向一次注入出射速度：本项目的普通满速 × WLK RunParam `SpeedD/SpeedF`（分别插值）。冲刺期间普通输入、转向和阻力仍生效，速度上限和前推加速度分别乘 `SpeedD/SpeedF` 与 `AccD/AccF`。后拉、撞墙、寿命耗尽或关门才结束；没有低速结束或附加冷却。
+- 等效输入间隔 0.2 s（owner 2026-11-27，按真人每秒约 5 次交替），第 N 次有效输入发生在 (N−1)×0.2 s；原作 14 帧只是等待下一次反向输入的最长窗口。空转前松开不冲，空转后提前松开按 `f32DashHelpSpeedCoef=0.67` 弱冲。球壳和吸附物空转，不转驾驶朝向或骑手视角。
+- 提示（`DashCueHost`，只影响表现）：蓄力开始轻震、空转点中震、出射强震、被拒绝两下短震（VR 左手，受触感设置控制）；三段声音 VR 和桌面都有，clip 未接线时静默。每次扳机/Shift 按下都有一行 `[input] use pressed …` / `[input] shift pressed …` 日志；蓄力或冲刺被取消时有 `[input] dash cancelled: <原因>`。
+- 沿驾驶朝向一次注入出射速度：本项目的普通满速 × WLK RunParam `SpeedD/SpeedF`（分别插值）。冲刺期间普通输入、转向和阻力仍生效，速度上限和前推加速度分别乘 `SpeedD/SpeedF` 与 `AccD/AccF`。后拉、撞墙（正面高速撞上近乎垂直、高于球半径的面；擦墙、可走的坡和低台阶不算）、寿命耗尽或关门才结束；撞墙结束后不立即爬墙；没有低速结束或附加冷却。
 - 冲刺消耗 `s16DashLife=90` 帧，耗尽喘气 `s16DashForbidTime=240` 帧，结束回满；非冲刺、非喘气每 `s16DashRecoverTime=10` 帧恢复 1。详见 [接触模型 §3.8](../BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
 - **已知冲突与缓解（已实现）**：扳机同时是 `InputUse` 与 `Interact` 的触发源——蓄力/出射时准心若指着载具的下车面板等 Interact 按钮，会顺带按下它（来源见「VRChat 平台事实」）。owner 2026-11-18 定的缓解：骑乘时（本地玩家坐着）骑乘面板/结果卡上的 Interact 在 motor 蓄力或出射段**忽略本次按下**（`RideDashInteractMath`；`BallRideStation.ShouldIgnoreDashInteract()` 给面板按钮、`StoryRoundController.ShouldIgnoreDashInteract()` 给结果卡重试）。不在 dash 中时行为完全不变。**残留**：同一帧里 `InputUse` 与 `Interact` 的送达顺序没有保证，所以「起蓄」的那一次按下仍可能先被面板收到；下车按钮是两次确认，第二次按下若仍在蓄力/出射段会被忽略，要完成下车必须等 dash 结束再点两次（那时是玩家明确要点）。
 - 交替推杆不触发冲刺；两杆照常用于驾驶。

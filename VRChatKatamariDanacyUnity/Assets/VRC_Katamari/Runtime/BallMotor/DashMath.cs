@@ -23,7 +23,9 @@ namespace VRCKatamari.BallMotor
         private const int HelpDash = 2;
 
         public const float OriginalTickSeconds = 1f / 30f;
-        public const float GachaWindowSeconds = 14f * OriginalTickSeconds; // s16DashInputDuration
+        // owner 2026-11-27：按真人每秒约 5 次交替换算，一次等效输入 0.2 s；
+        // 第 N 次有效输入发生在 (N-1) × 0.2 s（原作 14 帧只是等待下一次反向输入的最长窗口）。
+        public const float InputIntervalSeconds = 0.2f;
         public const float HelpSpeedScale = 0.67f; // f32DashHelpSpeedCoef
         private const int FullChargeAfterSpin = 4; // sDashSetInput
         public const int LifeCapacityFrames = 90; // s16DashLife
@@ -49,12 +51,12 @@ namespace VRCKatamari.BallMotor
 
         public static float SpinSecondsFor(float diameterM)
         {
-            return SpinGachasFor(diameterM) * GachaWindowSeconds;
+            return (SpinGachasFor(diameterM) - 1) * InputIntervalSeconds;
         }
 
         public static float ChargeSecondsFor(float diameterM)
         {
-            return (SpinGachasFor(diameterM) + FullChargeAfterSpin) * GachaWindowSeconds;
+            return (SpinGachasFor(diameterM) + FullChargeAfterSpin - 1) * InputIntervalSeconds;
         }
 
         /// <summary>在本项目支持的 0–400 m 范围内，先分列插值 WLK RunParam，再取比值。
@@ -276,12 +278,38 @@ namespace VRCKatamari.BallMotor
             return IsDashing(state) ? fullScale * (state[DashKind] == HelpDash ? HelpSpeedScale : 1f) : 1f;
         }
 
-        /// <summary>项目 HitWall 映射：有向墙内的水平入射速度、且该法向实际被接触去除。</summary>
-        public static bool IsBlockedByWall(Vector3 normal, Vector3 before, Vector3 after)
+        // 撞墙判定的门槛（工程值）：入射法向速度至少 0.5 m/s 且占水平速度的 35% 以上（贴墙擦过不算），
+        // 且接触把其中至少 60% 去掉（被挡住，而不是被导向）。
+        public const float WallMinIntoSpeedMps = 0.5f;
+        public const float WallMinIntoFraction = 0.35f;
+        public const float WallMinRemovedFraction = 0.6f;
+        // 法线与竖直方向夹角至少 80°：45–60° 的坡由坡道通道处理，低矮台阶的棱接触法线偏上，都不算墙。
+        public const float WallMinAngleDeg = 80f;
+
+        /// <summary>
+        /// 本步一条接触是否算「冲刺撞墙」。接触深度不参与判断：求解后的记录已被推回表面，深度为 0
+        /// （实测 cls=2 depth=0.0000）。obstacleHeightM 是障碍顶面高出球底的高度，
+        /// 不高于球半径的台阶会被滚越，不算墙。alreadyClimbingThisFace 只能传「本步开始前」
+        /// 就已在爬这个面——同一步里爬墙通道刚接管这个面，恰恰是撞上去的那一步。
+        /// </summary>
+        public static bool IsDashWallHit(Vector3 normal, float contactAngleDeg, float obstacleHeightM,
+            float radiusM, Vector3 before, Vector3 after, bool alreadyClimbingThisFace)
         {
-            float incoming = before.x * normal.x + before.z * normal.z;
-            float outgoing = after.x * normal.x + after.z * normal.z;
-            return incoming < -1e-4f && outgoing - incoming > 1e-4f;
+            if (alreadyClimbingThisFace) return false;
+            if (!KatamariMath.IsFiniteVector(normal) || !KatamariMath.IsFiniteVector(before) ||
+                !KatamariMath.IsFiniteVector(after) || !KatamariMath.IsFiniteFloat(contactAngleDeg) ||
+                !KatamariMath.IsFiniteFloat(obstacleHeightM) || !KatamariMath.IsFiniteFloat(radiusM)) return false;
+            if (contactAngleDeg < WallMinAngleDeg) return false;
+            if (obstacleHeightM <= radiusM) return false;
+            float horizontal = Mathf.Sqrt(normal.x * normal.x + normal.z * normal.z);
+            if (horizontal <= 1e-4f) return false;
+            float nx = normal.x / horizontal;
+            float nz = normal.z / horizontal;
+            float into = -(before.x * nx + before.z * nz);
+            float speed = Mathf.Sqrt(before.x * before.x + before.z * before.z);
+            if (into < WallMinIntoSpeedMps || into < WallMinIntoFraction * speed) return false;
+            float after2 = -(after.x * nx + after.z * nz);
+            return into - after2 >= WallMinRemovedFraction * into;
         }
 
         public static float EnergySeconds(float[] state)

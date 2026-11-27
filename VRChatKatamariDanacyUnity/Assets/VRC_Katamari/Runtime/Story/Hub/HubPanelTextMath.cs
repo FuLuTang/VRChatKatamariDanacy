@@ -216,15 +216,18 @@ namespace VRCKatamari.Story.Hub
                         "Move: both sticks forward = roll, one forward one back = turn",
                         "移動：両スティック前＝前進、前後逆＝旋回");
                 return "VR\n" + move + "\n"
-                    + Pick(lang, "冲刺：长按左扳机蓄力，到时自动冲出", "Dash: hold left trigger, launches when charged",
-                        "ダッシュ：左トリガー長押しでため、ためきると自動発進") + "\n"
+                    + Pick(lang, "冲刺：按住左扳机1秒左右自动冲出；球开始空转后松手是小冲",
+                        "Dash: hold left trigger for ~1 s to launch; release once the ball spins for a small dash",
+                        "ダッシュ：左トリガー1秒ほどで発進。空転後に離したら小ダッシュ") + "\n"
                     + Pick(lang, "道具：Jump 键", "Item: Jump", "アイテム：Jump") + "\n"
                     + Pick(lang, "下车：按住 Jump 1.5 秒", "Get off: hold Jump 1.5 s", "降りる：Jump 1.5 秒長押し") + "\n"
                     + Pick(lang, "选择：指向后扳机", "Select: point + trigger", "選択：指してトリガー");
             }
             return Pick(lang, "桌面", "Desktop", "PC") + "\n"
                 + Pick(lang, "移动：W/S 前后，A/D 转向", "Move: W/S roll, A/D turn", "移動：W/S 前後、A/D 旋回") + "\n"
-                + Pick(lang, "冲刺：", "Dash: ", "ダッシュ：") + dashKey + "\n"
+                + Pick(lang, "冲刺：按住" + dashKey + "1秒左右自动冲出；球开始空转后松手是小冲",
+                    "Dash: hold " + dashKey + " for ~1 s to launch; release once the ball spins for a small dash",
+                    "ダッシュ：" + dashKey + "を1秒ほどで発進。空転後に離したら小ダッシュ") + "\n"
                 + Pick(lang, "道具：空格（Jump）", "Item: Space (Jump)", "アイテム：スペース（Jump）") + "\n"
                 + Pick(lang, "下车：按住空格 1.5 秒", "Get off: hold Space 1.5 s", "降りる：スペース 1.5 秒長押し") + "\n"
                 + Pick(lang, "选择：对准后鼠标左键", "Select: aim + left click", "選択：左クリック");

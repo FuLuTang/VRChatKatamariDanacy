@@ -38,8 +38,8 @@ namespace VRCKatamari.Tests
         public void DashTiersUseWlkWheelSpinTable(float diameterM, int spinGachas)
         {
             Assert.AreEqual(spinGachas, DashMath.SpinGachasFor(diameterM));
-            Assert.AreEqual(spinGachas * 14f / 30f, DashMath.SpinSecondsFor(diameterM), 1e-6f);
-            Assert.AreEqual((spinGachas + 4f) * 14f / 30f, DashMath.ChargeSecondsFor(diameterM), 1e-6f);
+            Assert.AreEqual((spinGachas - 1) * 0.2f, DashMath.SpinSecondsFor(diameterM), 1e-6f);
+            Assert.AreEqual((spinGachas + 3f) * 0.2f, DashMath.ChargeSecondsFor(diameterM), 1e-6f);
         }
 
         [TestCase(0.035f, 27f / 9f)]
@@ -59,17 +59,17 @@ namespace VRCKatamari.Tests
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
             Vector3 velocity = Vector3.forward * BaseSpeed;
-            for (int i = 1; i <= 70; i++)
+            for (int i = 1; i <= 20; i++)
             {
                 Assert.IsTrue(DashMath.IsCharging(state));
                 Assert.IsTrue(BallMotionMath.TryStep(0f, 0f, 0f, 0f, velocity, Step, 1f,
                     BaseSpeed, 5f, 8f, 0f, 1.9f, 2.9f, 110f, 1.2f,
                     out _, out Vector3 next, out _));
-                // 1.4 s 的起转点早于 A2 的完全滑停（2.12 s）。
+                // 0.4 s 的起转点早于 A2 的完全滑停（2.12 s）。
                 Assert.AreEqual(4f - i * 1.9f * Step, next.z, 1e-5f);
                 velocity = next;
                 Assert.IsFalse(Advance(state, 1));
-                Assert.AreEqual(i == 70, DashMath.IsSpinning(state, SmallDiameterM));
+                Assert.AreEqual(i == 20, DashMath.IsSpinning(state, SmallDiameterM));
             }
             Assert.AreEqual(3f, DashMath.EnergySeconds(state), 1e-6f);
         }
@@ -79,7 +79,7 @@ namespace VRCKatamari.Tests
         {
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsFalse(Advance(state, 69));
+            Assert.IsFalse(Advance(state, 19));
             Assert.AreEqual(DashMath.ReleaseBeforeSpin, DashMath.ReleaseCharge(state, SmallDiameterM));
             Assert.IsFalse(TakeLaunch(state, 0f, out _));
             Assert.IsTrue(DashMath.TryBeginCharge(state));
@@ -90,7 +90,7 @@ namespace VRCKatamari.Tests
         {
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsFalse(Advance(state, 70));
+            Assert.IsFalse(Advance(state, 20));
             Assert.AreEqual(DashMath.ReleaseHelpDash, DashMath.ReleaseCharge(state, SmallDiameterM));
             Assert.IsTrue(TakeLaunch(state, 90f, out Vector3 launch));
             Assert.AreEqual(6.675337f, launch.x, 1e-5f);
@@ -104,7 +104,7 @@ namespace VRCKatamari.Tests
         {
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsFalse(Advance(state, 163));
+            Assert.IsFalse(Advance(state, 59));
             Assert.IsTrue(Advance(state, 1));
             Assert.IsFalse(DashMath.IsCharging(state));
             Assert.IsFalse(DashMath.IsSpinning(state, SmallDiameterM));
@@ -148,7 +148,7 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1f, speed);
             Assert.AreEqual(1f, acceleration);
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, 70);
+            Advance(state, 20);
             Assert.AreEqual(DashMath.ReleaseHelpDash, DashMath.ReleaseCharge(state, SmallDiameterM));
             DashMath.DriveScales(state, SmallDiameterM, out speed, out acceleration);
             Assert.AreEqual(2.4907975f, speed, 1e-6f);
@@ -160,14 +160,66 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(5f * acceleration * Step, next.z, 1e-6f);
         }
 
+        private const float R = 0.15f;
+        private static readonly Vector3 WallNormal = new Vector3(0f, 0f, -1f);
+
         [Test]
-        public void WallRequiresInwardSpeedActuallyRemovedNotAParallelOrSeparatingTouch()
+        public void HeadOnWallEndsDashEvenWhenRecordedDepthIsZeroAndClimbJustTookTheFace()
         {
-            Vector3 normal = new Vector3(0f, 0f, -1f);
-            Assert.IsTrue(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, 6f), new Vector3(2f, 0f, 0f)));
-            Assert.IsFalse(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, 6f), new Vector3(0f, 0f, 6f)));
-            Assert.IsFalse(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, 0f), Vector3.zero));
-            Assert.IsFalse(DashMath.IsBlockedByWall(normal, new Vector3(2f, 0f, -6f), Vector3.zero));
+            // 实测：9.96 m/s 撞边界面，速度归零；记录深度 0、爬墙通道同一步接管该面。
+            Assert.IsTrue(DashMath.IsDashWallHit(WallNormal, 90f, 3f, R,
+                new Vector3(0f, 0f, 9.96f), Vector3.zero, false));
+        }
+
+        [Test]
+        public void WallThatWasAlreadyBeingClimbedBeforeThisStepIsNotAFreshHit()
+        {
+            Assert.IsFalse(DashMath.IsDashWallHit(WallNormal, 90f, 3f, R,
+                new Vector3(0f, 0f, 9.96f), Vector3.zero, true));
+        }
+
+        [Test]
+        public void GrazingAlongAWallIsNotAHit()
+        {
+            // 几乎平行于墙：法向分量只有 0.3 m/s，占 3%。
+            Assert.IsFalse(DashMath.IsDashWallHit(WallNormal, 90f, 3f, R,
+                new Vector3(9.9f, 0f, 0.3f), new Vector3(9.9f, 0f, 0f), false));
+            // 斜擦：法向 3 m/s 占约 30%，且被导向而不是被挡住。
+            Assert.IsFalse(DashMath.IsDashWallHit(WallNormal, 90f, 3f, R,
+                new Vector3(9.5f, 0f, 3f), new Vector3(9.5f, 0f, 2.5f), false));
+        }
+
+        [Test]
+        public void WalkableSlopeAndLowStepAreNotWalls()
+        {
+            // 55° 坡：法线偏上，由坡道通道处理。
+            Vector3 slope = new Vector3(0f, 0.57f, -0.82f);
+            Assert.IsFalse(DashMath.IsDashWallHit(slope, 55f, 3f, R,
+                new Vector3(0f, 0f, 9f), new Vector3(0f, 0f, 5f), false));
+            // 低矮台阶（顶面不高于球半径）：滚越。
+            Assert.IsFalse(DashMath.IsDashWallHit(WallNormal, 90f, 0.10f, R,
+                new Vector3(0f, 0f, 9f), Vector3.zero, false));
+            // 没有顶面（无限高）的墙仍是墙。
+            Assert.IsTrue(DashMath.IsDashWallHit(WallNormal, 90f, float.MaxValue, R,
+                new Vector3(0f, 0f, 9f), new Vector3(0f, 0f, 1f), false));
+        }
+
+        [Test]
+        public void SeparatingOrNonFiniteInputIsNotAHit()
+        {
+            Assert.IsFalse(DashMath.IsDashWallHit(WallNormal, 90f, 3f, R,
+                new Vector3(0f, 0f, -6f), Vector3.zero, false));
+            Assert.IsFalse(DashMath.IsDashWallHit(WallNormal, float.NaN, 3f, R,
+                new Vector3(0f, 0f, 6f), Vector3.zero, false));
+        }
+
+        [TestCase(0.3f, 0.4f, 1.2f)]
+        [TestCase(100f, 0.6f, 1.4f)]
+        [TestCase(500f, 0.8f, 1.6f)]
+        public void ChargeTimesFollowFiveInputsPerSecond(float diameterM, float spin, float full)
+        {
+            Assert.AreEqual(spin, DashMath.SpinSecondsFor(diameterM), 1e-5f);
+            Assert.AreEqual(full, DashMath.ChargeSecondsFor(diameterM), 1e-5f);
         }
 
         [Test]
@@ -217,11 +269,11 @@ namespace VRCKatamari.Tests
         {
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Advance(state, 70);
+            Advance(state, 20);
             DashMath.Cancel(state);
             Assert.AreEqual(DashMath.ReleaseNone, DashMath.ReleaseCharge(state, SmallDiameterM));
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsTrue(Advance(state, 164));
+            Assert.IsTrue(Advance(state, 60));
             DashMath.Cancel(state);
             Assert.IsFalse(DashMath.IsDashing(state));
             Assert.IsFalse(TakeLaunch(state, 0f, out _));
@@ -251,7 +303,7 @@ namespace VRCKatamari.Tests
         {
             float[] state = FreshState();
             Assert.IsTrue(DashMath.TryBeginCharge(state));
-            Assert.IsTrue(Advance(state, 164));
+            Assert.IsTrue(Advance(state, 60));
             Assert.IsTrue(TakeLaunch(state, 0f, out _));
             return state;
         }

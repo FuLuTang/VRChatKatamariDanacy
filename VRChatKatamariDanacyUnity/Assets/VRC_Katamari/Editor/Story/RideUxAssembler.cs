@@ -227,6 +227,7 @@ namespace VRCKatamari.Editor.Story
                 AssembleCatchName(station, round, c);
             }
             AssembleLocalViews(motor, c);
+            AssembleDashCue(motor, c);
 
             CopyAllToUdon(c);
             VerifyUdonTables(station, c);
@@ -646,6 +647,124 @@ namespace VRCKatamari.Editor.Story
 
         // 碰撞线框与性能诊断都是基础场景里手工搭好的根对象；这里只接线（缺线框子物体时按
         // Art/Debug 的材质与空网格补建）。场景里没有对象时记一条说明，有两个以上时记 problem。
+        // ------------------------------------------------------------- dash cue ---
+
+        public const string DashCueObjectName = "DashCueHost";
+        public const string DashChargeClipPath = "Assets/VRC_Katamari/Audio/Sfx/UI/sfx_ui_click.wav";
+        public const string DashSpinClipPath = "Assets/VRC_Katamari/Audio/Sfx/Powerup/sfx_magnet_activate.wav";
+        public const string DashLaunchClipPath = "Assets/VRC_Katamari/Audio/Sfx/Powerup/sfx_rocket_boost.wav";
+
+        /// <summary>
+        /// 冲刺提示：场景里要有且只有一个 <see cref="DashCueHost"/>（根物体，带 2D、不循环、不自动播放的
+        /// AudioSource），接 motor、settings 和三段提示音，并让两个输入适配器的 dashCue 指向它。
+        /// 幂等；缺程序资产或音频时只记 Problem。表现用，不碰任何玩法状态。
+        /// </summary>
+        private static void AssembleDashCue(KatamariBallMotor motor, Counters c)
+        {
+            var scene = motor.gameObject.scene;
+            DashCueHost host = null;
+            foreach (var candidate in UnityEngine.Object.FindObjectsOfType<DashCueHost>(true))
+            {
+                if (candidate.gameObject.scene != scene) continue;
+                if (host != null)
+                {
+                    c.Problems.Add("more than one DashCueHost in the scene; dash cue left untouched");
+                    return;
+                }
+                host = candidate;
+            }
+
+            GameObject go;
+            if (host == null)
+            {
+                go = new GameObject(DashCueObjectName);
+                Undo.RegisterCreatedObjectUndo(go, "Create " + DashCueObjectName);
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(go, scene);
+                c.Created++;
+                host = AddUdon<DashCueHost>(go, c);
+                if (host == null)
+                {
+                    c.Problems.Add("DashCueHost could not be added (missing U# program asset?); the dash cue is not wired");
+                    return;
+                }
+            }
+            else
+            {
+                go = host.gameObject;
+            }
+
+            AudioSource voice = go.GetComponent<AudioSource>();
+            if (voice == null)
+            {
+                voice = go.AddComponent<AudioSource>();
+                c.Created++;
+            }
+            if (voice.spatialBlend != 0f || voice.loop || voice.playOnAwake)
+            {
+                Undo.RecordObject(voice, "Configure the dash cue voice");
+                voice.spatialBlend = 0f;
+                voice.loop = false;
+                voice.playOnAwake = false;
+                c.Changed++;
+            }
+
+            HubSettingsHost settings = null;
+            foreach (var candidate in UnityEngine.Object.FindObjectsOfType<HubSettingsHost>(true))
+            {
+                if (candidate.gameObject.scene != scene) continue;
+                if (settings != null)
+                {
+                    c.Problems.Add("more than one HubSettingsHost in the scene; DashCueHost.settings left empty");
+                    settings = null;
+                    break;
+                }
+                settings = candidate;
+            }
+
+            AudioClip charge = LoadDashClip(DashChargeClipPath, c);
+            AudioClip spin = LoadDashClip(DashSpinClipPath, c);
+            AudioClip launch = LoadDashClip(DashLaunchClipPath, c);
+
+            var so = new SerializedObject(host);
+            bool changed = SetObject(so, "motor", motor, c);
+            changed |= SetObject(so, "settings", settings, c);
+            changed |= SetObject(so, "voice", voice, c);
+            changed |= SetObject(so, "chargeClip", charge, c);
+            changed |= SetObject(so, "spinClip", spin, c);
+            changed |= SetObject(so, "launchClip", launch, c);
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(host);
+
+            int linked = 0;
+            foreach (var input in UnityEngine.Object.FindObjectsOfType<DesktopMoveInput>(true))
+            {
+                if (input.gameObject.scene != scene) continue;
+                if (LinkDashCue(input, host, c)) linked++;
+            }
+            foreach (var input in UnityEngine.Object.FindObjectsOfType<VrStickMoveInput>(true))
+            {
+                if (input.gameObject.scene != scene) continue;
+                if (LinkDashCue(input, host, c)) linked++;
+            }
+            if (linked == 0) c.Notes.Add("dash cue host ready; no input adapter needed a (re)link");
+        }
+
+        private static bool LinkDashCue(UdonSharpBehaviour input, DashCueHost host, Counters c)
+        {
+            var so = new SerializedObject(input);
+            bool changed = SetObject(so, "dashCue", host, c);
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(input);
+            return changed;
+        }
+
+        private static AudioClip LoadDashClip(string path, Counters c)
+        {
+            AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip == null) c.Problems.Add("dash cue clip not found: " + path + " (that voice stays silent)");
+            return clip;
+        }
+
         private static void AssembleLocalViews(KatamariBallMotor motor, Counters c)
         {
             Scene scene = motor.gameObject.scene;

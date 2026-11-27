@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- 已选项目方向与用户已决规则分开记录；`recommended_option`为空。第二轮公开来源已确认原作交分为场景内兑换区（王子飞船正下方、约每分钟换位）、站在区里逐跳结算、每跳球会变小、不足一跳就停；被吞＝短暂冻结＋异地重生、不淘汰；对战有宝箱道具与加分Brother，结算另有3项第一名+50pt。**原作**仍未知的是吞人门槛与吞人收益、ブラザー加成、道具完整清单与出生点；交分规则（逐跳、每跳 0.5 s、缩径＝起始直径的 10%、局时 3 分钟）已按原作实测改写，见下节 (a)–(d)，每跳单价 15 仍标 PROVISIONAL。([研究核查](Research/KatamariBallRules/README.md)、[规则矩阵](Research/ReferenceRules/rules_matrix.md)、[P09 决策表](Preparation/RuleDecisions/decisions.json)的`rules.match_format`与`rules.score_and_exchange`条)
+- 已选项目方向与用户已决规则分开记录；`recommended_option`为空。第二轮公开来源已确认原作交分为场景内兑换区（王子飞船正下方、约每分钟换位）、站在区里逐跳结算、每跳球会变小、不足一跳就停；被吞＝短暂冻结＋异地重生、不淘汰；对战有宝箱道具与加分Brother，结算另有3项第一名+50pt。**原作**仍未知的是吞人门槛的精确值（只测得范围：大于 1.0、不超过 1.65）、吞人收益、道具完整清单与出生点；交分规则（逐跳、每跳 0.5 s、缩径＝起始直径的 10%、每跳 10 分、局时 3 分钟）已按原作实测改写，见下节 (a)–(d)。([研究核查](Research/KatamariBallRules/README.md)、[规则矩阵](Research/ReferenceRules/rules_matrix.md)、[P09 决策表](Preparation/RuleDecisions/decisions.json)的`rules.match_format`与`rules.score_and_exchange`条)
 - 当前项目基线仍为首发两图目标、第一纵切片一图两人、夜市后置；T39允许在完整证据后批准两图或降为一图。([范围决策:L15-L22](00_SCOPE_DECISIONS.md#L15-L22)、[发布RFC:L7-L10](Archive/Preparation/ReleaseRFC/comparison.md#L7-L10))
 - P09 决策表（`decisions.json`）仍是 2026-10-11 的决策支持稿，尚未回填本文 (a)–(d) 四条；P17 审查未记录新的用户决定；根任务/DAG 未因本摘要改变。([P09/P17审查:L15-L16](Archive/Process/18_LARGE_SCALE_PREPARATION_REVIEW.md#L15-L16)、[决策表`non_decisions`段](Preparation/RuleDecisions/decisions.json))
 
@@ -20,9 +20,9 @@
 这四条已决定，并于 2026-11-26 按原作实测（对战视频逐帧读数）改写为现行口径。**标 PROVISIONAL 的数值是本项目暂定值**，须在 T39 试玩后复核；决定本身不改变任何任务依赖。
 
 - **（a）交分逐跳结算（owner 2026-11-26，按原作实测）。** 球站在激活的交分区里，每 0.5 s 结算一跳：每跳直径减少「本图开局直径 × 10%」（`D ← D − 0.1·D0`），积分加固定单价；减完会小于开局直径时就停（`D − 0.1·D0 < D0`）。每跳缩径随图自动取开局直径的 10%，不逐图配置。账本请求按跳计，每跳一个 requestId。依据：对战视频实测（本地分析，未入库），缩径与图尺度成比例、与当前球径无关。
-- **（b）没有单独的最小兑换门槛。** 下限就是开局直径：`D − 0.1·D0 ≥ D0` 才能再跳一次。分数按跳计、单价先用 15（PROVISIONAL，可调），不再按体积换分，分数与直径下降量成线性。另有两条实测但原因不明的现象，不写进规则：最后一分钟那处每跳 +10，本局首跳 +45。
+- **（b）没有单独的最小兑换门槛。** 下限就是开局直径：`D − 0.1·D0 ≥ D0` 才能再跳一次。分数按跳计，每跳固定 10 分（owner 2026-11-27），不再按体积换分，分数与直径下降量成线性。10 分不随地图、开局直径、第几个区、剩余时间、球径变化；第一版不做ブラザー，以后做时持有者每跳 15、被卷入即丢掉。
 - **（c）交分区：同时 1 处，每 60 s 换一处，开局即有，一局 3 处（局时 180 s）。** 区上的 UFO 图标显示该处剩余秒数；到 0 立刻在别处刷新，没有空档。依据：对战视频实测（对账 3 处与整分钟对齐，置信度中高）。具体布局见[野餐草坪 §6 交分区与轮换](Design/Maps/PicnicLawn/README.md)。
-- **（d）结算奖励：3 档，每档每局从奖项池随机抽一项（三档不重复），每档第一名 +50 pt，并列都发。** 交分积分仍是主计分通道。第一版池：卷入物件数、卷入别人塊的次数，第三项待 owner 定（不写死）；ブラザー和道具第一版不做，也不进池。依据：对战视频实测（3 档名称固定、项目每局不同、并列都发）。另：最后 60 s 进入隐藏阶段（计时变红显示秒数；HUD 只显示自己的分和名次；结算前他人分显示「?????」）；被吞后已交的分保留、球径不重置，约 6 s 后在别处重生，重生后约 3 s 保护（PROVISIONAL）；吞人门槛先保留 1.35 倍（未测出），吞人得分仍是开放项；大球移速随直径下降（定性，曲线待调参）。细则见 [VERSUS_MODE](Design/Versus/VERSUS_MODE.md)。
+- **（d）结算奖励：3 档，每档每局从奖项池随机抽一项（三档不重复），每档第一名 +50 pt，并列都发。** 交分积分仍是主计分通道。第一版池 4 种：卷入物件数、卷入塊次数、最大直径（整局峰值）、冲刺次数（owner 2026-11-27）；道具使用次数和ブラザー数等宝箱道具系统做了再加入。项目在结算时才公布，局中和开局不预告。依据：对战视频实测（3 档称号固定、项目每局不同、并列都发）。另：最后 60 s 进入隐藏阶段（计时变红显示秒数；HUD 只显示自己的分和名次；结算前他人分显示「?????」）；被吞后已交的分保留、球径不重置，约 6 s 后在别处重生，重生后约 3 s 保护（PROVISIONAL）；吞人门槛保持 1.35 倍（实测只得到范围，没有接近门槛的样本），卷入别人不直接给分，吞人得分仍是开放项；大球移速随球径的变化对齐原作 WLK 速度表（owner 2026-11-27，换算方式设计中）。细则见 [VERSUS_MODE](Design/Versus/VERSUS_MODE.md)。
 
 ### 地形门、成长包线与地图指纹（2026-11-14 拍板）
 
@@ -133,7 +133,7 @@
 - **移除 80 ms 核心追赶弹簧** — 开着仍被读成「跳一下」，真因是价值定价（单件涨幅过大），不是缺平滑。见 [PARITY_AUDIT 的「球核心视觉」行](Design/Parity/PARITY_AUDIT.md)、[VISUAL_GROWTH_AUDIT](Design/BallPresentation/VISUAL_GROWTH_AUDIT.md)。
 - **骑球 = 站姿手推球，触地点—球顶—视点成相似三角形**（owner 2026-11-18，VR 实测反馈「不是手在推着球，球在我脚底下」之后的决定；原作的小王子不缩放，骑手随球缩放是本项目的选择）— 玩家站在球后、脚在地上，手从肩向前下按在球背、手臂沿半径指向球心；眼高和眼点偏移都正比于球半径，平台缩放范围内保持同一站姿。站姿用玩家真实身体的比例（VR 的手是控制器），avatar 只经实测 η（站立头高 ÷ 眼高）修正眼高；Station 为站立式，座位让脚落地。骑乘面板（HUD、结果卡、下车面板）是随 E/1.64 缩放的世界空间面板，HUD 在左下球旁。推导、数字与 Unity 验证见 [RIDE_GEOMETRY](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md)；η 的实际值、手到球面的实测距离、面板在头显里的可读性待 owner 亲测。
 - **全局球径上限 400 m（owner 2026-11-18），所有地图适用。** 详见 (n) 与 [PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)。
-- **冲刺以《We Love Katamari REROLL+ Royal Reverie》为准；VR 不做双摇杆交替手势**（owner 2026-11-19）——用左扳机／桌面 Shift 长按替代交替输入：每次等效 `s16DashInputDuration=14` 帧，按 `s32DashWheelSpinData` 分档（3/4/5 次空转，+4 次自动出射）。空转后提前松手以 `f32DashHelpSpeedCoef=0.67` 弱冲，空转前松开不冲。蓄力复用普通滑行；出射倍率按球径来自 `s32SpeedD/s32SpeedF`，方向沿驾驶朝向；冲刺继续走普通推进，放大速度上限和前推加速；反推／撞墙退出，不按低速终止。寿命 `s16DashLife=90` 帧，耗尽喘气 `s16DashForbidTime=240` 帧，非冲刺非喘气每 `s16DashRecoverTime=10` 帧回 1。骑乘面板仍用 `RideDashInteractMath` 避免冲刺途中误触。见 [接触模型 §3.8](Design/BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
+- **冲刺以《We Love Katamari REROLL+ Royal Reverie》为准；VR 不做双摇杆交替手势**（owner 2026-11-19，时长换算 2026-11-27 更新）— 输入方式：VR 按住左扳机，桌面按住 Shift。不做双摇杆交替，原因三条：摇杆行为不能直接进 VRChat 世界读、玩家讨厌摇杆漂移、会和桌面路径分叉。时长换算：原作反汇编（`sDash1P`、`sDashSetInput`）里 `s16DashInputDuration=14` 帧是等待下一次反向输入的最长窗口，不是每次输入固定占用的时长；计数到 3/4/5 次（球径 <60 m / 60–<300 m / ≥300 m，`s32DashWheelSpinData`）起空转，再加 4 次出射，第 N 次输入发生在 (N−1) × 输入间隔。owner 定等效输入间隔 0.2 s（按真人每秒 5 次交替），所以小球空转 0.4 s、满冲 1.2 s，中档 0.6 s、1.4 s，大档 0.8 s、1.6 s。蓄力有手柄震动和声音提示；扳机和 Shift 按下各打一行入口日志；撞墙结束冲刺的判定要修（实测撞场地边界后冲刺状态又持续约 1.2 s）。其余规则：空转后松手以 `f32DashHelpSpeedCoef=0.67` 弱冲，空转前松手不冲；蓄力复用普通滑行，期间不吃摇杆；出射倍率按球径来自 `s32SpeedD/s32SpeedF`，方向沿驾驶朝向；冲刺继续走普通推进，放大速度上限和前推加速；反推／撞墙退出，不按低速终止；寿命 `s16DashLife=90` 帧，耗尽喘气 `s16DashForbidTime=240` 帧，非冲刺非喘气每 `s16DashRecoverTime=10` 帧回 1。骑乘面板仍用 `RideDashInteractMath` 避免冲刺途中误触。代码尚未按本条改完。依据：`.work/notes/reports/dash_rootcause.md` 题二，`.work/notes/reports/unity_dash_check.md`「第六次」（空地实测满冲 9.963 m/s，为普通速度的 2.49 倍，弱冲 0.67 倍）。见 [接触模型 §3.8](Design/BallMotor/CONTACT_MODEL_V2.md#38-冲刺wlk-规则与长按适配)。
 - **吸附物冻结、不随球长大外移** — 与原作一致，外移会破坏「吸附瞬间定姿」的契约。见 [PARITY_AUDIT 的「吸附物位姿」行](Design/Parity/PARITY_AUDIT.md)。
 - **球芯显示等体积直径跟随当前碰撞直径（owner 2026-11-17）** — 为消除粘附件与核之间的空腔，核随吸收/缩小直接更新，不用平滑弹簧。REROLL 玩家观察核会变大并吞入旧件，开发者确认镜头随球变大拉远；证据强度为“玩家观察 + 开发者镜头说法”，不是原作核/碰撞比例实测。`core_XX` 仍是按关卡命名的皮肤，不是尺寸档；玩家可切换，默认 `core_01`，关卡对应未知。见 [核皮肤与证据](Design/BallPresentation/CORE_SKIN.md)、[视觉核心差异行](Design/Parity/PARITY_AUDIT.md)。
 - **道具行为按原作的分列结构：`kind` 与 `behaviour` 两列、纯重力坠落、落定不倾斜、v1 不做 `carry`、单父指针、父件被吃子件坠落** — 原作本来就是「内容分类」和「怎么动」两轴；「掉」比「带」少一轮体积门与重复计收益的工作量。见 [PROP_BEHAVIOURS §10.1–§10.3、§10.9](Design/PickupAbsorb/PROP_BEHAVIOURS.md)；其中坠落传播见上方 (s) 条，不在此重复。
@@ -198,7 +198,7 @@
 - **蟹座小院的可吸收判定按原作门槛（owner 2026-11-19，2026-11-22 修订）** — 按原作逐件的吸收门槛判定（原作本关球长不到 1.2 m 以上，所以这些件在原作里够不着）；原作没有「永久不可卷入」标记的大物件（石灯笼、拉门、圆桌等），球够大就能卷走，不按转换器推出的 `absorbable:false` 永久禁止。卷走同 id 孪生件后原地留下隐形固体的隐患要修。
 - **推进方向箭头固定在球心前上方（owner 2026-11-19）** — 位置与大小随球的语义半径变化，不跟头部；仍指当前推进方向，不指目标或下一区域。见[推进方向箭头](Design/BallMotor/README.md#推进方向箭头本地球上方提示)。
 - **未入座时可正常跳跃，滚球时短按 Jump 不下车（owner 2026-11-19）** — 座位已能禁止默认退座，无需禁用玩家的跳跃；仍可按住 Jump 1.5 秒主动下车，见[防退座与退出](01_GAME_DESIGN.md#防退座与退出)。
-- **VR 冲刺只用左扳机，不支持双摇杆交替摇（owner 2026-11-19）** — 原作的 gacha 计数折算成按住时长。
+- **VR 冲刺只用左扳机，不支持双摇杆交替摇（owner 2026-11-19，2026-11-27 再次确认）** — 原作的反向输入计数按每秒 5 次折算成按住时长，换算见上文冲刺条。
 - **体积回收曲线按新版做（owner 2026-11-19）** — 采用 WLK REROLL+ 数据里的回收比曲线；拿到数据前维持全局 0.8。
 - **过关按原作类型与参数判定（owner 2026-11-20）** — 过关独立于评分；蟹座按初代 REROLL 的 B 型，420 秒到时以确认捕获数 ≥10 判定，80 cm 不参与过关。B 类计数对象是原生库任务表白名单里的六种蟹（共 133 只），没有配对条件，见[原作放置格式 §1](Research/KatamariBallRules/ORIGINAL_PLACEMENT_FORMATS.md)。见[剧情模式](Design/StoryMode/README.md)与[合集关卡清单](Design/StoryMode/ALL_MAPS_HUB.md#21-当前四关偏移与源数据来自-r47-盘点)。
 - **蟹座异区物件不与球碰撞（owner 2026-11-20）** — 照初代 `hitOnAreaNo`，晒衣夹虽有模型却不是本关障碍，不再用静态盒挡球；见[区域碰撞格式](Design/Levels/LEVEL_FORMAT_V2.md#物件的活动区域号)。
@@ -239,7 +239,13 @@
 - **Fab 标准许可的免费素材可以入 git**（owner 2026-11-26；owner 之后会把仓库改为私有）— 与 tevy CC0 一样，入库前先出挑选清单（预览图 + 面数）给 owner 定。
 - **大厅中庭小黑板只做宣传页**（owner 2026-11-26）— 世界标题、主视觉、一句话介绍，不放高密度信息；「怎么玩」另找位置，方案待定。
 - **大厅天花板保留白灰顶，只加单根木梁，不铺整片木板**（Lead 定，owner 授权「你推荐」，2026-11-26）。
-- **对战交分规则全部照原作实测改**（owner 2026-11-26）— 逐跳结算、每跳 0.5 s、缩径＝开局直径 × 10%、单价 15（PROVISIONAL）、同时 1 个交分区每 60 s 换一处、局时 180 s、最后 60 s 隐藏他人分数、被吞保分保径、结算 3 档随机奖励并列都发、开局直径按图配置、大球移速随直径下降。规则正文在上文「交分与回合规则」(a)–(d)，实现细节见 [VERSUS_MODE](Design/Versus/VERSUS_MODE.md)。依据：对战视频逐帧实测（本地分析，未入库）。
+- **对战交分规则全部照原作实测改**（owner 2026-11-26）— 逐跳结算、每跳 0.5 s、缩径＝开局直径 × 10%、每跳 10 分、同时 1 个交分区每 60 s 换一处、局时 180 s、最后 60 s 隐藏他人分数、被吞保分保径、结算 3 档随机奖励并列都发、开局直径按图配置、大球移速随球径变化（2026-11-27 改为对齐原作速度表）。规则正文在上文「交分与回合规则」(a)–(d)，实现细节见 [VERSUS_MODE](Design/Versus/VERSUS_MODE.md)。依据：对战视频逐帧实测（本地分析，未入库）。
+
+### Owner decisions 2026-11-27（对战每跳分、奖励池、球速）
+
+- **每跳固定 10 分**（owner 2026-11-27）— 原作实测每跳只有 10（没带ブラザー）和 15（带着）两种，查清持有状态的 12 人次 0 反例；第一版不做ブラザー，所以是 10，以后做ブラザー时持有者 15。见上文「交分与回合规则」(b)、[VERSUS_MODE §2.4](Design/Versus/VERSUS_MODE.md)。
+- **结算奖励池第一版 4 种**（owner 2026-11-27）— 卷入物件数、卷入塊次数、最大直径（整局峰值）、冲刺次数；每局随机抽 3 种对应三档，结算时才公布。原因：原作 18 局里见过 6 种，其中道具使用次数和ブラザー数依赖宝箱道具系统，暂不做；冲刺次数要等冲刺触发问题修好才有意义。见上文 (d)、[VERSUS_MODE §2.5](Design/Versus/VERSUS_MODE.md)。
+- **球速随球径的变化对齐原作 WLK 速度表，单人和对战一起改**（owner 2026-11-27）— 原作实际速度随球径上升但比球径涨得慢，我们现状是按 D/D0 等比例放大、体感不变。换算方式还在设计。见 [PARITY_AUDIT 的「球速随球径」行](Design/Parity/PARITY_AUDIT.md)、[BALL_INERTIA §8](Design/BallMotor/BALL_INERTIA.md#8-所有者已定--仍开放)。
 
 ### Still open
 
@@ -264,8 +270,8 @@
 
 | 事项 | 已知与未决边界 | 需要决定的阶段 / 暂缓条件 |
 |---|---|---|
-| **回合结构与时长** | 原作对战实测：局时 3 分钟；站在同时 1 处的交分区里每 0.5 s 逐跳结算，区每 60 s 换一处、一局 3 处；最后 60 s 隐藏他人分数（见上节 (a)–(d)）。仍unknown：吞人收益、回合数。项目对战按最多 8 人交分玩法做（见上文 2026-11-21、2026-11-23 对战条）。([研究核查](Research/KatamariBallRules/README.md)、[决策表](Preparation/RuleDecisions/decisions.json)的`rules.match_format`与`rules.score_and_exchange`条) | 每跳单价 15 为 PROVISIONAL，随 T39 试玩复核；若要改变项目范围再由用户明确批准。([项目基线与优先级](00_SCOPE_DECISIONS.md#L15-L22)、[交存事务边界](Preparation/RuleDecisions/decisions.json)的`rules.score_and_exchange`条) |
-| **KO、重生、PVP阈值与道具平衡** | 原作已确认：同尺寸弹开、可吞更小的对手；被更大的球吞掉＝已交的分保留、球径基本不变，镜头跟吞人方约 6 s 后在别处重生，重生后有短暂保护，**没有淘汰**；对战有宝箱道具与ブラザー（C6–C15，第一版不做）。项目取约 6 s 重生＋约 3 s 保护（PROVISIONAL）；吞人门槛先保留 1.35 倍（未测出）；吞人得分仍开放。([决策表](Preparation/RuleDecisions/decisions.json)的`rules.pvp_swallow_threshold`、`rules.ko_respawn`、`rules.powerups_in_pvp`条) | 相关参数须随T27/T39多人、公平与舒适证据调校；新增计时器等道具属于范围变更。([范围边界](00_SCOPE_DECISIONS.md#L25-L32)、[决策所有者](Preparation/RuleDecisions/decisions.json)的`rules.ko_respawn`条) |
+| **回合结构与时长** | 原作对战实测：局时 3 分钟；站在同时 1 处的交分区里每 0.5 s 逐跳结算，区每 60 s 换一处、一局 3 处；最后 60 s 隐藏他人分数（见上节 (a)–(d)）。仍 unknown：吞人收益、回合数。项目对战按最多 8 人交分玩法做（见上文 2026-11-21、2026-11-23 对战条）。([研究核查](Research/KatamariBallRules/README.md)、[决策表](Preparation/RuleDecisions/decisions.json)的`rules.match_format`与`rules.score_and_exchange`条) | 每跳 10 分是 owner 2026-11-27 的决定；若要改变项目范围再由用户明确批准。([项目基线与优先级](00_SCOPE_DECISIONS.md#L15-L22)、[交存事务边界](Preparation/RuleDecisions/decisions.json)的`rules.score_and_exchange`条) |
+| **KO、重生、PVP阈值与道具平衡** | 原作已确认：同尺寸弹开、可吞更小的对手；被更大的球吞掉＝已交的分保留、球径基本不变，镜头跟吞人方约 6 s 后在别处重生，重生后有短暂保护，**没有淘汰**；对战有宝箱道具与ブラザー（C6–C15，第一版不做）。项目取约 6 s 重生＋约 3 s 保护（PROVISIONAL）；吞人门槛保持 1.35 倍（实测范围：大于 1.0、不超过 1.65）；卷入别人不直接给分，吞人得分仍开放。([决策表](Preparation/RuleDecisions/decisions.json)的`rules.pvp_swallow_threshold`、`rules.ko_respawn`、`rules.powerups_in_pvp`条) | 相关参数须随T27/T39多人、公平与舒适证据调校；新增计时器等道具属于范围变更。([范围边界](00_SCOPE_DECISIONS.md#L25-L32)、[决策所有者](Preparation/RuleDecisions/decisions.json)的`rules.ko_respawn`条) |
 | **生长/碰撞上限与世界尺度** | 语义显示尺寸、碰撞半径、拾取门槛与收益账本必须分开；0.2–5米只是表现工作区间，不是碰撞或技术上限。最终半径、成长段、速度/物理限值仍未定。([技术契约:L15-L21](02_TECHNICAL_CONTRACTS.md#L15-L21)、[决策表](Preparation/RuleDecisions/decisions.json)的`project.item_growth_and_collision`条) | 先保持参数化；测量须由平台、地图和公平/性能证据支持，再由Lead在T01/T05后处理契约。T06未冻结前不得硬编码为公共接口。([T06依赖与范围](../tasks.json#L253-L279)、[契约冻结规则](02_TECHNICAL_CONTRACTS.md#L3-L13)) |
 | **付费外观SKU/价格** | 方向是免费完整玩法与可选纯外观；商品目录、价格、资格、授权和交易恢复均未批准。([决策表](Preparation/RuleDecisions/decisions.json)的`project.commercial_sku`条) | 可暂不决定并保持商店关闭；只有进入相应许可、权益和交易门禁后才需用户选SKU/价格。([发布配置](../tasks.json#L2094-L2105)、[范围排除](00_SCOPE_DECISIONS.md#L38-L42)) |
 
